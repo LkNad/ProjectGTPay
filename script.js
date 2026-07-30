@@ -69,6 +69,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 	let currentMarket = 'normal'; // 'normal' или 'rental'
 	let currentPlatformTab = 'platform'; // 'platform' или 'my-requests'
+	let rentalTimeoutId = null;
+	let myRequests = [];
 	
 	document.getElementById('normal-market-btn').addEventListener('click', function() {
 		if (currentMarket !== 'normal') {
@@ -4535,8 +4537,10 @@ document.addEventListener('DOMContentLoaded', function() {
 		const items = Array.from(container.querySelectorAll('.item-card'));
 		
 		items.sort((a, b) => {
-			const priceA = parseFloat(a.querySelector('.add-to-cart').getAttribute('data-price'));
-			const priceB = parseFloat(b.querySelector('.add-to-cart').getAttribute('data-price'));
+			const btnA = a.querySelector('.find-on-platform') || a.querySelector('.add-to-cart');
+			const btnB = b.querySelector('.find-on-platform') || b.querySelector('.add-to-cart');
+			const priceA = btnA ? parseFloat(btnA.getAttribute('data-price')) : 0;
+			const priceB = btnB ? parseFloat(btnB.getAttribute('data-price')) : 0;
 			return sortDescending ? priceB - priceA : priceA - priceB;
 		});
 		
@@ -13073,8 +13077,6 @@ document.addEventListener('DOMContentLoaded', function() {
 	addNewPromocode('lucky', 0, null, false, 0, null, null, 'toggle_upgrade');
 	
 	initShop();
-	
-	let rentalTimeoutId = null;
 
 	function removeExpiredItem(itemToRemove) {
 		const index = inventory.findIndex(i => i === itemToRemove);
