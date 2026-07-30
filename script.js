@@ -7739,11 +7739,10 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 			if (typeof updateInventory === 'function') updateInventory();
 			if (typeof saveGameState === 'function') saveGameState();
 			
-			// Закрываем модальные окна
+			// Закрываем только модальное окно продажи, но не родительское
 			sellModal.remove();
-			parentModal.remove();
 			
-			// Перерисовываем платформу
+			// Перерисовываем платформу без закрытия родительского модала
 			initShop();
 		});
 	}
@@ -11469,7 +11468,13 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 			modal.remove();
 		}
 
-		document.getElementById('apply-filters-btn').addEventListener('click', applyFilters);
+		document.getElementById('apply-filters-btn').addEventListener('click', function() {
+			applyFilters();
+			// Не закрываем модал при применении фильтров на рынке
+			if (typeof currentMarketFilters !== 'undefined') {
+				modal.remove();
+			}
+		});
 		document.getElementById('reset-filters-btn').addEventListener('click', resetFilters);
 		document.getElementById('close-filters-btn').addEventListener('click', function() {
 			modal.remove();
@@ -12545,7 +12550,8 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 	  if (shopItem && !shopItem.name.endsWith('Fragment')) {
 		const itemElement = document.getElementById(shopItem.id);
 		if (itemElement) {
-		  const currentStock = parseInt(itemElement.querySelector('.available-stock').textContent);
+		  const stockEl = itemElement.querySelector('.available-stock');
+		  const currentStock = stockEl ? parseInt(stockEl.textContent) : shopItem.stock;
                   const btn = itemElement.querySelector('.find-on-platform-btn') || itemElement.querySelector('.rent-item-btn');
                   const max = btn ? parseInt(btn.getAttribute('data-max')) : 0;
 		  updateStock(itemElement, currentStock + 1, max);
@@ -12605,7 +12611,8 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 				
 				const shopItem = document.getElementById(originalItem.id);
 				if (shopItem) {
-					const currentStock = parseInt(shopItem.querySelector('.available-stock').textContent);
+					const stockEl = shopItem.querySelector('.available-stock');
+					const currentStock = stockEl ? parseInt(stockEl.textContent) : originalItem.stock;
                                         const btn = shopItem.querySelector('.find-on-platform-btn') || shopItem.querySelector('.rent-item-btn');
                                         const max = btn ? parseInt(btn.getAttribute('data-max')) : 0;
 					updateStock(shopItem, currentStock + 1, max);
