@@ -1,0 +1,2232 @@
+body {
+	font-family: 'Arial', sans-serif;
+	background-color: #121212;
+	color: #ffffff;
+	margin: 0;
+	padding: 20px;
+	max-width: 1200px;
+	margin: 0 auto;
+}
+
+h1 {
+	color: #ffffff;
+	font-size: 28px;
+	margin-bottom: 30px;
+	text-align: center;
+}
+
+h2 {
+	color: #ffffff;
+	font-size: 22px;
+	margin: 25px 0 15px 0;
+}
+
+.bundles-list {
+	list-style-type: none;
+	padding: 0;
+}
+
+.bundles-list li {
+	background-color: rgb(30 30 30 / 85%);
+	padding: 12px 15px;
+	margin-bottom: 8px;
+	border-radius: 4px;
+}
+
+.divider {
+	border: none;
+	height: 1px;
+	background-color: #333;
+	margin: 30px 0;
+}
+
+.items-container {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 20px;
+	justify-content: flex-start;
+}
+
+.item-name {
+    margin-top: 5px;
+    font-size: 13px;
+    margin-bottom: 5px;
+    text-align: left;
+}
+
+.item-img {
+	margin-bottom: 10px;
+	text-align: left;
+}
+
+.item-img img {
+	margin-left: 8px;
+	max-width: 100%;
+	height: auto;
+}
+
+.item-card {
+	background-color: rgba(42, 42, 42, 0.5) !important;
+	border-radius: 6px;
+	padding: 15px;
+	margin-bottom: 20px;
+	width: calc(33.33% - 30px);
+	box-sizing: border-box;
+	position: relative;
+}
+
+.item-rarity {
+    transform: translate(8px, 0px);
+    position: relative;
+    padding: 2px 5px;
+    border-radius: 3px;
+    width: 160px;
+}
+
+
+
+.case-none {
+	background: linear-gradient(to left, #e2a537, #9c6e23);
+	color: white;
+}
+
+.box-none {
+	background: linear-gradient(to left, #8b9caf, #59666f);
+	color: white;
+}
+
+.none {
+	background: linear-gradient(to left, #cfd1d2, #848284);
+	color: white;
+}
+
+.gold-none {
+	background: linear-gradient(to left, #e2a537, #9c6e23);
+    color: white;
+}
+
+.common {
+	background: linear-gradient(to left, #89949b, #4a4f53);
+	color: white;
+}
+
+.uncommon {
+	background: linear-gradient(to left, #288bbb, #00517b);
+	color: white;
+}
+
+.rare {
+	background: linear-gradient(to left, #01349b, #0f1e42);
+	color: white;
+}
+
+.epic {
+	background: linear-gradient(to left, #7d02a9, #360c55);
+	color: white;
+}
+
+.legendary {
+	background: linear-gradient(to left, #b90f80, #6f0c4f);
+	color: white;
+}
+
+.arcane {
+	background: linear-gradient(to left, #c1101e, #7a0611);
+	color: white;
+}
+
+.nameless {
+    background: linear-gradient(to left, #e2a537, #9c6e23);
+    color: white;
+}
+
+.item-collection {
+    margin-top: 5px;
+    color: #aaa;
+    font-size: 16px;
+    margin-bottom: 10px;
+    text-align: left;
+}
+
+.item-stock {
+	color: #aaa;
+	font-size: 13px;
+	margin-bottom: 10px;
+	text-align: left;
+}
+
+.item-price {
+	font-size: 20px;
+	color: #ffffff;
+	margin-bottom: 10px;
+	text-align: left;
+}
+
+.add-to-cart {
+	background-color: #4CAF50;
+	color: white;
+	border: none;
+	padding: 8px 15px;
+	text-align: center;
+	text-decoration: none;
+	display: inline-block;
+	font-size: 14px;
+	margin-top: 10px;
+	cursor: pointer;
+	border-radius: 4px;
+	transition: background-color 0.3s;
+	width: auto;
+}
+
+.add-to-cart:hover {
+	background-color: #45a049;
+}
+
+.add-to-cart:disabled {
+	background-color: #666;
+	cursor: not-allowed;
+}
+
+.cart-container {
+	position: fixed;
+	top: 20px;
+	right: 20px;
+	background-color: rgb(30 30 30 / 85%);
+	padding: 15px;
+	border-radius: 6px;
+	width: 250px;
+	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.cart-title {
+	font-size: 18px;
+	margin-bottom: 10px;
+	border-bottom: 1px solid #333;
+	padding-bottom: 8px;
+}
+
+.cart-items {
+	max-height: 300px;
+	overflow-y: auto;
+}
+
+.cart-item {
+	display: flex;
+	justify-content: space-between;
+	margin-bottom: 8px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid #2a2a2a;
+}
+
+.cart-total {
+	margin-top: 10px;
+	padding-top: 10px;
+	border-top: 1px solid #333;
+}
+
+.cart-actions {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin-top: 15px;
+}
+
+.checkout-btn {
+	background-color: #4CAF50;
+	color: white;
+	border: none;
+	padding: 8px 15px;
+	width: 100%;
+	cursor: pointer;
+	border-radius: 4px;
+}
+
+.checkout-btn:hover {
+	background-color: #45a049;
+}
+
+.checkout-btn:disabled {
+	background-color: #666;
+	cursor: not-allowed;
+}
+
+.clear-cart-btn {
+	background-color: #f44336;
+	color: white;
+	border: none;
+	padding: 8px 15px;
+	width: 100%;
+	cursor: pointer;
+	border-radius: 4px;
+}
+
+.clear-cart-btn:hover {
+	background-color: #d32f2f;
+}
+
+.clear-cart-btn:disabled {
+	background-color: #666;
+	cursor: not-allowed;
+}
+
+.remove-item {
+	color: #ff4444;
+	cursor: pointer;
+	margin-left: 10px;
+}
+
+.stock-warning {
+	color: #ff4444;
+	font-size: 13px;
+	margin-top: 5px;
+	display: none;
+	text-align: left;
+}
+
+.item-quantity {
+	color: #aaa;
+	font-size: 13px;
+	margin-left: 5px;
+}
+
+/* Фильтры */
+.filters {
+	display: flex;
+	gap: 10px;
+	margin-bottom: 20px;
+	flex-wrap: wrap;
+}
+
+.filter-btn {
+	padding: 8px 15px;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+}
+
+.filter-btn.active {
+	transform: scale(1.05);
+	box-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+}
+
+/* Инвентарь */
+.inventory-btn {
+	position: fixed;
+	bottom: 20px;
+	right: 20px;
+	background-color: rgb(30 30 30 / 85%);
+	color: white;
+	border: none;
+	padding: 12px 20px;
+	border-radius: 6px;
+	cursor: pointer;
+	font-size: 16px;
+	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+	z-index: 100;
+}
+
+.inventory-container {
+	display: none;
+	position: fixed;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	background-color: rgb(30 30 30 / 85%);
+	padding: 20px;
+	border-radius: 8px;
+	width: 80%;
+	max-width: 800px;
+	max-height: 80vh;
+	overflow-y: auto;
+	z-index: 9999;
+	box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+.inventory-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 20px;
+}
+
+.close-inventory {
+	background: none;
+	border: none;
+	color: white;
+	font-size: 20px;
+	cursor: pointer;
+}
+
+.inventory-items {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 15px;
+}
+
+.inventory-item {
+	background-color: #2a2a2a;
+	padding: 10px;
+	border-radius: 6px;
+	width: calc(15% - 15px);
+	text-align: center;
+	position: relative;
+}
+
+.inventory-item img {
+	max-width: 100%;
+	height: auto;
+}
+
+.inventory-item-name {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: 12px;
+    margin: 2px 10px;
+    max-width: 85px;
+}
+
+.inventory-item-rarity {
+    font-size: 12px;
+    padding: 2px 1px;
+    border-radius: 3px;
+    margin-top: 5px;
+    display: inline-block;
+}
+
+.craft-btn {
+	background-color: #ffaa00;
+	color: #000;
+	border: none;
+	padding: 8px 15px;
+	margin-top: 20px;
+	cursor: pointer;
+	border-radius: 4px;
+	display: block;
+	margin-left: auto;
+	margin-right: auto;
+}
+
+.craft-btn:disabled {
+	background-color: #666;
+	cursor: not-allowed;
+}
+
+.selected-count {
+	text-align: left;
+	margin-top: 5px;
+	font-size: 14px;
+}
+
+.overlay {
+	display: none;
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background-color: rgba(0, 0, 0, 0.5);
+	z-index: 999;
+}
+
+@media screen and (max-width: 1024px) {
+	.item-card {
+width: calc(50% - 30px);
+	}
+	
+	.inventory-item {
+width: calc(25% - 15px);
+	}
+}
+
+@media screen and (max-width: 768px) {
+	.item-card {
+width: 100%;
+	}
+	
+	.inventory-item {
+width: calc(33.33% - 15px);
+	}
+}
+
+/* Класс для всплывающих уведомлений */
+.toast {
+    position: fixed !important;
+    top: 20px !important;
+    left: 50% !important;
+    transform: translateX(-50%) translateY(-20px) !important;
+    z-index: 2147483647 !important; /* Максимальный z-index */
+    
+    background-color: green;
+    color: white !important;
+    padding: 12px 24px !important;
+    border-radius: 8px !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+    
+    max-width: 90% !important;
+    width: auto !important;
+    min-width: 200px !important;
+    
+    text-align: center !important;
+    white-space: pre-wrap !important;
+    word-wrap: break-word !important;
+    line-height: 1.4 !important;
+    
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    
+    transition: opacity 0.25s ease, transform 0.25s ease !important;
+}
+
+.toast.show {
+    opacity: 1 !important;
+    visibility: visible !important;
+    transform: translateX(-50%) translateY(0) !important;
+}
+
+.toast.long {
+    padding: 15px 25px !important;
+    max-width: 95% !important;
+}
+
+/* Баланс */
+.balance-container {
+	position: fixed;
+	top: 20px;
+	left: 20px;
+	background-color: rgb(30 30 30 / 85%);
+	padding: 15px;
+	border-radius: 6px;
+	width: 200px;
+	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+}
+
+.balance-title {
+	font-size: 16px;
+}
+
+.edit-balance-btn {
+	background-color: #4CAF50;
+	color: white;
+	border: none;
+	padding: 5px 10px;
+	border-radius: 4px;
+	cursor: pointer;
+}
+
+.edit-balance-btn:hover {
+	background-color: #45a049;
+}
+
+/* Модальное окно баланса */
+.balance-edit-modal {
+	display: none;
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background-color: rgba(0, 0, 0, 0.7);
+	z-index: 1000;
+	justify-content: center;
+	align-items: center;
+}
+
+.balance-edit-content {
+	background-color: rgb(30 30 30 / 85%);
+	padding: 20px;
+	border-radius: 8px;
+	width: 300px;
+	text-align: center;
+}
+
+.balance-display {
+	font-size: 24px;
+	margin: 20px 0;
+	padding: 10px;
+	background-color: #2a2a2a;
+	border-radius: 4px;
+}
+
+.balance-keyboard {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 10px;
+	margin-bottom: 20px;
+}
+
+.balance-key {
+	padding: 15px;
+	font-size: 18px;
+	background-color: #2a2a2a;
+	color: white;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+}
+
+.balance-key:hover {
+	background-color: #333;
+}
+
+.balance-key.clear {
+	background-color: #f44336;
+}
+
+.balance-actions {
+	display: flex;
+	justify-content: space-between;
+}
+
+.balance-cancel, .balance-save {
+	padding: 10px 20px;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+}
+
+.balance-cancel {
+	background-color: #f44336;
+	color: white;
+}
+
+.balance-save {
+	background-color: #4CAF50;
+	color: white;
+}
+
+/* Кнопка продажи в инвентаре */
+.sell-btn {
+	background-color: #575757;
+	color: white;
+	border: none;
+	padding: 5px 10px;
+	border-radius: 4px;
+	cursor: pointer;
+	margin-top: 5px;
+	font-size: 12px;
+	width: 100%;
+}
+
+.sell-btn:hover {
+	background-color: #d32f2f;
+}
+
+.buy-all-btn {
+	background-color: #ff9800;
+	color: white;
+	border: none;
+	padding: 8px 15px;
+	text-align: center;
+	text-decoration: none;
+	display: inline-block;
+	font-size: 14px;
+	margin-top: 10px;
+	cursor: pointer;
+	border-radius: 4px;
+	transition: background-color 0.3s;
+	width: auto;
+	margin-left: 10px;
+}
+
+.buy-all-btn:hover {
+	background-color: #e68a00;
+}
+
+.buy-all-btn:disabled {
+	background-color: #666;
+	cursor: not-allowed;
+}
+
+.item-buttons {
+	display: flex;
+	gap: 10px;
+	margin-top: 10px;
+}
+
+.item-buttons button {
+	flex: 1;
+}
+
+/* Кнопки инвентаря */
+.inventory-actions {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin: 20px 0;
+	gap: 15px;
+}
+
+/* Футер инвентаря */
+.inventory-footer {
+	display: flex;
+	gap: 10px;
+	margin-top: 20px;
+}
+
+.sell-all-btn {
+	background-color: #f44336;
+	color: white;
+	border: none;
+	padding: 10px 15px;
+	border-radius: 4px;
+	cursor: pointer;
+	flex: 1;
+}
+
+.sell-all-btn:hover {
+	background-color: #d32f2f;
+}
+
+.sell-all-btn:disabled {
+	background-color: #666;
+	cursor: not-allowed;
+}
+
+.craft-btn {
+	background-color: #ffaa00;
+	color: #000;
+	border: none;
+	padding: 10px 15px;
+	cursor: pointer;
+	border-radius: 4px;
+	flex: 1;
+	margin-top: 0; /* Убираем отступ */
+}
+
+/* Добавим стили для кнопки сортировки */
+.sort-btn {
+	background-color: #2a2a2a;
+	color: white;
+	border: none;
+	padding: 8px 15px;
+	border-radius: 4px;
+	cursor: pointer;
+	margin-left: 10px;
+}
+
+.sort-btn:hover {
+	background-color: #333;
+}
+
+.sort-btn.active {
+	background-color: #4CAF50;
+}
+
+.sort-container {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 20px;
+}
+
+/* Стили для кейсов */
+.case-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.9);
+    z-index: 2000;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+}
+
+.case-content {
+    background-color: rgb(30 30 30 / 85%);
+    padding: 20px;
+    border-radius: 8px;
+    width: 80%;
+    max-width: 800px;
+    text-align: center;
+}
+
+.case-items-container {
+    display: flex;
+    overflow: hidden;
+    height: 200px;
+    position: relative;
+    margin: 20px 0;
+}
+
+.case-items-scroll {
+    display: flex;
+    transition: transform 2s ease-out;
+    will-change: transform;
+    align-items: center; /* Добавьте это свойство */
+}
+
+.case-item {
+    min-width: 150px;
+    padding: 10px;
+    text-align: center;
+}
+
+.case-center-indicator {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2px;
+    background: gold;
+    z-index: 10;
+}
+
+.open-case-btn {
+    background-color: #ff9800;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 5px;
+    font-size: 12px;
+    width: 100%;
+}
+
+.open-case-btn:hover {
+    background-color: #e68a00;
+}
+
+.case-result {
+    background-color: rgb(30 30 30 / 85%);
+    padding: 30px;
+    border-radius: 8px;
+    text-align: center;
+    max-width: 500px;
+}
+
+.case-help-modal {
+    display: none;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgb(30 30 30 / 85%);
+    padding: 20px;
+    border-radius: 8px;
+    z-index: 2001;
+    width: 300px;
+}
+
+.add-item-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+    overflow-y: auto;
+}
+
+.add-item-content {
+    background-color: rgb(30 30 30 / 85%);
+    padding: 20px;
+    border-radius: 8px;
+    width: 400px;
+    max-width: 90%;
+    margin: 20px auto;
+}
+
+#case-fields {
+    background-color: rgb(30 30 30 / 85%);
+    padding: 20px;
+    border-radius: 8px;
+    width: 400px;
+    max-width: 90%;
+    margin: 0 auto 20px;
+    display: none;
+}
+
+.form-actions {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 20px;
+}
+
+.form-actions button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    flex: 1;
+    margin: 0 5px;
+}
+
+#cancel-add-item {
+    background-color: #f44336;
+    color: white;
+}
+
+#confirm-add-item {
+    background-color: #4CAF50;
+    color: white;
+}
+
+@media screen and (max-width: 768px) {
+    .add-item-content, #case-fields {
+        width: 90%;
+    }
+}
+
+.open-case-start-btn:disabled {
+    background-color: #666 !important;
+    cursor: not-allowed !important;
+}
+
+.edit-item-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+    overflow-y: auto;
+}
+
+.edit-item-content {
+    background-color: rgb(30 30 30 / 85%);
+    padding: 20px;
+    border-radius: 8px;
+    width: 400px;
+    max-width: 90%;
+    margin: 20px auto;
+}
+
+#edit-case-fields {
+    background-color: rgb(30 30 30 / 85%);
+    padding: 20px;
+    border-radius: 8px;
+    width: 100%;
+    margin-bottom: 15px;
+    display: none;
+}
+
+@media screen and (max-width: 768px) {
+    .edit-item-content, #edit-case-fields {
+        width: 90%;
+    }
+}
+
+.edit-item-content {
+    background-color: rgb(30 30 30 / 85%);
+    padding: 20px;
+    border-radius: 8px;
+    width: 400px;
+    max-width: 90%;
+    margin: 20px auto;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+#edit-case-fields {
+    background-color: rgb(30 30 30 / 85%);
+    padding: 20px;
+    border-radius: 8px;
+    width: 100%;
+    margin-bottom: 15px;
+    display: none;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+/* Стили для слотов чармов и стикеров */
+.item-slots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin: 2px 0;
+    justify-content: center;
+}
+
+.slot {
+    width: 16px;
+    /* background-color: #2a2a2a; */
+    /* border: 0.5px dashed #444; */
+    /* border-radius: 2px; */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+}
+
+.slot img {
+    max-width: 100%;
+    max-height: 100%;
+}
+
+.charm-slot {
+    transform: translate(-84px, -48px) scale(2.8);
+    /* border-color: gold; */
+}
+
+.sticker-slot {
+    transform: translate(27px, -10px) scale(2.3);
+    /* border-color: #4CAF50; */
+}
+
+/* Стили для модального окна применения */
+.apply-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.9);
+    z-index: 2000;
+    justify-content: center;
+    align-items: center;
+}
+
+.apply-content {
+    background-color: rgb(30 30 30 / 85%);
+    padding: 20px;
+    border-radius: 8px;
+    width: 80%;
+    max-width: 800px;
+    text-align: center;
+}
+
+.apply-items-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    max-height: 60vh;
+    overflow-y: auto;
+    margin: 20px 0;
+    justify-content: center;
+}
+
+.apply-item {
+    background-color: #2a2a2a;
+    padding: 10px;
+    border-radius: 6px;
+    width: 120px;
+    text-align: center;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.apply-item:hover {
+    transform: scale(1.05);
+    background-color: #333;
+}
+
+/* Стили для действий с предметом */
+.item-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 5px;
+}
+
+.item-actions button {
+    width: 100%;
+    padding: 5px;
+    font-size: 12px;
+}
+
+/* Кнопка продажи для брелков/стикеров */
+.inventory-item .sell-btn {
+    background-color: #575757;
+    color: white;
+    border: none;
+    padding: 5px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.inventory-item .sell-btn:hover {
+    background-color: #d32f2f;
+}
+
+/* Стили для окна результата крафта */
+.craft-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.9);
+    z-index: 2000;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+}
+
+.craft-result {
+    background-color: rgb(30 30 30 / 85%);
+    padding: 30px;
+    border-radius: 8px;
+    text-align: center;
+    max-width: 500px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+.craft-item-rarity {
+    font-size: 14px;
+    padding: 5px 10px;
+    border-radius: 4px;
+    display: inline-block;
+    margin-top: 5px;
+}
+
+.craft-item-collection {
+    color: #aaa;
+    font-size: 14px;
+    margin-top: 10px;
+}
+
+.inventory-total-value {
+	 margin-top: 7px;
+    font-size: 16px;
+    margin-bottom: 10px;
+    color: #ffffff;
+    text-align: left;
+    width: 100%;
+}
+
+/* Стили для действий с кейсом */
+.item-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 5px;
+}
+
+/* Стиль кнопки открытия кейса */
+.open-case-btn {
+    background-color: #ff9800;
+    color: white;
+    border: none;
+    padding: 5px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+@font-face {
+    font-family: 'Gold Shreaft';
+    src: url('fonts/gold_shreaft.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+.inventory-item-select, .shop-item-select {
+    padding: 10px;
+    background-color: #2a2a2a;
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.2s;
+}
+
+.inventory-item-select:hover, .shop-item-select:hover {
+    background-color: #333;
+}
+
+.rarity-header {
+    font-weight: bold;
+    margin-top: 10px;
+    margin-bottom: 5px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #444;
+}
+
+#skin-changer-btn {
+    display: none;
+}
+
+.price-change-info {
+    margin: 5px 0;
+    padding: 3px;
+    background-color: rgba(0,0,0,0.2);
+    border-radius: 3px;
+    text-align: center;
+    font-size: 12px;
+	color: #4caf50;	
+}
+
+.battle-pass-modal {
+	z-index: 2001 !important;
+}
+
+.buy-bp-modal, .buy-levels-modal {
+	z-index: 2002 !important;
+}
+
+.pass-level {
+	transition: all 0.3s ease;
+}
+
+.pass-level:hover {
+	transform: scale(1.05);
+}
+
+.rang-container {
+	transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.rang-container:hover {
+	transform: translateY(-5px);
+	box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.open-btn {
+	padding: 8px 15px;
+	background: none;
+	border: none;
+	color: white;
+	cursor: pointer;
+	font-size: 16px;
+	position: relative;
+	margin-left: 10px;
+}
+
+.open-btn:hover {
+	color: gold;
+}
+
+.free-pass-levels::-webkit-scrollbar {
+	height: 8px;
+}
+.free-pass-levels::-webkit-scrollbar-track {
+	background: #2a2a2a;
+	border-radius: 4px;
+}
+.free-pass-levels::-webkit-scrollbar-thumb {
+	background: #555;
+	border-radius: 4px;
+}
+.free-pass-levels::-webkit-scrollbar-thumb:hover {
+	background: #777;
+}
+
+.gold-pass-levels::-webkit-scrollbar {
+	height: 8px;
+}
+.gold-pass-levels::-webkit-scrollbar-track {
+	background: #2a2a2a;
+	border-radius: 4px;
+}
+.gold-pass-levels::-webkit-scrollbar-thumb {
+	background: #555;
+	border-radius: 4px;
+}
+.gold-pass-levels::-webkit-scrollbar-thumb:hover {
+	background: #777;
+}
+
+.inventory-container::-webkit-scrollbar {
+	height: 8px;
+}
+.inventory-container::-webkit-scrollbar-track {
+	background: #2a2a2a;
+	border-radius: 4px;
+}
+.inventory-container::-webkit-scrollbar-thumb {
+	background: #555;
+	border-radius: 4px;
+}
+.inventory-container::-webkit-scrollbar-thumb:hover {
+	background: #777;
+}
+
+.apply-item-btn {
+	background-color: #666666;
+    color: #ffffff;
+}
+
+.name-filter-input {
+	background-color: #434343;
+    color: #ffffff;
+}
+
+.collection-filter {
+	background-color: #666666;
+    color: #b1b1b1;
+}
+
+.collection-filter::-webkit-scrollbar {
+	height: 8px;
+}
+.collection-filter::-webkit-scrollbar-track {
+	background: #2a2a2a;
+	border-radius: 4px;
+}
+.collection-filter::-webkit-scrollbar-thumb {
+	background: #555;
+	border-radius: 4px;
+}
+.collection-filter::-webkit-scrollbar-thumb:hover {
+	background: #777;
+}
+
+.modal-content::-webkit-scrollbar {
+	height: 8px;
+}
+.modal-content::-webkit-scrollbar-track {
+	background: #2a2a2a;
+	border-radius: 4px;
+}
+.modal-content::-webkit-scrollbar-thumb {
+	background: #555;
+	border-radius: 4px;
+}
+.modal-content::-webkit-scrollbar-thumb:hover {
+	background: #777;
+}
+
+.global-ui::-webkit-scrollbar {
+	height: 8px;
+}
+.global-ui::-webkit-scrollbar-track {
+	background: #2a2a2a;
+	border-radius: 4px;
+}
+.global-ui::-webkit-scrollbar-thumb {
+	background: #555;
+	border-radius: 4px;
+}
+.global-ui::-webkit-scrollbar-thumb:hover {
+	background: #777;
+}
+
+.cart-items::-webkit-scrollbar {
+	height: 8px;
+}
+.cart-items::-webkit-scrollbar-track {
+	background: #2a2a2a;
+	border-radius: 4px;
+}
+.cart-items::-webkit-scrollbar-thumb {
+	background: #555;
+	border-radius: 4px;
+}
+.cart-items::-webkit-scrollbar-thumb:hover {
+	background: #777;
+}
+
+.clan-withdraw-item {
+    position: relative;
+}
+
+.selected-quantity {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background-color: gold;
+    color: black;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 12px;
+}
+
+.apply-item:hover {
+    transform: scale(1.05);
+    transition: transform 0.2s ease;
+    border: 1px solid gold !important;
+}
+
+.apply-item img[width="20"] {
+    border: 1px solid #555;
+    padding: 1px;
+}
+
+.apply-item img[width="20"]:hover {
+    border-color: gold;
+    transform: scale(1.2);
+}
+
+.apply-modal {
+    font-family: 'Gold Shreaft', sans-serif;
+}
+
+.apply-item:hover {
+    transform: scale(1.05);
+    transition: transform 0.2s ease;
+}
+
+.confirm-modal {
+    font-family: 'Gold Shreaft', sans-serif;
+    border: 2px solid gold;
+}
+
+.confirm-modal button:hover {
+    opacity: 0.8;
+    transition: opacity 0.2s ease;
+}
+
+.profile-medal {
+    position: absolute;
+    transform: translate(170%, -50px);
+    width: 100px;
+    height: auto;
+    z-index: 4;
+    border-radius: 0%;
+    border: none;
+}
+
+.unequip-medal-btn {
+	background-color: rgb(87, 87, 87);
+    color: white;
+}
+
+.equip-medal-btn {
+	background-color: rgb(87, 87, 87);
+    color: white;
+}
+
+#terminal-input:focus {
+	outline: none;
+	border-color: #00ff00;
+}
+  
+#terminal-output {
+	line-height: 1.4;
+}
+  
+#terminal-output div {
+	margin-bottom: 5px;
+}
+  
+#command-history {
+	white-space: pre-wrap;
+}
+
+.sort-btn {
+    background-color: #444;
+    color: white;
+    border: 1px solid #666;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.sort-btn:hover {
+    background-color: #555;
+}
+
+.sort-btn.active {
+    background-color: #4CAF50;
+    border-color: #008f3c;
+}
+
+.inventory-item-select, .target-item-select {
+    border: 1px solid #444;
+    border-radius: 5px;
+    padding: 10px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background-color: #2a2a2a;
+    width: auto;
+    height: 100px;
+}
+
+.inventory-item-select:hover, .target-item-select:hover {
+    background-color: #333;
+    border-color: #666;
+}
+
+.global-ui {
+    scrollbar-width: thin;
+    scrollbar-color: #555 #2a2a2a;
+}
+
+.global-ui::-webkit-scrollbar {
+    width: 8px;
+}
+
+.global-ui::-webkit-scrollbar-track {
+    background: #2a2a2a;
+}
+
+.global-ui::-webkit-scrollbar-thumb {
+    background-color: #555;
+    border-radius: 4px;
+}
+
+.global-ui::-webkit-scrollbar-thumb:hover {
+    background-color: #666;
+}
+
+.editor-input::-webkit-scrollbar {
+    width: 8px;
+}
+
+.editor-input::-webkit-scrollbar-track {
+    background: #2a2a2a;
+}
+
+.editor-input::-webkit-scrollbar-thumb {
+    background-color: #555;
+    border-radius: 4px;
+}
+
+.editor-input::-webkit-scrollbar-thumb:hover {
+    background-color: #666;
+}
+
+.filter-container {
+    display: flex;
+    align-items: center;
+    margin-bottom: 15px;
+    gap: 10px;
+}
+
+#type-filter {
+    min-width: 150px;
+}
+
+.collection-icon {
+    transform: translateY(8px);
+}
+
+#inventory-filters-btn {
+    transition: all 0.3s ease;
+}
+
+#inventory-filters-btn:hover {
+    background-color: #4444dd !important;
+    transform: translateY(-2px);
+}
+
+.fragment-item {
+  border: 2px solid transparent;
+  position: relative;
+}
+
+.fragment-count {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background: rgba(0,0,0,0.7);
+  color: white;
+  border-radius: 50%;
+  width: 25px;
+  height: 25px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 12px;
+}
+
+.fragment-item .item-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.fragment-item .item-actions button {
+  padding: 5px 10px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.upgrade-fragment-btn {
+  background-color: #4CAF50;
+  color: white;
+}
+
+.open-fragment-btn {
+  background-color: #ff9800;
+  color: white;
+}
+
+.sell-fragment-btn {
+  background-color: #575757;
+  color: white;
+}
+
+.buy-currency-btn {
+	transform: translateY(-10px);
+	width: 100%;padding: 10px;
+	background: #4CAF50;
+	color: white;border: none;
+	border-radius: 4px;cursor: pointer;
+	font-size: 14px;font-weight: bold;
+}
+
+body, h1, h2, h3, h4, h5, h6, p, span, div, button, input, textarea, select, a {
+font-family: 'Gold Shreaft', sans-serif !important;
+}
+
+.profile-frame {
+position: absolute;
+top: 31%;
+left: 50%;
+transform: translate(-50%, -35%);
+width: 200px;
+height: 200px;
+pointer-events: none;
+z-index: 2;
+}
+
+.profile-stattrack-balance {
+position: absolute;
+bottom: -0.05%;
+left: 50%;
+transform: translateX(-50%);
+color: gold;
+border-radius: 15px;
+font-weight: bold;
+font-size: 16px;
+z-index: 99999;
+text-shadow: 0 0 5px black;
+}
+
+.case-items-container::-webkit-scrollbar {
+height: 8px;
+}
+.case-items-container::-webkit-scrollbar-track {
+background: #2a2a2a;
+border-radius: 4px;
+}
+.case-items-container::-webkit-scrollbar-thumb {
+background: #555;
+border-radius: 4px;
+}
+.case-items-container::-webkit-scrollbar-thumb:hover {
+background: #777;
+}
+
+.market-toggle {
+display: flex;
+margin-bottom: 15px;
+border-bottom: 2px solid rgb(51 51 51 / 0%);
+	  }
+	  .market-btn {
+padding: 8px 15px;
+background: none;
+border: none;
+color: white;
+cursor: pointer;
+font-size: 16px;
+position: relative;
+	  }
+	  .market-btn.active {
+color: gold;
+	  }
+	  .market-btn.active::after {
+content: '';
+position: absolute;
+bottom: -2px;
+left: 0;
+width: 100%;
+height: 2px;
+background: gold;
+	  }
+
+.rental-item {
+position: relative;
+opacity: 0.9;
+	  }
+	  .item-image-container {
+position: relative;
+display: inline-block;
+	  }
+	  .rental-overlay {
+position: relative;
+bottom: 10px;
+left: 0;
+right: 0;
+text-align: center;
+pointer-events: none; /* ← Добавляем это свойство */
+	  }
+	  .rental-time {
+color: white;
+text-shadow: 0 0 3px black;
+	  }
+	  .rental-notice {
+color: #aaa;
+font-size: 12px;
+margin-top: 5px;
+	  }
+	  .fragment-item {
+border: 2px solid transparent;
+	  }
+	  .fragment-count {
+position: absolute;
+top: 5px;
+right: 5px;
+background: rgba(0,0,0,0.7);
+color: white;
+border-radius: 50%;
+width: 25px;
+height: 25px;
+display: flex;
+align-items: center;
+justify-content: center;
+font-weight: bold;
+font-size: 12px;
+	  }
+
+.scroll-btn {
+	position: fixed;
+	left: 20px;
+	width: 50px;
+	height: 50px;
+	border-radius: 50%;
+	background-color: #333;
+	color: white;
+	border: none;
+	cursor: pointer;
+	z-index: 999;
+	font-size: 20px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	opacity: 0.7;
+	transition: opacity 0.3s;
+}
+
+.scroll-btn:hover {
+	opacity: 1;
+}
+
+.scroll-to-top {
+	bottom: 80px;
+}
+
+.scroll-to-bottom {
+	bottom: 20px;
+}
+
+.level-frame {
+		position: absolute;
+		padding: 0px;
+		bottom: 32%;
+		left: 50%;
+		transform: translate(-50%, 14.5px);
+		width: 125px;
+		height: auto;
+		z-index: 3;
+	}
+
+.${id} { 
+	background-color: ${color}; 
+	color: ${getContrastColor(color)}; 
+}
+#rarity-colors .${id}-color { 
+	background-color: ${color}; 
+}
+option[value="${id}"] {
+	color: ${color};
+	font-weight: bold;
+}
+.filter-btn[data-rarity="${id}"] {
+	background-color: ${color};
+	color: ${getContrastColor(color)};
+}
+
+/* Редактор элементов - самый верхний уровень */
+#element-editor {
+z-index: 100001 !important;
+}
+
+/* Подсказка выбора элементов - выше редактора */
+#selection-tooltip {
+z-index: 100002 !important;
+}
+
+/* Подсвеченные элементы - ниже подсказки но выше обычных окон */
+.element-highlight {
+z-index: 99999 !important;
+}
+
+/* Обычные модальные окна - ниже редактора */
+.modal {
+z-index: 9999 !important;
+}
+
+.modal .modal-content {
+z-index: 10000 !important;
+}
+
+/* Overlay - самый низкий из модальных */
+#overlay {
+z-index: 9998 !important;
+}
+
+.selector-item {
+position: relative;
+}
+
+.selector-item.selected {
+border-color: gold !important;
+background: rgba(255, 215, 0, 0.1) !important;
+}
+
+/* Стили для выбранных стикеров */
+#selected-stickers > div {
+transition: all 0.2s;
+}
+
+#selected-stickers > div:hover {
+transform: scale(1.1);
+}
+
+/* Адаптивность для мобильных устройств */
+@media (max-width: 768px) {
+.modal-content {
+	width: 95% !important;
+	margin: 10px;
+}
+
+#stickers-grid {
+	grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)) !important;
+}
+
+#charms-grid {
+	grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)) !important;
+}
+}
+
+.info-field {
+transition: all 0.3s ease;
+}
+
+.info-field:hover {
+background: rgba(255,255,255,0.08) !important;
+transform: translateX(5px);
+}
+
+.rang-container {
+transition: all 0.3s ease;
+}
+
+/* Стили для лучшего отображения в редакторе элементов */
+.editor-field select,
+.editor-field input {
+font-family: 'Gold Shreaft', sans-serif;
+}
+
+.editor-field label {
+color: gold !important;
+font-weight: bold;
+}
+
+.selector-item .sticker-count {
+position: absolute;
+top: 3px;
+right: 3px;
+background: gold;
+color: black;
+border-radius: 50%;
+width: 18px;
+height: 18px;
+display: flex;
+align-items: center;
+justify-content: center;
+font-size: 10px;
+font-weight: bold;
+}
+
+.selector-item .max-badge {
+position: absolute;
+bottom: 3px;
+left: 3px;
+background: #ff4444;
+color: white;
+border-radius: 3px;
+padding: 1px 4px;
+font-size: 8px;
+}
+
+#selected-stickers .sticker-group {
+position: relative;
+transition: all 0.2s;
+}
+
+#selected-stickers .sticker-group:hover {
+transform: scale(1.1);
+}
+
+#selected-stickers .group-count {
+position: absolute;
+top: -8px;
+right: -8px;
+background: gold;
+color: black;
+border-radius: 50%;
+width: 20px;
+height: 20px;
+display: flex;
+align-items: center;
+justify-content: center;
+font-size: 10px;
+font-weight: bold;
+}
+
+.selector-item.id-finder-item {
+min-height: 120px;
+}
+
+.selector-item.id-finder-item:hover {
+background: #3a3a3a !important;
+}
+
+/* Стиль для поля замены по ID */
+.editor-field input[placeholder*="ID"] {
+font-family: monospace;
+background: rgba(255, 215, 0, 0.1) !important;
+border: 1px solid gold !important;
+}
+
+/* Анимация копирования */
+@keyframes copyFlash {
+0% { background: rgba(76, 175, 80, 0.3); }
+100% { background: #2a2a2a; }
+}
+
+.copy-flash {
+animation: copyFlash 1s ease-in-out;
+}
+
+.selector-item.frame-item {
+min-height: 180px;
+}
+
+.selector-item.frame-item img {
+max-width: 100px;
+max-height: 100px;
+}
+
+/* Стили для кнопок в редакторе */
+.editor-button-duplicate {
+background: #2196F3 !important;
+}
+
+.editor-button-duplicate:hover {
+background: #1976D2 !important;
+}
+
+.selector-item:hover {
+background: #3a3a3a !important;
+}
+
+.editor-button-replace {
+background: #2196F3 !important;
+}
+
+.editor-button-replace:hover {
+background: #1976D2 !important;
+}
+
+.editor-button-delete {
+background: #ff4444 !important;
+}
+
+.editor-button-delete:hover {
+background: #ff6666 !important;
+}
+
+.editor-button-duplicate {
+background: #4CAF50 !important;
+}
+
+.editor-button-duplicate:hover {
+background: #45a049 !important;
+}
+
+/* Анимация появления модального окна */
+.modal-content {
+animation: modalAppear 0.3s ease-out;
+}
+
+@keyframes modalAppear {
+from {
+	opacity: 0;
+	transform: scale(0.8) translateY(-20px);
+}
+to {
+	opacity: 1;
+	transform: scale(1) translateY(0);
+}
+}
+
+/* Стили для скроллбара в модальном окне */
+#items-grid::-webkit-scrollbar {
+width: 8px;
+}
+
+#items-grid::-webkit-scrollbar-track {
+background: #2a2a2a;
+}
+
+#items-grid::-webkit-scrollbar-thumb {
+background: #555;
+border-radius: 4px;
+}
+
+#items-grid::-webkit-scrollbar-thumb:hover {
+background: #777;
+}
+
+.editor-button {
+width: 100%;
+padding: 8px;
+background: #ff4444;
+color: white;
+border: none;
+border-radius: 4px;
+cursor: pointer;
+font-family: inherit;
+margin-top: 5px;
+}
+
+.editor-button:hover {
+background: #ff6666;
+}
+
+.editor-button:nth-child(2) {
+background: #4CAF50;
+}
+
+.editor-button:nth-child(2):hover {
+background: #45a049;
+}
+
+#selection-overlay {
+position: fixed;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+background: transparent;
+z-index: 99998;
+cursor: crosshair;
+}
+
+#selection-tooltip {
+position: fixed;
+top: 10px;
+left: 50%;
+transform: translateX(-50%);
+background: rgba(0,0,0,0.9);
+color: gold;
+padding: 10px 20px;
+border-radius: 5px;
+z-index: 99999;
+font-family: 'Gold Shreaft', sans-serif;
+border: 2px solid gold;
+font-size: 14px;
+pointer-events: none;
+}
+
+.selector-item {
+display: flex !important;
+flex-direction: column;
+}
+
+#items-grid,
+#stickers-grid,
+#charms-grid,
+#medals-grid,
+#frames-grid,
+#id-items-grid {
+display: grid !important;
+}
+
+/* Обеспечиваем правильное отображение скрытых элементов */
+.selector-item[style*="display: none"] {
+display: none !important;
+}
+
+.selector-item[style*="display: flex"] {
+display: flex !important;
+}
+
+/* Исправление отображения фильтрованных элементов */
+.selector-item {
+display: flex !important;
+flex-direction: column;
+}
+
+.selector-item[style*="display: none"] {
+display: none !important;
+}
+
+/* Стили для выпадающих списков */
+select {
+font-family: 'Gold Shreaft', sans-serif;
+}
+
+/* Подсветка активного фильтра */
+select:focus {
+border-color: gold !important;
+outline: none;
+}
+
+/* Анимация при фильтрации */
+.selector-item {
+transition: all 0.3s ease;
+}
+
+#element-editor {
+position: fixed;
+top: 50px;
+left: 50px;
+width: 400px;
+max-height: 600px;
+background: rgba(30, 30, 30, 0.98);
+border: 2px solid gold;
+border-radius: 8px;
+z-index: 99999;
+padding: 0;
+color: white;
+font-family: 'Gold Shreaft', sans-serif;
+box-shadow: 0 0 30px rgba(0,0,0,0.8);
+backdrop-filter: blur(10px);
+overflow: hidden;
+}
+
+.editor-header {
+display: flex;
+justify-content: space-between;
+align-items: center;
+padding: 15px;
+background: rgba(0, 0, 0, 0.5);
+border-bottom: 1px solid #555;
+cursor: move;
+user-select: none;
+}
+
+.editor-header h3 {
+margin: 0;
+color: gold;
+font-size: 16px;
+}
+
+#close-editor {
+background: #ff4444;
+color: white;
+border: none;
+border-radius: 4px;
+width: 30px;
+height: 30px;
+cursor: pointer;
+font-size: 18px;
+display: flex;
+align-items: center;
+justify-content: center;
+}
+
+#close-editor:hover {
+background: #ff6666;
+}
+
+.editor-content {
+padding: 15px;
+max-height: 500px;
+overflow-y: auto;
+}
+
+.editor-section {
+margin-bottom: 20px;
+padding: 10px;
+background: rgba(255,255,255,0.05);
+border-radius: 4px;
+}
+
+.editor-section label {
+display: block;
+margin-bottom: 8px;
+font-weight: bold;
+color: #ccc;
+}
+
+.editor-fields {
+margin-top: 15px;
+}
+
+.editor-field {
+margin-bottom: 12px;
+}
+
+.editor-field label {
+display: block;
+margin-bottom: 5px;
+font-size: 12px;
+color: #aaa;
+}
+
+.editor-input {
+width: 100%;
+padding: 8px;
+background: #2a2a2a;
+border: 1px solid #555;
+border-radius: 4px;
+color: white;
+font-family: inherit;
+}
+
+.editor-input:focus {
+outline: none;
+border-color: gold;
+}
+
+#select-element-btn {
+width: 100%;
+padding: 10px;
+background: #4CAF50;
+color: white;
+border: none;
+border-radius: 4px;
+cursor: pointer;
+font-family: inherit;
+}
+
+#select-element-btn:hover {
+background: #45a049;
+}
+
+/* Скрываем скроллбар для красоты */
+.editor-content::-webkit-scrollbar {
+width: 6px;
+}
+
+.editor-content::-webkit-scrollbar-track {
+background: #2a2a2a;
+}
+
+.editor-content::-webkit-scrollbar-thumb {
+background: #555;
+border-radius: 3px;
+}
+
+.editor-content::-webkit-scrollbar-thumb:hover {
+background: #777;
+}

@@ -4008,11 +4008,11 @@ document.addEventListener('DOMContentLoaded', function() {
 	  exportItemsDatabase();
 	});
 	
-//	const cart = [];
-//	const checkoutBtn = document.getElementById('checkout-btn');
-//	const clearCartBtn = document.getElementById('clear-cart-btn');
-//	const cartItemsElement = document.getElementById('cart-items');
-//	const cartTotalElement = document.getElementById('cart-total');
+	const cart = [];
+	const checkoutBtn = document.getElementById('checkout-btn');
+	const clearCartBtn = document.getElementById('clear-cart-btn');
+	const cartItemsElement = document.getElementById('cart-items');
+	const cartTotalElement = document.getElementById('cart-total');
 	const itemsContainer = document.getElementById('items-container');
 	const inventoryBtn = document.getElementById('inventory-btn');
 	const inventoryContainer = document.getElementById('inventory-container');
@@ -4023,10 +4023,6 @@ document.addEventListener('DOMContentLoaded', function() {
 	const selectedCountElement = document.getElementById('selected-count');
 	let filterButtons = document.querySelectorAll('.filter-btn');
 	let isCaseOpening = false; // Флаг, указывающий, что кейс открывается
-	// Система платформы (вместо корзины)
-	const marketListings = []; // Лоты на рынке
-	const myRequests = []; // Мои запросы на продажу/покупку
-	const bots = []; // Боты для симуляции рынка
 	
 	let sortDescending = true; // Флаг сортировки по убыванию цены
 	const sortPriceBtn = document.getElementById('sort-price-btn');
@@ -7202,38 +7198,34 @@ document.addEventListener('DOMContentLoaded', function() {
 	  
 	  const rarityInfo = rarities[item.rarity];
 	  const collectionInfo = collectionsDatabase[item.collection] || { name: item.collection, image: '' };
-const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : item.price;
-
-          // Получаем информацию о лотах для предмета
-          const marketLotsCount = marketListings.filter(l => l.itemId === item.id).length;
-          const myLotsCount = myRequests.filter(r => r.itemId === item.id && r.type === 'sell').length;
-          const inventoryCount = inventory.filter(i => i.id === item.id).length;
-          
-          itemCard.innerHTML = `
-                <div class="item-img"><img data-src='${item.image}' alt="" class="logo lazy" width=150></div>
-                <div class="item-rarity ${rarityInfo.color}"><div class="item-name">${item.name}</div></div>
-                <div class="item-collection" data-collection="${item.collection}">
-                  ${collectionInfo.image ? `<img src="${collectionInfo.image}" class="collection-icon" alt="${collectionInfo.name}" style="width: 30px; height: auto;">` : ''}
-                  ${collectionInfo.name || item.collection}
-                </div>
-                ${currentMarket === 'rental' ?
-                  '<div class="item-stock">Аренда на 3 минуты</div>' :
-                  `<div class="item-stock-info">
-                    <div>Лотов на рынке: <span class="market-lots">${marketLotsCount}</span></div>
-                    <div>Моих лотов: <span class="my-lots">${myLotsCount}</span></div>
-                    <div>Количество в инвентаре: <span class="inventory-count">${inventoryCount}</span></div>
-                  </div>`
-                }
-                <div class="item-price" style="color: ${currencyColor}">${price.toFixed(2)} ₽</div>
-                <div class="item-buttons">
-                  <button class="find-on-platform-btn" data-id='${item.id}' data-name='${item.name}' data-price='${price}'
-                        data-max='${item.stock}' data-rarity='${item.rarity}'
-                        ${currentMarket === 'rental' ? 'data-rental="true"' : ''}>
-                        ${currentMarket === 'rental' ? 'Арендовать' : 'Найти на платформе'}
-                  </button>
-                </div>
-                ${currentMarket === 'rental' ? '' : '<div class="stock-warning">Нет доступных лотов</div>'}
-          `;
+	  
+	  const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : item.price;
+	  
+	  itemCard.innerHTML = `
+		<div class="item-img"><img data-src='${item.image}' alt="" class="logo lazy" width=150></div>
+		<div class="item-rarity ${rarityInfo.color}"><div class="item-name">${item.name}</div></div>
+		<div class="item-collection" data-collection="${item.collection}">
+		  ${collectionInfo.image ? `<img src="${collectionInfo.image}" class="collection-icon" alt="${collectionInfo.name}" style="width: 30px; height: auto;">` : ''}
+		  ${collectionInfo.name || item.collection}
+		</div>
+		${currentMarket === 'rental' ? 
+		  '<div class="item-stock">Аренда на 3 минуты</div>' : 
+		  `<div class="item-stock">Количество доступных покупок: <span class="available-stock">${item.stock}</span></div>`
+		}
+		<div class="item-price" style="color: ${currencyColor}">${price.toFixed(2)} ₽</div>
+		<div class="item-buttons">
+		  <button class="add-to-cart" data-id='${item.id}' data-name='${item.name}' data-price='${price}' 
+			data-max='${item.stock}' data-rarity='${item.rarity}' 
+			${currentMarket === 'rental' ? 'data-rental="true"' : ''}>
+			${currentMarket === 'rental' ? 'Арендовать' : 'Добавить в корзину'}
+		  </button>
+		  ${currentMarket === 'rental' ? '' : 
+			`<button class="buy-all-btn" data-id='${item.id}' data-name='${item.name}' data-price='${price}' 
+			  data-max='${item.stock}' data-rarity='${item.rarity}'>Купить все</button>`
+		  }
+		</div>
+		${currentMarket === 'rental' ? '' : '<div class="stock-warning">Достигнуто максимальное количество покупок</div>'}
+	  `;
 	  
 	  const warning = itemCard.querySelector('.stock-warning');
 	  const addBtn = itemCard.querySelector('.add-to-cart');
