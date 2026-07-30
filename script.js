@@ -4536,8 +4536,10 @@ document.addEventListener('DOMContentLoaded', function() {
 		const items = Array.from(container.querySelectorAll('.item-card'));
 		
 		items.sort((a, b) => {
-			const priceA = parseFloat(a.querySelector('.add-to-cart').getAttribute('data-price'));
-			const priceB = parseFloat(b.querySelector('.add-to-cart').getAttribute('data-price'));
+			const btnA = a.querySelector('.find-on-platform-btn') || a.querySelector('.rent-item-btn');
+			const btnB = b.querySelector('.find-on-platform-btn') || b.querySelector('.rent-item-btn');
+			const priceA = btnA ? parseFloat(btnA.getAttribute('data-price')) : 0;
+			const priceB = btnB ? parseFloat(btnB.getAttribute('data-price')) : 0;
 			return sortDescending ? priceB - priceA : priceA - priceB;
 		});
 		
