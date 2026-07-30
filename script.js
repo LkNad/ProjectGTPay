@@ -7543,6 +7543,248 @@ document.addEventListener('DOMContentLoaded', function() {
 		filterButtons = document.querySelectorAll('.filter-btn');
 		return true;
 	}
+
+	// Функция открытия модального окна предмета
+	function openItemModal(item) {
+		const modal = document.createElement('div');
+		modal.className = 'item-modal';
+		modal.innerHTML = `
+			<div class="item-modal-content">
+				<div class="item-modal-left">
+					<div class="item-modal-mini-card">
+						<img src="${item.image}" alt="${item.name}">
+						<div class="item-name">${item.name}</div>
+						<div class="item-rarity ${item.rarity}">${item.rarity}</div>
+					</div>
+					<button class="sell-from-inventory-btn">Продать из инвентаря</button>
+				</div>
+				<div class="item-modal-right">
+					<h3>Лоты на рынке</h3>
+					<div class="lots-container"></div>
+					<div class="request-form">
+						<h4>Запрос на покупку</h4>
+						<input type="number" placeholder="Количество" class="request-quantity">
+						<input type="number" placeholder="Цена за шт" class="request-price">
+						<button class="create-request-btn">Создать запрос</button>
+					</div>
+				</div>
+				<button class="close-modal-btn">×</button>
+			</div>
+		`;
+		document.body.appendChild(modal);
+		
+		// Закрытие модального окна
+		modal.querySelector('.close-modal-btn').addEventListener('click', () => modal.remove());
+		modal.addEventListener('click', (e) => {
+			if (e.target === modal) modal.remove();
+		});
+		
+		// Генерация бот-лотов
+		generateBotLots(item, modal.querySelector('.lots-container'));
+		
+		// Кнопка продажи из инвентаря
+		modal.querySelector('.sell-from-inventory-btn').addEventListener('click', () => {
+			showInventorySellModal(item, modal);
+		});
+		
+		// Создание запроса
+		modal.querySelector('.create-request-btn').addEventListener('click', () => {
+			const qty = parseInt(modal.querySelector('.request-quantity').value);
+			const price = parseFloat(modal.querySelector('.request-price').value);
+			if (qty > 0 && price > 0) {
+				myRequests.push({
+					id: Date.now(),
+					itemId: item.id,
+					itemName: item.name,
+					type: 'buy',
+					quantity: qty,
+					price: price
+				});
+				showToast('Запрос создан!');
+				renderMyRequests();
+			}
+		});
+	}
+
+	// Рендеринг моих запросов
+	function renderMyRequests() {
+		const container = document.getElementById('items-container');
+		
+		container.innerHTML = '';
+		
+		if (myRequests.length === 0) {
+			container.innerHTML = '<div style="padding: 20px; text-align: center;">Нет активных запросов</div>';
+			return;
+		}
+		
+		myRequests.forEach(request => {
+			const div = document.createElement('div');
+			div.className = 'item-card request-item';
+			div.innerHTML = `
+				<div class="item-name">${request.itemName}</div>
+				<div class="request-type">${request.type === 'buy' ? 'Покупка' : 'Продажа'}</div>
+				<div class="request-qty">Количество: ${request.quantity}</div>
+				<div class="request-price">Цена: ${request.price} ₽</div>
+				<button class="cancel-request-btn" data-id="${request.id}">Отменить</button>
+			`;
+			container.appendChild(div);
+		});
+		
+		container.querySelectorAll('.cancel-request-btn').forEach(btn => {
+			btn.addEventListener('click', function() {
+				const id = parseInt(this.getAttribute('data-id'));
+				myRequests = myRequests.filter(r => r.id !== id);
+				renderMyRequests();
+			});
+		});
+	}
+
+	// Генерация бот-лотов
+	function generateBotLots(item, container) {
+		container.innerHTML = '';
+		
+		const botCount = Math.floor(Math.random() * 5) + 3;
+		for (let i = 0; i < botCount; i++) {
+			const basePrice = item.price;
+			const stickerCount = Math.floor(Math.random() * 4);
+			const stickerPrice = stickerCount * 50;
+			const botPrice = basePrice + stickerPrice * 0.25;
+			
+			const lot = document.createElement('div');
+			lot.className = 'lot-item';
+			lot.innerHTML = `
+				<div class="lot-seller">Бот #${i + 1}</div>
+				<div class="lot-price">${botPrice.toFixed(2)} ₽</div>
+				${stickerCount > 0 ? `<div class="lot-stickers">Наклеек: ${stickerCount}</div>` : ''}
+				<button class="buy-lot-btn" data-price="${botPrice}">Купить</button>
+			`;
+			container.appendChild(lot);
+			
+			lot.querySelector('.buy-lot-btn').addEventListener('click', function() {
+				const price = parseFloat(this.getAttribute('data-price'));
+				if (balance >= price) {
+					balance -= price;
+					balance = Math.round(balance * 100) / 100;
+					if (balanceAmount) balanceAmount.textContent = balance.toLocaleString('ru-RU');
+					inventory.push({...item, stickers: stickerCount});
+					updateInventory();
+				} else {
+					showToast('Недостаточно средств!', true);
+				}
+			});
+		}
+	}
+
+	// Модальное окно продажи из инвентаря
+	function showInventorySellModal(item, parentModal) {
+		const sellModal = document.createElement('div');
+		sellModal.className = 'item-modal';
+		sellModal.innerHTML = `
+			<div class="item-modal-content">
+				<h3>Выберите предмет для продажи</h3>
+				<div class="inventory-sell-grid"></div>
+				<button class="close-sell-modal-btn">Отмена</button>
+			</div>
+		`;
+		document.body.appendChild(sellModal);
+		
+		const grid = sellModal.querySelector('.inventory-sell-grid');
+		const matchingItems = inventory.filter(invItem => invItem.id === item.id || invItem.name === item.name);
+		
+		matchingItems.forEach((invItem, index) => {
+			const stickerCount = invItem.stickers || 0;
+			const suggestedPrice = item.price + stickerCount * 50 * 0.4;
+			
+			const div = document.createElement('div');
+			div.className = 'inventory-sell-item';
+			div.innerHTML = `
+				<img src="${invItem.image}" alt="${invItem.name}">
+				<div class="item-name">${invItem.name}</div>
+				${stickerCount > 0 ? `<div class="stickers-count">Наклеек: ${stickerCount}</div>` : ''}
+				<input type="number" class="sell-price-input" placeholder="Цена" value="${suggestedPrice.toFixed(2)}" min="0" max="1000000">
+				<div class="price-hint">Рекомендуемая: ${suggestedPrice.toFixed(2)} ₽</div>
+				<button class="confirm-sell-btn">Выставить</button>
+			`;
+			grid.appendChild(div);
+			
+			div.querySelector('.confirm-sell-btn').addEventListener('click', function() {
+				const sellPrice = parseFloat(div.querySelector('.sell-price-input').value);
+				if (sellPrice >= 0 && sellPrice <= 1000000) {
+					marketLots.push({
+						id: Date.now(),
+						itemId: item.id,
+						sellerId: 'player',
+						price: sellPrice,
+						stickers: stickerCount
+					});
+					inventory.splice(index, 1);
+					updateInventory();
+					generateBotLots(item, parentModal.querySelector('.lots-container'));
+					sellModal.remove();
+				} else {
+					showToast('Некорректная цена!', true);
+				}
+			});
+		});
+		
+		sellModal.querySelector('.close-sell-modal-btn').addEventListener('click', () => sellModal.remove());
+		sellModal.addEventListener('click', (e) => {
+			if (e.target === sellModal) sellModal.remove();
+		});
+	}
+
+	// Инициализация рыночных ботов
+	function initMarketBots() {
+		itemsDatabase.forEach(item => {
+				for (let i = 0; i < item.stock; i++) {
+					const hasStickers = Math.random() < 0.3;
+					const stickerCount = hasStickers ? Math.floor(Math.random() * 4) : 0;
+					const botPrice = item.price + (stickerCount * 50) * 0.25;
+					
+					marketLots.push({
+						id: Date.now() + i,
+						itemId: item.id,
+						sellerId: `bot_${Math.floor(Math.random() * 10)}`,
+						price: botPrice,
+						stickers: stickerCount
+					});
+				}
+			}
+		});
+	}
+
+	// Симуляция активности ботов
+	function startMarketSimulation() {
+		setInterval(() => {
+			if (marketLots.length > 0 && Math.random() < 0.3) {
+				const randomIndex = Math.floor(Math.random() * marketLots.length);
+				marketLots.splice(randomIndex, 1);
+			}
+			
+			if (Math.random() < 0.2) {
+				if (randomItem) {
+					const hasStickers = Math.random() < 0.3;
+					const stickerCount = hasStickers ? Math.floor(Math.random() * 4) : 0;
+					const botPrice = randomItem.price + (stickerCount * 50) * 0.25;
+					
+					marketLots.push({
+						id: Date.now(),
+						itemId: randomItem.id,
+						sellerId: `bot_${Math.floor(Math.random() * 10)}`,
+						price: botPrice,
+						stickers: stickerCount
+					});
+				}
+			}
+		}, 3000);
+	}
+
+	// Инициализация рынка
+	initMarketBots();
+	startMarketSimulation();
+
+
+	}
 	
 	
 	let itemsDbMap = new Map();
