@@ -53,80 +53,66 @@ document.addEventListener('DOMContentLoaded', function() {
 	marketToggle.innerHTML = `
 	  <button id="normal-market-btn" class="market-btn active"><a style="font-size: 120%">Рынок</a></button>
 	  <button id="rental-market-btn" class="market-btn"><a style="font-size: 120%">Аренда</a></button>
-	  <button id="online-market-btn" class="market-btn"><a style="font-size: 120%">Онлайн-рынок</a></button>
 	`;
 	document.querySelector('.sort-container').insertAdjacentElement('beforebegin', marketToggle);
 	
 	document.getElementById('generate-promo-btn').addEventListener('click', generateRandomPromocode);
 
-	let currentMarket = 'normal'; // 'normal', 'rental' или 'online'
-	
-	// Онлайн-рынок объект
-	const onlineMarket = {
-		listings: {},      // itemId -> [{id, price, isMine, inventoryItem, seller, stickers}]
-		buyRequests: [],   // {id,itemId,item,price,quantity,remaining,timestamp,timerId,expectedAt}
-		sellRequests: [],  // {id,lotId,itemId,item,price,status,listedAt,expectedSellAt}
-		reqCounter: 0,
-		currentFilterRarity: 'all',
-		currentFilterCollection: 'all',
-		currentFilterName: '',
-		sortDescending: false,
-		currentFilterTypes: ['all']
-	};
-	
-	// Track which items have been initialized for bots
-	const omInitialized = new Set();
-	
-	document.getElementById('normal-market-btn').addEventListener('click', function() {
-		if (currentMarket !== 'normal') {
-			currentMarket = 'normal';
-			this.classList.add('active');
-			document.getElementById('rental-market-btn').classList.remove('active');
-			document.getElementById('online-market-btn').classList.remove('active');
-			// Show shop UI
-			document.querySelector('.sort-container').style.display = '';
-			document.getElementById('items-container').style.display = '';
-			const omSection = document.getElementById('online-market-section');
-			if (omSection) omSection.style.display = 'none';
-			initShop(); // Перезагружаем магазин
-		}
-	});
-
-	document.getElementById('rental-market-btn').addEventListener('click', function() {
-		if (currentMarket !== 'rental') {
-			currentMarket = 'rental';
-			this.classList.add('active');
-			document.getElementById('normal-market-btn').classList.remove('active');
-			document.getElementById('online-market-btn').classList.remove('active');
-			// Show shop UI
-			document.querySelector('.sort-container').style.display = '';
-			document.getElementById('items-container').style.display = '';
-			const omSection = document.getElementById('online-market-section');
-			if (omSection) omSection.style.display = 'none';
-			initShop(); // Перезагружаем магазин
-		}
-	});
-
-	document.getElementById('online-market-btn').addEventListener('click', function() {
-		if (currentMarket !== 'online') {
-			currentMarket = 'online';
-			document.querySelectorAll('.market-btn').forEach(b => b.classList.remove('active'));
-			this.classList.add('active');
-			// Hide shop UI
-			document.querySelector('.sort-container').style.display = 'none';
-			document.getElementById('items-container').style.display = 'none';
-			// Show online market section
-			let omSection = document.getElementById('online-market-section');
-			if (!omSection) {
-				createOnlineMarketSection();
-				omSection = document.getElementById('online-market-section');
+		let currentMarket = 'normal'; // 'normal' или 'rental'
+		
+		// Онлайн-рынок объект
+		const onlineMarket = {
+			listings: {},      // itemId -> [{id, price, isMine, inventoryItem, seller, stickers}]
+			buyRequests: [],   // {id,itemId,item,price,quantity,remaining,timestamp,timerId,expectedAt}
+			sellRequests: [],  // {id,lotId,itemId,item,price,status,listedAt,expectedSellAt}
+			reqCounter: 0,
+			currentFilterRarity: 'all',
+			currentFilterCollection: 'all',
+			currentFilterName: '',
+			sortDescending: false,
+			currentFilterTypes: ['all']
+		};
+		
+		// Track which items have been initialized for bots
+		const omInitialized = new Set();
+		
+		document.getElementById('rental-market-btn').addEventListener('click', function() {
+			if (currentMarket !== 'rental') {
+				currentMarket = 'rental';
+				this.classList.add('active');
+				document.getElementById('normal-market-btn').classList.remove('active');
+				// Show shop UI
+				document.querySelector('.sort-container').style.display = '';
+				document.getElementById('items-container').style.display = '';
+				const omSection = document.getElementById('online-market-section');
+				if (omSection) omSection.style.display = 'none';
+				initShop(); // Перезагружаем магазин
 			}
-			omSection.style.display = 'flex';
-			buildRarityFilters();
-			buildCollectionFilter();
-			renderPlatformGrid();
-		}
-	});
+		});
+	
+		// Клик по кнопке "Рынок" теперь открывает онлайн-рынок вместо обычного магазина
+		document.getElementById('normal-market-btn').addEventListener('click', function(e) {
+			// Переопределяем поведение - открываем онлайн-рынок
+			e.preventDefault();
+			if (currentMarket !== 'online') {
+				currentMarket = 'online';
+				document.querySelectorAll('.market-btn').forEach(b => b.classList.remove('active'));
+				this.classList.add('active');
+				// Hide shop UI
+				document.querySelector('.sort-container').style.display = 'none';
+				document.getElementById('items-container').style.display = 'none';
+				// Show online market section
+				let omSection = document.getElementById('online-market-section');
+				if (!omSection) {
+					createOnlineMarketSection();
+					omSection = document.getElementById('online-market-section');
+				}
+				omSection.style.display = 'flex';
+				buildRarityFilters();
+				buildCollectionFilter();
+				renderPlatformGrid();
+			}
+		});
 	
 	let balance = 0;
 	const balanceAmount = document.getElementById('balance-amount');
