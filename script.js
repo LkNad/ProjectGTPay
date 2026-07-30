@@ -113,12 +113,11 @@ document.addEventListener('DOMContentLoaded', function() {
         let inventory = [];
 
         function addBattlePassButton() {
-	function addBattlePassButton() {
-		const battlePassBtn = document.getElementById('battle-pass-btn');
-		battlePassBtn.addEventListener('click', openBattlePassMenu);
-	}
-	
-	function addScrollButtons() {
+                const battlePassBtn = document.getElementById('battle-pass-btn');
+                battlePassBtn.addEventListener('click', openBattlePassMenu);
+        }
+        
+        function addScrollButtons() {
 		const scrollToTopBtn = document.createElement('button');
 		const scrollToBottomBtn = document.createElement('button');
 		
@@ -7266,14 +7265,15 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
                 ${currentMarket === 'rental' ? '' : '<div class="stock-warning">Нет доступных лотов</div>'}
           `;
 	  
-	  const warning = itemCard.querySelector('.stock-warning');
-	  const addBtn = itemCard.querySelector('.add-to-cart');
-	  const buyAllBtn = itemCard.querySelector('.buy-all-btn');
-	  if (warning) {
-		warning.style.display = item.stock <= 0 ? 'block' : 'none';
-		addBtn.disabled = item.stock <= 0;
-		buyAllBtn.disabled = item.stock <= 0;
-	  }
+	  // Кнопки корзины удалены, теперь используется только кнопка "Найти на платформе"
+	  // const warning = itemCard.querySelector('.stock-warning');
+	  // const addBtn = itemCard.querySelector('.add-to-cart');
+	  // const buyAllBtn = itemCard.querySelector('.buy-all-btn');
+	  // if (warning) {
+	  //   warning.style.display = item.stock <= 0 ? 'block' : 'none';
+	  //   addBtn.disabled = item.stock <= 0;
+	  //   buyAllBtn.disabled = item.stock <= 0;
+	  // }
 
 	  const canShow3D = fxCan3D(item);
 
@@ -7318,75 +7318,14 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 			showToast(`Предмет "${name}" арендован на 3 минуты!`);
 			if(typeof updateInventory === 'function') updateInventory();
 			if(typeof saveGameState === 'function') saveGameState();
-		  } else {
-			const stockSpan = itemCard.querySelector('.available-stock');
-			if (!stockSpan) return;
-			
-			const currentStock = parseFloat(stockSpan.textContent);
-			if (currentStock <= 0) {
-			  showToast('Товар закончился!', true);
-			  return;
-			}
+                  } else {
+                        // Корзина удалена, кнопка "Найти на платформе" открывает модальное окно
+                        // Этот блок больше не используется для добавления в корзину
+                  }
+                });
+          }
 
-			let quantityToAdd = 1;
-			if (e.shiftKey) {
-			  quantityToAdd = Math.min(10, currentStock);
-			}
-
-			for (let i = 0; i < quantityToAdd; i++) {
-			  if(typeof addToCart === 'function') addToCart(id, name, price, false);
-			}
-
-			if(typeof updateStock === 'function') {
-				updateStock(itemCard, currentStock - quantityToAdd, max);
-			} else {
-				stockSpan.textContent = currentStock - quantityToAdd;
-				if (warning) warning.style.display = (currentStock - quantityToAdd) <= 0 ? 'block' : 'none';
-				if (addBtn) addBtn.disabled = (currentStock - quantityToAdd) <= 0;
-				if (buyAllBtn) buyAllBtn.disabled = (currentStock - quantityToAdd) <= 0;
-			}
-
-			const message = quantityToAdd === 1
-			  ? 'Добавлено в корзину!'
-			  : `Добавлено ${quantityToAdd} шт. в корзину!`;
-
-			showToast(message);
-		  }
-		});
-	  }
-
-	  if (currentMarket !== 'rental' && buyAllBtn) {
-		buyAllBtn.addEventListener('click', function(e) {
-		  e.stopPropagation();
-		  const id = this.getAttribute('data-id');
-		  const name = this.getAttribute('data-name');
-		  const price = parseFloat(this.getAttribute('data-price'));
-		  const max = parseInt(this.getAttribute('data-max'));
-		  
-		  const stockSpan = itemCard.querySelector('.available-stock');
-		  if (!stockSpan) return;
-		  
-		  const currentStock = parseFloat(stockSpan.textContent);
-		  
-		  if (currentStock > 0) {
-			for (let i = 0; i < currentStock; i++) {
-			  if(typeof addToCart === 'function') addToCart(id, name, price, false);
-			}
-			
-			if(typeof updateStock === 'function') {
-				updateStock(itemCard, 0, max);
-			} else {
-				stockSpan.textContent = 0;
-				if (warning) warning.style.display = 'block';
-				if (addBtn) addBtn.disabled = true;
-				buyAllBtn.disabled = true;
-			}
-			
-			showToast(`Все ${currentStock} шт. добавлены в корзину!`);
-		  }
-		});
-	  }
-	  
+          // Кнопка "Купить все" удалена вместе с корзиной
 	  itemsContainer.appendChild(itemCard);
 
 	  const img = itemCard.querySelector('.item-img img');
@@ -7619,9 +7558,9 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 		return true;
 	}
 	
-	checkoutBtn.addEventListener('click', checkout);
-	
-	clearCartBtn.addEventListener('click', clearCart);
+	// Функции корзины удалены, так как корзина больше не используется
+	// checkoutBtn.addEventListener('click', checkout);
+	// clearCartBtn.addEventListener('click', clearCart);
 	
 	function addToCart(id, name, price) {
 		const existingItem = cart.find(item => item.id === id);
@@ -7640,8 +7579,7 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 		
 		const itemElement = document.getElementById(id);
 		if (itemElement) {
-			const currentStock = parseInt(itemElement.querySelector('.available-stock').textContent);
-			const max = parseInt(itemElement.querySelector('.add-to-cart').getAttribute('data-max'));
+			const currentStock = parseInt(itemElement.querySelector('.market-lots').textContent);
 			
 			if (shopItem.priceMultiply > 0) {
 				shopItem.price += shopItem.priceMultiply;
@@ -7651,10 +7589,10 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 				updateItemPriceInUI(shopItem);
 			}
 			
-			updateStock(itemElement, currentStock - 1, max);
+			updateStock(itemElement, currentStock - 1, null);
 		}
 		
-		updateCart();
+		// updateCart() больше не вызывается, так как корзина удалена
 	}
 
 	function removeFromCart(index, isShiftPressed = false) {
@@ -7682,9 +7620,8 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 
 		const stockDelta = quantityToRemove;
 		if (itemElement) {
-			const currentStock = parseInt(itemElement.querySelector('.available-stock').textContent);
-			const max = parseInt(itemElement.querySelector('.add-to-cart').getAttribute('data-max'));
-			updateStock(itemElement, currentStock + stockDelta, max);
+			const currentStock = parseInt(itemElement.querySelector('.market-lots').textContent);
+			updateStock(itemElement, currentStock + stockDelta, null);
 		} else {
 			shopItem.stock += stockDelta;
 		}
@@ -7697,25 +7634,21 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 			updateItemPriceInUI(shopItem);
 		}
 
-		updateCart();
+		// updateCart() больше не вызывается, так как корзина удалена
 	}
 
 	function updateStock(element, newStock, max) {
-		const stockElement = element.querySelector('.available-stock');
-		const addBtn = element.querySelector('.add-to-cart');
-		const buyAllBtn = element.querySelector('.buy-all-btn');
-		const warning = element.querySelector('.stock-warning');
+		// Функция обновляет только отображение количества лотов, кнопки корзины удалены
+		const stockElement = element.querySelector('.market-lots');
 		
-		stockElement.textContent = newStock;
-		addBtn.disabled = newStock <= 0;
-		buyAllBtn.disabled = newStock <= 0;
-		warning.style.display = newStock <= 0 ? 'block' : 'none';
+		if (stockElement) {
+			stockElement.textContent = newStock;
+		}
 		
 		const serchItem = itemsDatabase.find(item => item.id === element.id);
-		serchItem.stock = newStock;
-		
-		checkoutBtn.disabled = cart.length === 0;
-		clearCartBtn.disabled = cart.length === 0;
+		if (serchItem) {
+			serchItem.stock = newStock;
+		}
 	}
 	
 	function updateCart() {
