@@ -7733,40 +7733,43 @@ document.addEventListener('DOMContentLoaded', function() {
 		});
 	}
 
-	// Инициализация рыночных ботов
-	function initMarketBots() {
-		itemsDatabase.forEach(item => {
-				for (let i = 0; i < item.stock; i++) {
-					const hasStickers = Math.random() < 0.3;
-					const stickerCount = hasStickers ? Math.floor(Math.random() * 4) : 0;
-					const botPrice = item.price + (stickerCount * 50) * 0.25;
-					
-					marketLots.push({
-						id: Date.now() + i,
-						itemId: item.id,
-						sellerId: `bot_${Math.floor(Math.random() * 10)}`,
-						price: botPrice,
-						stickers: stickerCount
-					});
+		// Инициализация рыночных ботов
+		function initMarketBots() {
+			itemsDatabase.forEach(item => {
+				if (item.stock > 0 && !item.isRental) {
+					for (let i = 0; i < item.stock; i++) {
+						const hasStickers = Math.random() < 0.3;
+						const stickerCount = hasStickers ? Math.floor(Math.random() * 4) : 0;
+						const botPrice = item.price + (stickerCount * 50) * 0.25;
+						
+						marketLots.push({
+							id: Date.now() + i,
+							itemId: item.id,
+							sellerId: `bot_${Math.floor(Math.random() * 10)}`,
+							price: botPrice,
+							stickers: stickerCount
+						});
+					}
 				}
-			}
-		});
-	}
+			});
+		}
 
-	// Симуляция активности ботов
 	function startMarketSimulation() {
 		setInterval(() => {
+			// Симуляция покупки (удаление лота)
 			if (marketLots.length > 0 && Math.random() < 0.3) {
 				const randomIndex = Math.floor(Math.random() * marketLots.length);
 				marketLots.splice(randomIndex, 1);
 			}
-			
-			if (Math.random() < 0.2) {
+
+			// Симуляция продажи (добавление лота)
+			if (Math.random() < 0.2 && itemsDatabase.length > 0) {
+				const randomItem = itemsDatabase.filter(item => !item.isRental && item.stock > 0)[Math.floor(Math.random() * itemsDatabase.length)];
 				if (randomItem) {
 					const hasStickers = Math.random() < 0.3;
 					const stickerCount = hasStickers ? Math.floor(Math.random() * 4) : 0;
 					const botPrice = randomItem.price + (stickerCount * 50) * 0.25;
-					
+
 					marketLots.push({
 						id: Date.now(),
 						itemId: randomItem.id,
