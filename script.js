@@ -56,15 +56,26 @@ document.addEventListener('DOMContentLoaded', function() {
 	`;
 	document.querySelector('.sort-container').insertAdjacentElement('beforebegin', marketToggle);
 	
+	// Добавляем вкладки Платформа / Мои запросы (только для обычного рынка)
+	const platformTabs = document.createElement('div');
+	platformTabs.className = 'platform-tabs';
+	platformTabs.innerHTML = `
+	  <button id="platform-tab-btn" class="platform-tab-btn active">Платформа</button>
+	  <button id="my-requests-tab-btn" class="platform-tab-btn">Мои запросы</button>
+	`;
+	marketToggle.insertAdjacentElement('afterend', platformTabs);
+	
 	document.getElementById('generate-promo-btn').addEventListener('click', generateRandomPromocode);
 
 	let currentMarket = 'normal'; // 'normal' или 'rental'
+	let currentPlatformTab = 'platform'; // 'platform' или 'my-requests'
 	
 	document.getElementById('normal-market-btn').addEventListener('click', function() {
 		if (currentMarket !== 'normal') {
 			currentMarket = 'normal';
 			this.classList.add('active');
 			document.getElementById('rental-market-btn').classList.remove('active');
+			platformTabs.style.display = 'flex';
 			initShop(); // Перезагружаем магазин
 		}
 	});
@@ -74,13 +85,38 @@ document.addEventListener('DOMContentLoaded', function() {
 			currentMarket = 'rental';
 			this.classList.add('active');
 			document.getElementById('normal-market-btn').classList.remove('active');
+			platformTabs.style.display = 'none';
 			initShop(); // Перезагружаем магазин
+		}
+	});
+	
+	// Переключение вкладок Платформа / Мои запросы
+	document.getElementById('platform-tab-btn').addEventListener('click', function() {
+		if (currentPlatformTab !== 'platform') {
+			currentPlatformTab = 'platform';
+			this.classList.add('active');
+			document.getElementById('my-requests-tab-btn').classList.remove('active');
+			initShop();
+		}
+	});
+	
+	document.getElementById('my-requests-tab-btn').addEventListener('click', function() {
+		if (currentPlatformTab !== 'my-requests') {
+			currentPlatformTab = 'my-requests';
+			this.classList.add('active');
+			document.getElementById('platform-tab-btn').classList.remove('active');
+			renderMyRequests();
 		}
 	});
 	
 	let balance = 0;
 	const balanceAmount = document.getElementById('balance-amount');
 	let inventory = [];
+	
+	// Данные для рынка: лоты и запросы
+	let marketLots = []; // {id, itemId, sellerId, price, stickers?, charm?}
+	let buyRequests = []; // {id, itemId, buyerId, price, quantity}
+	let sellRequests = []; // {id, itemId, sellerId, price, quantity}
 	
 	function addBattlePassButton() {
 		const battlePassBtn = document.getElementById('battle-pass-btn');
@@ -4008,11 +4044,8 @@ document.addEventListener('DOMContentLoaded', function() {
 	  exportItemsDatabase();
 	});
 	
-	const cart = [];
-	const checkoutBtn = document.getElementById('checkout-btn');
-	const clearCartBtn = document.getElementById('clear-cart-btn');
-	const cartItemsElement = document.getElementById('cart-items');
-	const cartTotalElement = document.getElementById('cart-total');
+	// Корзина удалена - теперь используется система лотов на рынке
+	
 	const itemsContainer = document.getElementById('items-container');
 	const inventoryBtn = document.getElementById('inventory-btn');
 	const inventoryContainer = document.getElementById('inventory-container');
@@ -7580,227 +7613,6 @@ document.addEventListener('DOMContentLoaded', function() {
 		return true;
 	}
 	
-	checkoutBtn.addEventListener('click', checkout);
-	
-	clearCartBtn.addEventListener('click', clearCart);
-	
-	function addToCart(id, name, price) {
-		const existingItem = cart.find(item => item.id === id);
-		const shopItem = itemsDatabase.find(item => item.id === id);
-		
-		if (shopItem && shopItem.stock <= 0) {
-			showToast('Товара нет в наличии!', true);
-			return;
-		}
-		
-		if (existingItem) {
-			existingItem.quantity += 1;
-		} else {
-			cart.push({ id, name, price, quantity: 1 });
-		}
-		
-		const itemElement = document.getElementById(id);
-		if (itemElement) {
-			const currentStock = parseInt(itemElement.querySelector('.available-stock').textContent);
-			const max = parseInt(itemElement.querySelector('.add-to-cart').getAttribute('data-max'));
-			
-			if (shopItem.priceMultiply > 0) {
-				shopItem.price += shopItem.priceMultiply;
-				if (shopItem.price > 1000000) {
-					shopItem.price = 1000000;
-				}
-				updateItemPriceInUI(shopItem);
-			}
-			
-			updateStock(itemElement, currentStock - 1, max);
-		}
-		
-		updateCart();
-	}
-
-	function removeFromCart(index, isShiftPressed = false) {
-		const item = cart[index];
-		if (!item) return;
-
-		const shopItem = itemsDatabase.find(dbItem => dbItem.id === item.id);
-		if (!shopItem) return;
-
-		const itemElement = document.getElementById(item.id);
-
-		let quantityToRemove = 1;
-		if (isShiftPressed) {
-			quantityToRemove = Math.min(10, item.quantity);
-		}
-
-		for (let i = 0; i < quantityToRemove; i++) {
-			if (item.quantity > 1) {
-				item.quantity -= 1;
-			} else {
-				cart.splice(index, 1);
-				break; // больше нечего удалять
-			}
-		}
-
-		const stockDelta = quantityToRemove;
-		if (itemElement) {
-			const currentStock = parseInt(itemElement.querySelector('.available-stock').textContent);
-			const max = parseInt(itemElement.querySelector('.add-to-cart').getAttribute('data-max'));
-			updateStock(itemElement, currentStock + stockDelta, max);
-		} else {
-			shopItem.stock += stockDelta;
-		}
-
-		if (shopItem.priceMultiply > 0) {
-			shopItem.price = Math.max(0, shopItem.price - shopItem.priceMultiply * stockDelta);
-			if (shopItem.price > 1000000) {
-				shopItem.price = 1000000;
-			}
-			updateItemPriceInUI(shopItem);
-		}
-
-		updateCart();
-	}
-
-	function updateStock(element, newStock, max) {
-		const stockElement = element.querySelector('.available-stock');
-		const addBtn = element.querySelector('.add-to-cart');
-		const buyAllBtn = element.querySelector('.buy-all-btn');
-		const warning = element.querySelector('.stock-warning');
-		
-		stockElement.textContent = newStock;
-		addBtn.disabled = newStock <= 0;
-		buyAllBtn.disabled = newStock <= 0;
-		warning.style.display = newStock <= 0 ? 'block' : 'none';
-		
-		const serchItem = itemsDatabase.find(item => item.id === element.id);
-		serchItem.stock = newStock;
-		
-		checkoutBtn.disabled = cart.length === 0;
-		clearCartBtn.disabled = cart.length === 0;
-	}
-	
-	function updateCart() {
-		cartItemsElement.innerHTML = '';
-		let total = 0;
-		
-		cart.forEach((item, index) => {
-			total += item.price * item.quantity;
-			
-			const itemElement = document.createElement('div');
-			itemElement.className = 'cart-item';
-			itemElement.innerHTML = `
-				<span>${item.name} ×${item.quantity}</span>
-				<span style="color: ${currencyColor}">${(item.price * item.quantity).toFixed(2)} ₽ <span class="remove-item" data-index="${index}">×</span></span>
-			`;
-			
-			cartItemsElement.appendChild(itemElement);
-		});
-		
-		document.querySelectorAll('.remove-item').forEach(btn => {
-			btn.addEventListener('click', function(e) { // ← добавлен параметр e
-				const index = parseInt(this.getAttribute('data-index'));
-				removeFromCart(index, e.shiftKey); // ← передаём флаг shiftKey
-			});
-		});
-		
-		cartTotalElement.textContent = total.toFixed(2); // Отображаем сумму с двумя знаками после запятой
-	}
-	
-	function checkout() {
-		if (cart.length === 0) {
-			showToast('Корзина пуста!', true);
-			return;
-		}
-		
-		let total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-		total = Math.round(total * 100) / 100;
-		
-		if (balance < total) {
-			showToast('Недостаточно средств!', true);
-			return;
-		}
-		
-		balance -= Math.round(total * 100) / 100;
-		balance = Math.round(balance * 100) / 100;
-		updateDuelRang(Math.round(total));
-		balanceAmount.textContent = balance.toLocaleString('ru-RU');
-		UpdateStatrackFrame(balance);
-		addExp(Math.round(total));
-		
-		showToast(`Заказ оформлен! Сумма: ${total.toLocaleString('ru-RU')} ₽`);
-		
-		cart.forEach(item => {
-			const dbItem = itemsDatabase.find(dbItem => dbItem.id === item.id);
-			if (dbItem) {
-				for (let i = 0; i < item.quantity; i++) {
-					const newItem = {
-						id: dbItem.id,
-						name: dbItem.name,
-						rarity: dbItem.rarity,
-						image: dbItem.image
-					};
-					
-					if (!dbItem.isCase && !dbItem.isCharm && !dbItem.isSticker && !dbItem.isItemWithoutSlot) {
-						if (Math.random() < 0.03) {
-							const allStickers = itemsDatabase.filter(item => item.isSticker);
-							const stickerCount = Math.min(4, Math.max(1, Math.floor(Math.random() * 4) + 1));
-							
-							newItem.stickers = [];
-							
-							for (let j = 0; j < stickerCount; j++) {
-								const randomIndex = Math.floor(Math.random() * allStickers.length);
-								const selectedSticker = allStickers[randomIndex];
-								if (selectedSticker) {
-									newItem.stickers.push({
-										id: selectedSticker.id,
-										name: selectedSticker.name,
-										image: selectedSticker.image
-									});
-								}
-							}
-						}
-					}
-					
-					inventory.push(newItem);
-				}
-			}
-		});
-		
-		cart.length = 0;
-		updateCart();
-		sortItemsByPrice();
-		updateInventory();
-		saveGameState();
-	}
-	
-	function clearCart() {
-		cart.forEach(item => {
-			const shopItem = itemsDatabase.find(dbItem => dbItem.id === item.id);
-			const itemElement = document.getElementById(item.id);
-			
-			if (itemElement && shopItem) {
-				const currentStock = parseInt(itemElement.querySelector('.available-stock').textContent);
-				const max = parseInt(itemElement.querySelector('.add-to-cart').getAttribute('data-max'));
-				
-				if (shopItem.priceMultiply > 0) {
-					shopItem.price = Math.max(0, shopItem.price - (shopItem.priceMultiply * item.quantity));
-					updateItemPriceInUI(shopItem);
-				}
-				
-				updateStock(itemElement, currentStock + item.quantity, max);
-			} else if (shopItem) {
-				shopItem.stock = shopItem.stock + item.quantity;
-				if (shopItem.priceMultiply > 0) {
-					shopItem.price = Math.max(0, shopItem.price - (shopItem.priceMultiply * item.quantity));
-					updateItemPriceInUI(shopItem);
-				}
-			}
-		});
-
-		cart.length = 0;
-		updateCart();
-		showToast('Корзина очищена');
-	}
 	
 	let itemsDbMap = new Map();
 
