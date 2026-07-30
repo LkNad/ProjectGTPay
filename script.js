@@ -59,13 +59,50 @@ document.addEventListener('DOMContentLoaded', function() {
 	document.getElementById('generate-promo-btn').addEventListener('click', generateRandomPromocode);
 
 	let currentMarket = 'normal'; // 'normal' или 'rental'
+	let currentMarketTab = 'platform'; // 'platform' или 'my-requests'
+	
+	// Функция для создания/обновления вкладок Платформа/Мои запросы
+	function updateMarketTabs() {
+		const wrapper = document.getElementById('market-tabs-wrapper');
+		if (!wrapper) return;
+		
+		if (currentMarket === 'rental') {
+			// Для аренды скрываем вкладки Платформа/Мои запросы
+			wrapper.innerHTML = '';
+			return;
+		}
+		
+		// Для рынка показываем дополнительные вкладки Платформа/Мои запросы
+		wrapper.innerHTML = `
+			<div class="market-subtabs">
+				<button id="platform-tab-btn" class="market-subtab-btn ${currentMarketTab === 'platform' ? 'active' : ''}">Платформа</button>
+				<button id="my-requests-tab-btn" class="market-subtab-btn ${currentMarketTab === 'my-requests' ? 'active' : ''}">Мои запросы</button>
+			</div>
+		`;
+		
+		document.getElementById('platform-tab-btn')?.addEventListener('click', function() {
+			currentMarketTab = 'platform';
+			this.classList.add('active');
+			document.getElementById('my-requests-tab-btn')?.classList.remove('active');
+			initShop();
+		});
+		
+		document.getElementById('my-requests-tab-btn')?.addEventListener('click', function() {
+			currentMarketTab = 'my-requests';
+			this.classList.add('active');
+			document.getElementById('platform-tab-btn')?.classList.remove('active');
+			initShop();
+		});
+	}
 	
 	document.getElementById('normal-market-btn').addEventListener('click', function() {
 		if (currentMarket !== 'normal') {
 			currentMarket = 'normal';
 			this.classList.add('active');
 			document.getElementById('rental-market-btn').classList.remove('active');
-			initShop(); // Перезагружаем магазин
+			currentMarketTab = 'platform'; // Сбрасываем на платформу при переключении на рынок
+			updateMarketTabs();
+			initShop();
 		}
 	});
 
@@ -74,7 +111,8 @@ document.addEventListener('DOMContentLoaded', function() {
 			currentMarket = 'rental';
 			this.classList.add('active');
 			document.getElementById('normal-market-btn').classList.remove('active');
-			initShop(); // Перезагружаем магазин
+			updateMarketTabs();
+			initShop();
 		}
 	});
 	
@@ -7210,19 +7248,37 @@ document.addEventListener('DOMContentLoaded', function() {
 		</div>
 		${currentMarket === 'rental' ? 
 		  '<div class="item-stock">Аренда на 3 минуты</div>' : 
-		  `<div class="item-stock">Количество доступных покупок: <span class="available-stock">${item.stock}</span></div>`
+		  `<div class="item-stock-info"><span>Лотов на рынке: <span class="available-stock">${item.stock}</span></span></div>`
 		}
 		<div class="item-price" style="color: ${currencyColor}">${price.toFixed(2)} ₽</div>
 		<div class="item-buttons">
-		  <button class="add-to-cart" data-id='${item.id}' data-name='${item.name}' data-price='${price}' 
-			data-max='${item.stock}' data-rarity='${item.rarity}' 
-			${currentMarket === 'rental' ? 'data-rental="true"' : ''}>
-			${currentMarket === 'rental' ? 'Арендовать' : 'Добавить в корзину'}
+		  <button class="find-on-platform-btn" data-id='${item.id}' data-name='${item.name}' data-price='${price}' data-max='${item.stock}' data-rarity='${item.rarity}' ${currentMarket === 'rental' ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>
+			${currentMarket === 'rental' ? 'Аренда' : 'Найти на платформе'}
 		  </button>
-		  ${currentMarket === 'rental' ? '' : 
-			`<button class="buy-all-btn" data-id='${item.id}' data-name='${item.name}' data-price='${price}' 
-			  data-max='${item.stock}' data-rarity='${item.rarity}'>Купить все</button>`
-		  }
+		  <button class="find-on-platform-btn" data-id='${item.id}' data-name='${item.name}' data-price='${price}' data-max='${item.stock}' data-rarity='${item.rarity}' ${currentMarket === 'rental' ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>
+			${currentMarket === 'rental' ? 'Аренда' : 'Найти на платформе'}
+		  </button>
+		  <button class="find-on-platform-btn" data-id='${item.id}' data-name='${item.name}' data-price='${price}' data-max='${item.stock}' data-rarity='${item.rarity}' ${currentMarket === 'rental' ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>
+			${currentMarket === 'rental' ? 'Аренда' : 'Найти на платформе'}
+		  </button>
+		  <button class="find-on-platform-btn" data-id='${item.id}' data-name='${item.name}' data-price='${price}' data-max='${item.stock}' data-rarity='${item.rarity}' ${currentMarket === 'rental' ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>
+			${currentMarket === 'rental' ? 'Аренда' : 'Найти на платформе'}
+		  </button>
+		  <button class="find-on-platform-btn" data-id='${item.id}' data-name='${item.name}' data-price='${price}' data-max='${item.stock}' data-rarity='${item.rarity}' ${currentMarket === 'rental' ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>
+			${currentMarket === 'rental' ? 'Аренда' : 'Найти на платформе'}
+		  </button>
+		  <button class="find-on-platform-btn" data-id='${item.id}' data-name='${item.name}' data-price='${price}' data-max='${item.stock}' data-rarity='${item.rarity}' ${currentMarket === 'rental' ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>
+			${currentMarket === 'rental' ? 'Аренда' : 'Найти на платформе'}
+		  </button>
+		  <button class="find-on-platform-btn" data-id='${item.id}' data-name='${item.name}' data-price='${price}' data-max='${item.stock}' data-rarity='${item.rarity}' ${currentMarket === 'rental' ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>
+			${currentMarket === 'rental' ? 'Аренда' : 'Найти на платформе'}
+		  </button>
+		  <button class="find-on-platform-btn" data-id='${item.id}' data-name='${item.name}' data-price='${price}' data-max='${item.stock}' data-rarity='${item.rarity}' ${currentMarket === 'rental' ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>
+			${currentMarket === 'rental' ? 'Аренда' : 'Найти на платформе'}
+		  </button>
+		  <button class="find-on-platform-btn" data-id='${item.id}' data-name='${item.name}' data-price='${price}' data-max='${item.stock}' data-rarity='${item.rarity}' ${currentMarket === 'rental' ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>
+			${currentMarket === 'rental' ? 'Аренда' : 'Найти на платформе'}
+		  </button>
 		</div>
 		${currentMarket === 'rental' ? '' : '<div class="stock-warning">Достигнуто максимальное количество покупок</div>'}
 	  `;
