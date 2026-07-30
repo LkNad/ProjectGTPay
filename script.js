@@ -3794,13 +3794,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
 		if (originalItem.isCase) return false;
 
-		let totalPrice = Math.round((originalItem.price * 0.8) * 100) / 100;
+		let totalPrice = Math.round((originalItem.price) * 100) / 100;
 
 		if (inventoryItem.stickers) {
 			inventoryItem.stickers.forEach(sticker => {
 				const stickerItem = itemsDatabase.find(dbItem => dbItem.id === sticker.id);
 				if (stickerItem && stickerItem.itemInStore !== false) {
-					totalPrice += Math.round((stickerItem.price * 0.1) * 100) / 100;
+					totalPrice += Math.round((stickerItem.price * 0.4) * 100) / 100;
 				}
 			});
 		}
@@ -12531,7 +12531,7 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 		soldItem.stickers.forEach(sticker => {
 		  const stickerItem = itemsDatabase.find(item => item.id === sticker.id);
 		  if (stickerItem) {
-			totalPrice += Math.round((stickerItem.price * 0.1) * 100) / 100;
+			totalPrice += Math.round((stickerItem.price * 0.4) * 100) / 100;
 		  }
 		});
 	  }
@@ -12596,7 +12596,7 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 		itemsToSell.forEach(item => {
 			const originalItem = itemsDatabase.find(dbItem => dbItem.id === item.id);
 			if (originalItem) {
-				total += Math.round((originalItem.price * 0.8) * 100) / 100;
+				total += Math.round((originalItem.price) * 100) / 100;
 				itemsToRemove.push(item);
 				if (originalItem.priceMultiply > 0) {
 					originalItem.price = Math.max(0, originalItem.price - originalItem.priceMultiply);
@@ -12630,7 +12630,7 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 					item.stickers.forEach(sticker => {
 						const stickerItem = itemsDatabase.find(dbItem => dbItem.id === sticker.id);
 						if (stickerItem) {
-							total += Math.round((stickerItem.price * 0.1) * 100) / 100;
+							total += Math.round((stickerItem.price * 0.4) * 100) / 100;
 						}
 					});
 				}
