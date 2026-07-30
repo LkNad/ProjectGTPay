@@ -2391,6 +2391,24 @@ background: #777;
     margin: 0 auto;
 }
 
+.om-modal-close {
+    position: absolute;
+    top: 12px;
+    right: 15px;
+    background: none;
+    border: none;
+    color: #aaa;
+    font-size: 26px;
+    cursor: pointer;
+    z-index: 2;
+    line-height: 1;
+    transition: color 0.2s;
+}
+
+.om-modal-close:hover {
+    color: #fff;
+}
+
 .om-item-rarity-badge {
     transform: none !important;
     width: auto !important;
@@ -2490,6 +2508,12 @@ background: #777;
     flex: 1;
 }
 
+.om-lot-price {
+    color: gold;
+    font-weight: bold;
+    font-size: 16px;
+}
+
 .om-lot-seller {
     font-size: 12px;
     color: #aaa;
@@ -2500,12 +2524,20 @@ background: #777;
     display: flex;
     gap: 5px;
     margin-top: 5px;
+    flex-wrap: wrap;
 }
 
 .om-lot-sticker {
     width: 30px;
     height: 30px;
     border-radius: 4px;
+    object-fit: cover;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.om-lot-sticker:hover {
+    transform: scale(1.1);
 }
 
 .om-buy-lot-btn {
@@ -2552,10 +2584,31 @@ background: #777;
     gap: 10px;
 }
 
+.om-request-item-name {
+    color: #fff;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.om-request-price {
+    color: gold;
+    margin-bottom: 5px;
+}
+
 .om-request-timer {
     font-size: 12px;
     color: #aaa;
     margin-top: 5px;
+}
+
+.om-request-timer.om-infinite {
+    color: #f44336;
+    font-weight: bold;
+}
+
+.om-request-timer.om-ready {
+    color: #4CAF50;
+    font-weight: bold;
 }
 
 .om-requests-subtabs {

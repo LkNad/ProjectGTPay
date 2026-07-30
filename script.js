@@ -16730,24 +16730,35 @@ document.addEventListener('DOMContentLoaded', function() {
 			
 			lots.sort((a, b) => a.price - b.price);
 			
-			lots.forEach(lot => {
-				const lotEl = document.createElement('div');
-				lotEl.style.cssText = 'background:#333;padding:12px;border-radius:4px;display:flex;justify-content:space-between;align-items:center;';
-				lotEl.innerHTML = `
-					<div>
-						<div style="color:gold;font-weight:bold;">${lot.price.toFixed(2)} ₽</div>
-						<div style="font-size:12px;color:#aaa;">Продавец: ${lot.seller}</div>
-						${lot.stickers && lot.stickers.length > 0 ? '<div style="font-size:11px;color:#4CAF50;">🏷️ С наклейками</div>' : ''}
-					</div>
-					<button class="om-buy-lot-btn" data-lot-id="${lot.id}" style="padding:8px 16px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer;">Купить</button>
-				`;
-				lotEl.querySelector('.om-buy-lot-btn').addEventListener('click', () => {
-					buyLot(item.id, lot);
-					overlay.remove();
-					openPlatformModal(item);
-				});
-				list.appendChild(lotEl);
-			});
+lots.forEach(lot => {
+const lotEl = document.createElement('div');
+lotEl.className = 'om-lot-card';
+
+// Build stickers HTML if present
+let stickersHtml = '';
+if (lot.stickers && lot.stickers.length > 0) {
+stickersHtml = `<div class="om-lot-stickers">`;
+lot.stickers.forEach(sticker => {
+stickersHtml += `<img src="${sticker.image || 'images/sticker_placeholder.png'}" class="om-lot-sticker" alt="" title="${sticker.name}">`;
+});
+stickersHtml += `</div>`;
+}
+
+lotEl.innerHTML = `
+<div class="om-lot-info">
+<div class="om-lot-price">${lot.price.toFixed(2)} ₽</div>
+<div class="om-lot-seller">Продавец: ${lot.seller}</div>
+${stickersHtml}
+</div>
+<button class="om-buy-lot-btn" data-lot-id="${lot.id}">Купить</button>
+`;
+lotEl.querySelector('.om-buy-lot-btn').addEventListener('click', () => {
+buyLot(item.id, lot);
+overlay.remove();
+openPlatformModal(item);
+});
+list.appendChild(lotEl);
+});
 		}
 		
 		mineFilter.addEventListener('change', renderLotsList);
@@ -16758,6 +16769,26 @@ document.addEventListener('DOMContentLoaded', function() {
 	// Place buy request
 	function placeBuyRequest(item, price, quantity) {
 		const reqId = 'req_buy_' + (++onlineMarket.reqCounter);
+		// Calculate expected purchase time based on price difference from average market price
+		const lots = onlineMarket.listings[item.id] || [];
+		let avgPrice = item.initialPrice || item.price || 1000000;
+		if (lots.length > 0) {
+			const sum = lots.reduce((acc, lot) => acc + lot.price, 0);
+			avgPrice = sum / lots.length;
+		}
+		const priceRatio = price / avgPrice;
+		let expectedSeconds;
+		if (priceRatio >= 0.95) {
+			expectedSeconds = Math.floor(Math.random() * 30) + 10; // 10-40 sec
+		} else if (priceRatio >= 0.8) {
+			expectedSeconds = Math.floor(Math.random() * 300) + 60; // 1-6 min
+		} else if (priceRatio >= 0.5) {
+			expectedSeconds = Math.floor(Math.random() * 1800) + 300; // 5-35 min
+		} else if (priceRatio >= 0.2) {
+			expectedSeconds = Math.floor(Math.random() * 7200) + 1800; // 30 min - 2.5 hours
+		} else {
+			expectedSeconds = Infinity; // Too low, never
+		}
 		const req = {
 			id: reqId,
 			itemId: item.id,
@@ -16765,7 +16796,9 @@ document.addEventListener('DOMContentLoaded', function() {
 			price: price,
 			quantity: quantity,
 			remaining: quantity,
-			timestamp: Date.now()
+			timestamp: Date.now(),
+			expectedAt: expectedSeconds === Infinity ? null : Date.now() + expectedSeconds * 1000,
+			expectedSeconds: expectedSeconds
 		};
 		onlineMarket.buyRequests.push(req);
 		showToast(`Заявка на покупку размещена: ${price.toFixed(2)} ₽ × ${quantity}`);
@@ -16854,13 +16887,44 @@ document.addEventListener('DOMContentLoaded', function() {
 		myRequests.forEach(req => {
 			const item = req.item || itemsDatabase.find(i => i.id === req.itemId);
 			const div = document.createElement('div');
-			div.style.cssText = 'background:#333;padding:12px;border-radius:4px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;';
+			div.className = 'om-request-card';
+			
+			// Format time display
+			let timeDisplay = '';
+			if (req.expectedSeconds === Infinity) {
+				timeDisplay = '<span class="om-request-timer om-infinite">Бесконечно</span>';
+			} else if (req.expectedAt) {
+				const now = Date.now();
+				const remainingMs = Math.max(0, req.expectedAt - now);
+				const remainingSecs = Math.ceil(remainingMs / 1000);
+				if (remainingSecs <= 0) {
+					timeDisplay = '<span class="om-request-timer om-ready">Готово к покупке!</span>';
+				} else {
+					let timeStr = '';
+					if (remainingSecs < 60) {
+						timeStr = `${remainingSecs} сек.`;
+					} else if (remainingSecs < 3600) {
+						const mins = Math.floor(remainingSecs / 60);
+						const secs = remainingSecs % 60;
+						timeStr = `${mins} мин. ${secs > 0 ? secs + ' сек.' : ''}`;
+					} else {
+						const hours = Math.floor(remainingSecs / 3600);
+						const mins = Math.floor((remainingSecs % 3600) / 60);
+						timeStr = `${hours} ч. ${mins > 0 ? mins + ' мин.' : ''}`;
+					}
+					timeDisplay = `<span class="om-request-timer">⏱️ ${timeStr}</span>`;
+				}
+			}
+			
 			div.innerHTML = `
-				<div>
-					<div style="color:#fff;font-weight:bold;">${item?.name || req.itemId}</div>
-					<div style="color:gold;">${req.price.toFixed(2)} ₽ × ${req.remaining}</div>
+				<div class="om-request-info">
+					<div>
+						<div class="om-request-item-name">${item?.name || req.itemId}</div>
+						<div class="om-request-price">${req.price.toFixed(2)} ₽ × ${req.remaining}</div>
+						${timeDisplay}
+					</div>
+					<button class="om-cancel-req-btn" data-req-id="${req.id}">Отменить</button>
 				</div>
-				<button class="om-cancel-req-btn" data-req-id="${req.id}" style="padding:8px 16px;background:#f44336;color:white;border:none;border-radius:4px;cursor:pointer;">Отменить</button>
 			`;
 			div.querySelector('.om-cancel-req-btn').addEventListener('click', () => {
 				cancelBuyRequest(req.id);
@@ -16874,6 +16938,116 @@ document.addEventListener('DOMContentLoaded', function() {
 	function renderSellRequests() {
 		const list = document.getElementById('om-sell-requests-list');
 		if (!list) return;
-		list.innerHTML = '<div style="color:#aaa;text-align:center;padding:20px;">Функция в разработке</div>';
+		list.innerHTML = '';
+		
+		const mySellRequests = onlineMarket.sellRequests;
+		if (!mySellRequests.length) {
+			list.innerHTML = '<div style="color:#aaa;text-align:center;padding:20px;">Нет активных заявок на продажу</div>';
+			return;
+		}
+		
+		mySellRequests.forEach(req => {
+			const item = req.item || itemsDatabase.find(i => i.id === req.itemId);
+			const div = document.createElement('div');
+			div.className = 'om-request-card';
+			
+			let statusText = '';
+			switch(req.status) {
+				case 'active': statusText = 'Активна'; break;
+				case 'sold': statusText = 'Продано'; break;
+				case 'cancelled': statusText = 'Отменена'; break;
+				default: statusText = req.status || 'Неизвестно';
+			}
+			
+			let timeDisplay = '';
+			if (req.expectedSellAt) {
+				const now = Date.now();
+				const remainingMs = Math.max(0, req.expectedSellAt - now);
+				const remainingSecs = Math.ceil(remainingMs / 1000);
+				if (remainingSecs <= 0) {
+					timeDisplay = '<span class="om-request-timer om-ready">Готово к продаже!</span>';
+				} else {
+					let timeStr = '';
+					if (remainingSecs < 60) {
+						timeStr = `${remainingSecs} сек.`;
+					} else if (remainingSecs < 3600) {
+						const mins = Math.floor(remainingSecs / 60);
+						timeStr = `${mins} мин.`;
+					} else {
+						const hours = Math.floor(remainingSecs / 3600);
+						timeStr = `${hours} ч.`;
+					}
+					timeDisplay = `<span class="om-request-timer">⏱️ ${timeStr}</span>`;
+				}
+			}
+			
+			div.innerHTML = `
+				<div class="om-request-info">
+					<div>
+						<div class="om-request-item-name">${item?.name || req.itemId}</div>
+						<div class="om-request-price">${req.price.toFixed(2)} ₽</div>
+						<div style="font-size:12px;color:#aaa;">Статус: ${statusText}</div>
+						${timeDisplay}
+					</div>
+					${req.status === 'active' ? `<button class="om-cancel-req-btn" data-sell-req-id="${req.id}">Отменить</button>` : ''}
+				</div>
+			`;
+			
+			const cancelBtn = div.querySelector('.om-cancel-req-btn');
+			if (cancelBtn) {
+				cancelBtn.addEventListener('click', () => {
+					cancelSellRequest(req.id);
+					renderSellRequests();
+				});
+			}
+			
+			list.appendChild(div);
+		});
+	}
+	
+	// Place sell request
+	function placeSellRequest(item, price, quantity) {
+		const reqId = 'req_sell_' + (++onlineMarket.reqCounter);
+		const lots = onlineMarket.listings[item.id] || [];
+		let avgPrice = item.initialPrice || item.price || 1000000;
+		if (lots.length > 0) {
+			const sum = lots.reduce((acc, lot) => acc + lot.price, 0);
+			avgPrice = sum / lots.length;
+		}
+		const priceRatio = price / avgPrice;
+		let expectedSeconds;
+		if (priceRatio <= 1.05) {
+			expectedSeconds = Math.floor(Math.random() * 30) + 10;
+		} else if (priceRatio <= 1.2) {
+			expectedSeconds = Math.floor(Math.random() * 300) + 60;
+		} else if (priceRatio <= 1.5) {
+			expectedSeconds = Math.floor(Math.random() * 1800) + 300;
+		} else if (priceRatio <= 2) {
+			expectedSeconds = Math.floor(Math.random() * 7200) + 1800;
+		} else {
+			expectedSeconds = Infinity;
+		}
+		const req = {
+			id: reqId,
+			lotId: null,
+			itemId: item.id,
+			item: item,
+			price: price,
+			quantity: quantity,
+			status: 'active',
+			listedAt: Date.now(),
+			expectedSellAt: expectedSeconds === Infinity ? null : Date.now() + expectedSeconds * 1000,
+			expectedSeconds: expectedSeconds
+		};
+		onlineMarket.sellRequests.push(req);
+		showToast(`Заявка на продажу размещена: ${price.toFixed(2)} ₽ × ${quantity}`);
+		saveGameState();
+	}
+	
+	// Cancel sell request
+	function cancelSellRequest(reqId) {
+		onlineMarket.sellRequests = onlineMarket.sellRequests.filter(r => r.id !== reqId);
+		showToast('Заявка на продажу отменена');
+		saveGameState();
 	}
 });
