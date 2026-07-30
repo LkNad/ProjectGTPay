@@ -4538,8 +4538,8 @@ document.addEventListener('DOMContentLoaded', function() {
 		items.sort((a, b) => {
 			const btnA = a.querySelector('.find-on-platform-btn') || a.querySelector('.rent-item-btn');
 			const btnB = b.querySelector('.find-on-platform-btn') || b.querySelector('.rent-item-btn');
-			const priceA = btnA ? parseFloat(btnA.getAttribute('data-price')) : 0;
-			const priceB = btnB ? parseFloat(btnB.getAttribute('data-price')) : 0;
+			const priceA = btnA && btnA.hasAttribute('data-price') ? parseFloat(btnA.getAttribute('data-price')) : 0;
+			const priceB = btnB && btnB.hasAttribute('data-price') ? parseFloat(btnB.getAttribute('data-price')) : 0;
 			return sortDescending ? priceB - priceA : priceA - priceB;
 		});
 		
@@ -7351,7 +7351,7 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 	  
 	  // Кнопки корзины удалены, теперь используется только кнопка "Найти на платформе"
 	  // const warning = itemCard.querySelector('.stock-warning');
-	  // const addBtn = itemCard.querySelector('.add-to-cart');
+	  // const addBtn = itemCard.querySelector('.find-on-platform-btn') || itemElement.querySelector('.rent-item-btn');
 	  // const buyAllBtn = itemCard.querySelector('.buy-all-btn');
 	  // if (warning) {
 	  //   warning.style.display = item.stock <= 0 ? 'block' : 'none';
@@ -8219,8 +8219,8 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 			const itemElement = document.getElementById(item.id);
 			
 			if (itemElement && shopItem) {
-				const currentStock = parseInt(itemElement.querySelector('.available-stock').textContent);
-				const max = parseInt(itemElement.querySelector('.add-to-cart').getAttribute('data-max'));
+				const btn = itemElement.querySelector('.find-on-platform-btn') || itemElement.querySelector('.rent-item-btn');
+				const max = btn ? parseInt(btn.getAttribute('data-max')) : 0;
 				
 				if (shopItem.priceMultiply > 0) {
 					shopItem.price = Math.max(0, shopItem.price - (shopItem.priceMultiply * item.quantity));
@@ -9234,7 +9234,8 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 		const itemElement = document.getElementById(shopItem.id);
 		if (itemElement) {
 		  const currentStock = parseInt(itemElement.querySelector('.available-stock').textContent);
-		  const max = parseInt(itemElement.querySelector('.add-to-cart').getAttribute('data-max'));
+                  const btn = itemElement.querySelector('.find-on-platform-btn') || itemElement.querySelector('.rent-item-btn');
+                  const max = btn ? parseInt(btn.getAttribute('data-max')) : 0;
 		  updateStock(itemElement, currentStock + 1, max);
 		} else {
 			shopItem.stock = shopItem.stock + 1;
@@ -12545,7 +12546,8 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 		const itemElement = document.getElementById(shopItem.id);
 		if (itemElement) {
 		  const currentStock = parseInt(itemElement.querySelector('.available-stock').textContent);
-		  const max = parseInt(itemElement.querySelector('.add-to-cart').getAttribute('data-max'));
+                  const btn = itemElement.querySelector('.find-on-platform-btn') || itemElement.querySelector('.rent-item-btn');
+                  const max = btn ? parseInt(btn.getAttribute('data-max')) : 0;
 		  updateStock(itemElement, currentStock + 1, max);
 		} else {
 			shopItem.stock += 1;
@@ -12604,7 +12606,8 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 				const shopItem = document.getElementById(originalItem.id);
 				if (shopItem) {
 					const currentStock = parseInt(shopItem.querySelector('.available-stock').textContent);
-					const max = parseInt(shopItem.querySelector('.add-to-cart').getAttribute('data-max'));
+                                        const btn = shopItem.querySelector('.find-on-platform-btn') || shopItem.querySelector('.rent-item-btn');
+                                        const max = btn ? parseInt(btn.getAttribute('data-max')) : 0;
 					updateStock(shopItem, currentStock + 1, max);
 				} else {
 					originalItem.stock += 1;
