@@ -4519,11 +4519,14 @@ document.addEventListener('DOMContentLoaded', function() {
 	
 	function sortItemsByQuantity() {
 		const container = document.getElementById('items-container');
+		if (!container) return;
 		const items = Array.from(container.querySelectorAll('.item-card'));
 		
 		items.sort((a, b) => {
-			const qtyA = parseInt(a.querySelector('.available-stock').textContent);
-			const qtyB = parseInt(b.querySelector('.available-stock').textContent);
+			const stockElA = a.querySelector('.market-lots-count') || a.querySelector('.available-stock');
+			const stockElB = b.querySelector('.market-lots-count') || b.querySelector('.available-stock');
+			const qtyA = stockElA ? parseInt(stockElA.textContent) : 0;
+			const qtyB = stockElB ? parseInt(stockElB.textContent) : 0;
 			
 			return sortQtyDescending ? qtyB - qtyA : qtyA - qtyB;
 		});
@@ -7266,6 +7269,7 @@ document.addEventListener('DOMContentLoaded', function() {
 		  const imgContainer = itemCard.querySelector('.item-img');
 		  setup3DViewer(imgContainer, item, item); // item — и есть originalItem для магазина
 	  }
+          const findBtn = itemCard.querySelector('.find-on-platform-btn');
           if (findBtn) {
                 findBtn.addEventListener('click', function(e) {
 		  
@@ -7303,43 +7307,11 @@ document.addEventListener('DOMContentLoaded', function() {
 			if(typeof saveGameState === 'function') saveGameState();
 		  } else {
 			// Открыть модальное окно предмета
-			openItemModal(item);
+			if (typeof openItemModal === 'function') { openItemModal(item); }
 		  }
 		});
 	  }
 
-	  if (currentMarket !== 'rental' && buyAllBtn) {
-		buyAllBtn.addEventListener('click', function(e) {
-		  e.stopPropagation();
-		  const id = this.getAttribute('data-id');
-		  const name = this.getAttribute('data-name');
-		  const price = parseFloat(this.getAttribute('data-price'));
-		  const max = parseInt(this.getAttribute('data-max'));
-		  
-		  const stockSpan = itemCard.querySelector('.available-stock');
-		  if (!stockSpan) return;
-		  
-		  const currentStock = parseFloat(stockSpan.textContent);
-		  
-		  if (currentStock > 0) {
-			for (let i = 0; i < currentStock; i++) {
-			  if(typeof addToCart === 'function') addToCart(id, name, price, false);
-			}
-			
-			if(typeof updateStock === 'function') {
-				updateStock(itemCard, 0, max);
-			} else {
-				stockSpan.textContent = 0;
-				if (warning) warning.style.display = 'block';
-				if (addBtn) addBtn.disabled = true;
-				buyAllBtn.disabled = true;
-			}
-			
-			showToast(`Все ${currentStock} шт. добавлены в корзину!`);
-		  }
-		});
-	  }
-	  
 	  itemsContainer.appendChild(itemCard);
 
 	  const img = itemCard.querySelector('.item-img img');
