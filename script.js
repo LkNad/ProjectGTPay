@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', function() {
-	const defoltMenuLogo = 'images/fon/8years.png';
-	const version = '0.34.12F';
+	const defoltMenuLogo = 'images/fon/summer2024.png';
+	const version = '0.29.29';
+
 
 
 	function createOverlayModal() {
@@ -48,11 +49,23 @@ document.addEventListener('DOMContentLoaded', function() {
 		});
 	}
 	
+	const onlineMarket = {
+		listings: {},      // itemId -> [{id, price, isMine, inventoryItem, seller}]
+		buyRequests: [],   // {id,itemId,item,price,quantity,remaining,timestamp,timerId,expectedAt}
+		sellRequests: [],  // {id,lotId,itemId,item,price,status,listedAt,expectedSellAt}
+		reqCounter: 0,
+		currentFilterRarity: 'all',
+		currentFilterCollection: 'all',
+		currentFilterName: '',
+		sortDescending: false
+	};
+	
 	const marketToggle = document.createElement('div');
 	marketToggle.className = 'market-toggle';
 	marketToggle.innerHTML = `
 	  <button id="normal-market-btn" class="market-btn active"><a style="font-size: 120%">Рынок</a></button>
 	  <button id="rental-market-btn" class="market-btn"><a style="font-size: 120%">Аренда</a></button>
+	  <button id="online-market-btn" class="market-btn"><a style="font-size: 120%">Онлайн-рынок</a></button>
 	`;
 	document.querySelector('.sort-container').insertAdjacentElement('beforebegin', marketToggle);
 	
@@ -65,6 +78,12 @@ document.addEventListener('DOMContentLoaded', function() {
 			currentMarket = 'normal';
 			this.classList.add('active');
 			document.getElementById('rental-market-btn').classList.remove('active');
+			document.getElementById('online-market-btn').classList.remove('active');
+			// Show shop UI
+			document.querySelector('.sort-container').style.display = '';
+			document.getElementById('items-container').style.display = '';
+			const omSection = document.getElementById('online-market-section');
+			if (omSection) omSection.style.display = 'none';
 			initShop(); // Перезагружаем магазин
 		}
 	});
@@ -74,6 +93,12 @@ document.addEventListener('DOMContentLoaded', function() {
 			currentMarket = 'rental';
 			this.classList.add('active');
 			document.getElementById('normal-market-btn').classList.remove('active');
+			document.getElementById('online-market-btn').classList.remove('active');
+			// Show shop UI
+			document.querySelector('.sort-container').style.display = '';
+			document.getElementById('items-container').style.display = '';
+			const omSection = document.getElementById('online-market-section');
+			if (omSection) omSection.style.display = 'none';
 			initShop(); // Перезагружаем магазин
 		}
 	});
@@ -146,7 +171,6 @@ document.addEventListener('DOMContentLoaded', function() {
 		  'arcane': 0.65,
 		  'nameless': 0.75,
 		  'none': 0.9,
-		  'gold-none': 0.9,
 		  'box-none': 0.3,
 		  'case-none': 0.7
 	  }
@@ -169,6 +193,7 @@ document.addEventListener('DOMContentLoaded', function() {
 		isItemWithoutSlot,
 		priceMultiply
 	  };
+	  
 	  
 	  if (isCase) {
 		newItem.contains = contains;
@@ -200,21 +225,17 @@ document.addEventListener('DOMContentLoaded', function() {
 	 * @param {Object} item - объект предмета (из inventory/promoItemsDatabase/itemsDatabase)
 	 * @param {Object} [originalItem] - оригинальный предмет из базы (если есть, для получения доп. свойств)
 	*/
-	function fxCan3D(invItem) {
-		const item = itemsDatabase.find(i => i.id === invItem.id);
-		const x = !item.isSticker && !item.isCharm && !item.name.endsWith("Fragment") && !(item.name.startsWith("Graffiti")
-		&& !item.name.startsWith("GraffitiPack")) && !item.name.startsWith("Medal") && !item.name.startsWith("Agent");
-		if (x) return true;
-		else return false;
-	}
-	
 	function setup3DViewer(imgContainer, item, originalItem = null) {
 		if (!imgContainer) return;
-
+		
 		const sourceItem = originalItem || item;
-
-		// Базовые проверки на тип предмета
-		const canShow3D = fxCan3D(item);
+		
+		const canShow3D = !sourceItem.isSticker && 
+						  !sourceItem.isCharm && 
+						  !item.name.endsWith("Fragment") && 
+						  !(item.name.startsWith("Graffiti") && !item.name.startsWith("GraffitiPack")) && 
+						  !item.name.startsWith("Medal");
+		
 		if (!canShow3D) {
 			imgContainer.style.cursor = 'default';
 			return;
@@ -222,20 +243,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
 		let modelFile = '', albedoFile = '', metalnessFile = '', patternFile = '', patternMask = '';
 		let StatTrackFlag = false;
-
+		
 		const displayNameOld = item.name;
-		// Убираем StatTrack для определения базовых файлов
 		let displayName = item.name.replace(/\bStatTrack\b/g, '').trim();
-
+		
 		if (displayName !== displayNameOld) {
 			StatTrackFlag = true;
 		}
-
+		
 		displayName = displayName.replace(/\s*\(?\bTimeLimited\b\)?\s*/g, ' ').replace(/\s+/g, ' ').trim();
-
+		
 		const quoteMatch = displayName.match(/^([^\s"']+)\s+"([^"]+)"(.*)$/);
-		let flagContainers = '';
-
+		
 		if (quoteMatch) {
 			const baseName = quoteMatch[1].toLowerCase();
 			const variantInside = quoteMatch[2];
@@ -248,7 +267,6 @@ document.addEventListener('DOMContentLoaded', function() {
 			patternMask = `${baseName}_${variantNoSpaces}_P.png`;
 			patternFile = variantNoSpaces + '.png';
 			modelFile = StatTrackFlag ? `${baseName}_st.glb` : `${baseName}.glb`;
-			flagContainers = baseName; // Используем baseName для дальнейших проверок
 		} else {
 			const baseName = displayName.split(' ')[0].toLowerCase();
 			albedoFile = `${baseName}_A.png`;
@@ -256,57 +274,38 @@ document.addEventListener('DOMContentLoaded', function() {
 			patternMask = `${baseName}_P.png`;
 			patternFile = baseName + '.png';
 			modelFile = `${baseName}.glb`;
-			flagContainers = baseName;
 		}
-
+		
 		patternFile = "patterns/" + patternFile;
 		patternMask = "materials_p/" + patternMask;
 		modelFile = "models/" + modelFile;
 		albedoFile = "materials/" + albedoFile;
 		metalnessFile = "materials_m/" + metalnessFile;
 		const roughnessFile = "black.png";
-
+		
 		const collectionName = (collectionsDatabase[sourceItem.collection] || { name: sourceItem.collection }).name;
 		const background = 'backgrounds/' + sourceItem.collection.replace(/\_collection\b/g, '').trim();
 		const backUrl = encodeURIComponent(window.location.href);
-
+		
 		let rar = item.rarity;
 		if (rar === 'none') rar = 'none-rarity';
+		
 		const logo = 'collections/' + collectionName.toLowerCase().replace(/\s+/g, '') + 'Collection_icon.png';
 		
-		// Список исключений (в нижнем регистре)
-		// Исключения для осмотра паков / кейсов / юоксов
-		const exceptionKeywords = [
-			'giftbox', 
-			'giftcase', 
-			'gift',
-			'eventcase', 
-			'eventbox', 
-			'eventcrate', 
-			'tacticalbox',
-			'fragmentbox'
-		];
-		const isException = exceptionKeywords.some(keyword => 
-			displayName.toLowerCase().includes(keyword)
-		);
-		if ((rar === 'box-none' || rar === 'case-none') && !isException) {
-			albedoFile = logo;
-		}
-
 		const viewerUrl = `viever.html?model=${encodeURIComponent(modelFile)}&rarity=${rar}&logo=${encodeURIComponent(logo)}&collection=${encodeURIComponent(collectionName)}&albedo=${encodeURIComponent(albedoFile)}&metalness=${encodeURIComponent(metalnessFile)}&pattern=${encodeURIComponent(patternFile)}&mask=${encodeURIComponent(patternMask)}&roughness=${encodeURIComponent(roughnessFile)}&bg=${encodeURIComponent(background + '.png')}&title=${encodeURIComponent(item.name)}&backUrl=${backUrl}`;
 
 		imgContainer.style.cursor = 'pointer';
 		imgContainer.style.display = 'inline-block';
 		imgContainer.style.position = 'relative';
 		imgContainer.style.zIndex = '10';
-
+		
 		imgContainer.onmouseenter = function() { this.style.opacity = '0.9'; };
 		imgContainer.onmouseleave = function() { this.style.opacity = '1'; };
 
 		imgContainer.addEventListener('click', function(e) {
-			e.stopPropagation();
+			e.stopPropagation(); 
 			e.preventDefault();
-			window.open(viewerUrl, '_block');
+			window.open(viewerUrl, '_blank');
 		});
 	}
 	
@@ -349,13 +348,7 @@ document.addEventListener('DOMContentLoaded', function() {
 		document.body.appendChild(modal);
 
 		const grid = modal.querySelector('#promo-items-grid');
-		
-		// Объект для хранения количества выбранных предметов
-		const itemQuantities = {};
-		
 		promoItemsDatabase.forEach(item => {
-			itemQuantities[item.id] = 1; // По умолчанию количество = 1
-			
 			const rarityInfo = rarities[item.rarity] || { color: 'none', name: item.rarity };
 			const itemEl = document.createElement('div');
 			itemEl.style.cssText = `
@@ -365,7 +358,6 @@ document.addEventListener('DOMContentLoaded', function() {
 			  text-align: center;
 			  cursor: pointer;
 			  transition: all 0.2s;
-			  position: relative;
 			`;
 			const collectionInfo = collectionsDatabase[item.collection] || { name: item.collection, image: '' };
 
@@ -375,17 +367,6 @@ document.addEventListener('DOMContentLoaded', function() {
 			  <div style="color: gold; margin-top: 5px;">
 				${collectionInfo.image ? `<img src="${collectionInfo.image}" class="collection-icon" alt="${collectionInfo.name}" style="width: 30px; auto;">` : ''}
 				${item.price.toLocaleString('ru-RU')} ₽
-			  </div>
-			  <div class="quantity-display" style="
-				margin-top: 8px;
-				padding: 4px 8px;
-				background: rgba(255, 215, 0, 0.2);
-				border-radius: 4px;
-				font-size: 12px;
-				color: gold;
-				display: inline-block;
-			  ">
-				Кол-во: <span class="quantity-value">1</span>
 			  </div>
 			  <button class="buy-promo-item" data-id="${item.id}" style="
 				margin-top: 10px;
@@ -400,28 +381,7 @@ document.addEventListener('DOMContentLoaded', function() {
 			`;
 			
 			const imgContainer = itemEl.querySelector('.item-img');
-			setup3DViewer(imgContainer, item, item);
-			
-			// Добавляем обработчик прокрутки с Ctrl
-			itemEl.addEventListener('wheel', function(e) {
-				if (e.ctrlKey) {
-					e.preventDefault();
-					
-					// Определяем направление прокрутки
-					const delta = e.deltaY > 0 ? -1 : 1;
-					let newQuantity = itemQuantities[item.id] + delta;
-					
-					// Ограничиваем количество от 1 до 100
-					newQuantity = Math.max(1, Math.min(100, newQuantity));
-					
-					// Обновляем количество
-					itemQuantities[item.id] = newQuantity;
-					
-					// Обновляем отображение
-					const quantityValue = this.querySelector('.quantity-value');
-					quantityValue.textContent = newQuantity;
-				}
-			});
+			setup3DViewer(imgContainer, item, item); // передаём item и как originalItem, т.к. промо-предметы имеют ту же структуру
 			
 			grid.appendChild(itemEl);
 		});
@@ -432,41 +392,28 @@ document.addEventListener('DOMContentLoaded', function() {
 				const item = promoItemsDatabase.find(i => i.id === id);
 				if (!item) return;
 
-				const quantity = itemQuantities[id] || 1;
-				const totalPrice = item.price * quantity;
-
-				if (balance < totalPrice) {
-					showToast(`Недостаточно средств! Нужно: ${totalPrice.toLocaleString('ru-RU')} ₽`, true);
+				if (balance < item.price) {
+					showToast('Недостаточно средств!', true);
 					return;
 				}
 
-				balance -= totalPrice;
+				balance -= item.price;
 				balance = Math.round(balance * 100) / 100;
 				balanceAmount.textContent = balance.toLocaleString('ru-RU');
 				UpdateStatrackFrame(balance);
-				addExp(Math.round(totalPrice));
+				addExp(Math.round(item.price));
 
-				// Добавляем предметы в инвентарь по количеству
-				for (let i = 0; i < quantity; i++) {
-					inventory.push({
-						id: item.id,
-						name: item.name,
-						rarity: item.rarity,
-						image: item.image,
-						itemInStore: false
-					});
-				}
+				inventory.push({
+					id: item.id,
+					name: item.name,
+					rarity: item.rarity,
+					image: item.image,
+					itemInStore: false
+				});
 
-				showToast(`Получено ${quantity} акционных скинов: ${item.name}!`);
+				showToast(`Получен акционный скин: ${item.name}!`);
 				updateInventory();
 				saveGameState();
-				
-				// Сбрасываем количество после покупки
-				itemQuantities[id] = 1;
-				const quantityDisplay = btn.parentElement.querySelector('.quantity-value');
-				if (quantityDisplay) {
-					quantityDisplay.textContent = '1';
-				}
 			});
 		});
 
@@ -475,7 +422,7 @@ document.addEventListener('DOMContentLoaded', function() {
 			if (e.target === modal) modal.remove();
 		});
 	}
-
+	
 	promoItemsBtn.addEventListener('click', openPromoItemsModal);
 	
 	let userClan = {
@@ -533,10 +480,10 @@ document.addEventListener('DOMContentLoaded', function() {
 			id: 'default_pass',
 			name: 'Default Pass',
 			stars_for_up: 1,
-			free_pass: [false],
-			gold_pass: [false],
-			cost_gold_pass: null,
-			levels_costs: {},
+			free_pass: [false, 'fragment_box', 'uncommon1', 'rare1', 'epic1', 'legendary1', 'arcane1'],
+			gold_pass: [false, 5, 10, 15, 25, 50, 'nameless1'],
+			cost_gold_pass: 900,
+			levels_costs: {1: 60, 6: 330, 60: 2750},
 			stars_for_craft_rarites: {
 				'common': 0,
 				'uncommon': 0,
@@ -669,9 +616,9 @@ document.addEventListener('DOMContentLoaded', function() {
 		for (let i = 0; i < currentMedals.length; i++) {
 			const medalId = currentMedals[i];
 			
-			if (medalId !== null && medalId !== undefined) {
+			if (medalId !== null) {
 				const medalInInventory = inventory.find(item => 
-					item && item.id === medalId && item.slot === i
+					item.id === medalId && item.slot === i
 				);
 				
 				if (!medalInInventory) {
@@ -682,8 +629,6 @@ document.addEventListener('DOMContentLoaded', function() {
 		}
 		
 		inventory.forEach((item, idx) => {
-			if (!item) return; // Пропускаем null/undefined элементы
-			
 			if (item.name && item.name.startsWith('Medal') && item.slot !== undefined && item.slot !== null) {
 				const slotIndex = item.slot;
 				if (slotIndex >= 0 && slotIndex < 5) {
@@ -752,36 +697,14 @@ document.addEventListener('DOMContentLoaded', function() {
 		return true;
 	}
 	
-	function getRandomItemReward(rarity = null, type = null) {
+	function getRandomItemReward(rarity = null) {
 		if (!rarity) return null;
 		
-		let rewardItems = [];
-		if (type == 'mm') {
-			rewardItems = itemsDatabase.filter(item => 
-				item.id.includes('_5x5') && 
-				item.rarity === rarity && 
-				!item.isRental
-			);
-		} else if (type == 'souz') {
-			rewardItems = itemsDatabase.filter(item => 
-				item.id.includes('_2x2') && 
-				item.rarity === rarity && 
-				!item.isRental
-			);
-		} else if (type == 'duel') {
-			rewardItems = itemsDatabase.filter(item => 
-				item.id.includes('_1x1') && 
-				item.rarity === rarity && 
-				!item.isRental
-			);
-		} else {
-			rewardItems = itemsDatabase.filter(item => 
-				item.id.includes('_reward') && 
-				item.rarity === rarity && 
-				!item.isRental
-			);
-		}
-			
+		let rewardItems = itemsDatabase.filter(item => 
+			item.id.includes('_reward') && 
+			item.rarity === rarity && 
+			!item.isRental
+		);
 		
 		if (rewardItems.length === 0) {
 			rewardItems = itemsDatabase.filter(item => 
@@ -1182,6 +1105,7 @@ document.addEventListener('DOMContentLoaded', function() {
 			  const amount = parseFloat(args[0]);
 			  if (!isNaN(amount)) {
 				balance = amount;
+				balance = Math.round(balance * 100) / 100;
 				balanceAmount.textContent = balance.toLocaleString('ru-RU');
 				UpdateStatrackFrame(balance);
 				saveGameState();
@@ -1383,7 +1307,7 @@ document.addEventListener('DOMContentLoaded', function() {
 		modal.className = 'modal';
 		Object.assign(modal.style, {
 			display: 'flex', position: 'fixed', top: '0', left: '0', width: '100%', height: '100%',
-			backgroundColor: 'rgba(0, 0, 0, 0.5)', zIndex: '1000', 
+			backgroundColor: 'rgba(0, 0, 0, 0.5)', zIndex: '1000', // Базовый уровень профиля
 			justifyContent: 'center', alignItems: 'center'
 		});
 
@@ -1420,8 +1344,6 @@ document.addEventListener('DOMContentLoaded', function() {
 		const currentAppliedFrame = framesDatabase[currentFrame];
 		const levelFrameToShow = currentAppliedFrame?.levelFrameImg || null;
 		const isStatTrack = currentAppliedFrame?.name.includes("StatTrack");
-		const hasClan = userClan.name !== "";
-		const clTag = hasClan ? '['+ userClan.name + ']' : '';
 
 		modal.innerHTML = `
 		<div class="modal-content" style="background:rgb(30 30 30 / 85%);padding:20px;border-radius:8px;width:80%;max-width:800px;max-height:80vh;overflow:auto;position:relative;">
@@ -1434,32 +1356,32 @@ document.addEventListener('DOMContentLoaded', function() {
 			<div class="player-profile" style="display:flex;align-items:flex-start;gap:30px;margin-bottom:20px;justify-content:center; flex-wrap: wrap;">
 				
 				<!-- ЛЕВАЯ ЧАСТЬ: Аватар + Рамка + Медали + Баланс -->
-				<div style="transform: translatex(-50px);position:relative;display:inline-block;cursor:pointer;" id="avatar-click-area">
-					<img id="profile-avatar" src="${avatar}" width="150" height="150" style="border-radius:2%;object-fit:cover;border:3px solid #333333;display:block; position:relative; z-index:0;">
+                <div style="transform: translatex(-50px);position:relative;display:inline-block;cursor:pointer;" id="avatar-click-area">
+                    <img id="profile-avatar" src="${avatar}" width="150" height="150" style="border-radius:2%;object-fit:cover;border:3px solid #333333;display:block; position:relative; z-index:0;">
 					${currentFrame !== 'null_frame' ? `<img class="profile-frame" src="${currentAppliedFrame.image}">` : ''}
-					<!-- Контейнер для медалей -->
-					<div id="profile-medals-container" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;">
-						${generateMedalSlotsHTML()}
-					</div>
-					
-					${isStatTrack ? `<div class="profile-stattrack-balance">${balance.toLocaleString('ru-RU')} ₽</div>` : ''}
-				</div>
+                    <!-- Контейнер для медалей -->
+                    <div id="profile-medals-container" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;">
+                        ${generateMedalSlotsHTML()}
+                    </div>
+                    
+                    ${isStatTrack ? `<div class="profile-stattrack-balance">${balance.toLocaleString('ru-RU')} ₽</div>` : ''}
+                </div>
 
-				<!-- ПРАВАЯ ЧАСТЬ: ID, Имя, Верификация -->
+				<!-- ПРАВАЯ ЧАСТЬ: ID, Имя, Верификация (Старое оформление) -->
 				<div style="transform: translate(-30px, 20px);display:flex;flex-direction:column;justify-content:center;gap:15px;min-width:250px;">
 					
 					<!-- Блок ID -->
-					<div style="display:flex;align-items:center;gap:6px;">
-						<span style="font-size:16px;color:#aaa;">ID</span>
-						<span id="display-player-id" style="font-size:16px;color:#aaa;">${pId}</span>
+					<div style="display:flex;align-items:center;gap:10px;">
+						<span style="font-size:18px;color:#aaa;font-weight:bold;">ID:</span>
+						<span id="display-player-id" style="font-size:18px;color:white;font-family:monospace;font-weight:bold;">${pId}</span>
 						<button id="edit-player-id-btn" title="Изменить ID" style="background:none;border:none;cursor:pointer;padding:2px;opacity:0.6;">
 							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#aaaaaa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
 						</button>
 					</div>
 
 					<!-- Блок Имя + Значок -->
-					<div style="display:flex;align-items:center;gap:8px;">
-						<span style="font-size:18px;color:#aaa;font-weight:bold;">${clTag}</span>
+					<div style="display:flex;align-items:center;gap:10px;">
+						<span style="font-size:18px;color:#aaa;font-weight:bold;">Имя:</span>
 						<span id="display-player-name" style="font-size:18px;color:white;font-weight:bold;">${pName}</span>
 						<img src="${getVerificationImage(pVerify)}" alt="Mark" style="height:20px;width:auto;" title="${getVerificationStatus(pVerify)}">
 						<button id="edit-player-name-btn" title="Изменить имя" style="background:none;border:none;cursor:pointer;padding:2px;opacity:0.6;">
@@ -1506,6 +1428,7 @@ document.addEventListener('DOMContentLoaded', function() {
 			<!-- Кнопки управления -->
 			<div style="text-align:center;margin-top:30px;display:flex;flex-direction:column;gap:10px;align-items:center;">
 				<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+					<button id="change-background-btn" style="padding:8px 15px;background:#555;color:white;border:none;border-radius:4px;cursor:pointer;">Сменить фон</button>
 					<button id="dev-terminal-btn" style="padding:8px 15px;background:#555;color:white;border:none;border-radius:4px;cursor:pointer;">Терминал</button>
 				</div>
 				<button id="reset-save-profile-btn" style="padding:10px 20px;background:#f44336;color:white;border:none;border-radius:4px;cursor:pointer;margin-top:10px;">Сбросить сохранение</button>
@@ -1624,93 +1547,6 @@ document.addEventListener('DOMContentLoaded', function() {
 			input.onkeydown = (e) => { if(e.key==='Enter') document.getElementById('save-name-btn').click(); };
 		}
 
-		function openAvatarSelector() {
-			const selectorModal = document.createElement('div');
-			selectorModal.id = 'avatar-selector-modal';
-			selectorModal.style.cssText = `display:flex;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:10002;justify-content:center;align-items:center;`;
-			// Настройки
-			const totalAvatarsToCheck = 120; // Проверяем до 120 файлов (можно увеличить)
-			const folderPath = 'images/profile_avatars/';
-			// Создаем контейнер для сетки аватаров
-			const gridContainer = document.createElement('div');
-			gridContainer.style.cssText = `
-				display: grid; 
-				grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); 
-				gap: 10px; 
-				margin-bottom: 20px; 
-				max-height: 60vh; /* Ограничиваем высоту для прокрутки */
-				overflow-y: auto; /* Включаем вертикальную прокрутку */
-				padding: 10px;
-				background: #1a1a1a;
-				border-radius: 8px;
-				border: 1px solid #333;
-			`;
-			// Заголовок модального окна
-			const headerHtml = `<h3 style="margin:0 0 15px;color:#fff;">Выберите аватар</h3>`;
-			// Кнопка закрытия
-			const footerHtml = `<button id="close-avatar-selector-btn" style="padding:10px 25px;background:#555;color:white;border:none;border-radius:4px;cursor:pointer;font-size:14px;margin-top:10px;">Закрыть</button>`;
-			const contentDiv = document.createElement('div');
-			contentDiv.style.cssText = `background:#222;padding:25px;border-radius:12px;width:90%;max-width:600px;height:80vh;display:flex;flex-direction:column;color:white;box-shadow:0 0 30px rgba(0,0,0,0.8);`;
-			contentDiv.innerHTML = headerHtml;
-			contentDiv.appendChild(gridContainer);
-			const footerDiv = document.createElement('div');
-			footerDiv.style.textAlign = 'center';
-			footerDiv.innerHTML = footerHtml;
-			contentDiv.appendChild(footerDiv);
-
-			selectorModal.appendChild(contentDiv);
-			document.body.appendChild(selectorModal);
-			let avatarPaths = [];
-			for(let i = 1; i <= totalAvatarsToCheck; i++) {
-				avatarPaths.push(`${folderPath}${i}.png`);
-			}
-			avatarPaths.sort((a, b) => {
-				return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
-			});
-			// Рендеринг изображений
-			avatarPaths.forEach(path => {
-				const img = document.createElement('img');
-				img.src = path;
-				img.className = 'avatar-option';
-				img.dataset.path = path;
-				img.alt = `Avatar ${path}`;
-				
-				// Стили для каждого аватара
-				Object.assign(img.style, {
-					width: '80px',
-					height: '80px',
-					objectFit: 'cover',
-					borderRadius: '8px',
-					border: '2px solid #444',
-					cursor: 'pointer',
-					transition: 'transform 0.2s, border-color 0.2s',
-					backgroundColor: '#333' // Фон пока грузится
-				});
-
-				// Эффекты наведения
-				img.onmouseover = function() { this.style.transform='scale(1.1)'; this.style.borderColor='#fff'; this.style.zIndex='10'; };
-				img.onmouseout = function() { this.style.transform='scale(1)'; this.style.borderColor='#444'; this.style.zIndex='1'; };
-				img.onerror = function() {
-					this.style.display = 'none';
-				};
-
-				img.onclick = () => {
-					const newPath = img.getAttribute('data-path');
-					localStorage.setItem('profile_avatar', newPath);
-					if(typeof showToast === 'function') showToast('Аватар обновлен');
-					selectorModal.remove();
-					const settingsModal = document.querySelector('#avatar-settings-modal');
-					if(settingsModal) settingsModal.remove();
-					openAvatarSettingsModal(newPath, localStorage.getItem('playerVerification') || 'default');
-				};
-
-				gridContainer.appendChild(img);
-			});
-
-			document.getElementById('close-avatar-selector-btn').onclick = () => selectorModal.remove();
-			selectorModal.onclick = (e) => { if(e.target === selectorModal) selectorModal.remove(); };
-		}
-
 		function openAvatarSettingsModal(curAv, curVer) {
 			if (document.querySelector('#avatar-settings-modal')) return;
 			const subModal = document.createElement('div');
@@ -1721,9 +1557,6 @@ document.addEventListener('DOMContentLoaded', function() {
 				<h3 style="margin:0 0 20px;">Настройки аватара</h3>
 				<img src="${curAv}" id="preview-avatar" style="width:120px;height:120px;border-radius:5%;border:2px solid #555;object-fit:cover;margin-bottom:20px;">
 				<div style="display:flex;flex-direction:column;gap:10px;">
-					<!-- Новая кнопка выбора аватара -->
-					<button id="modal-change-avatar-btn" style="padding:10px;background:#9C27B0;color:white;border:none;border-radius:4px;cursor:pointer;font-weight:bold;">Выбрать аватар</button>
-					
 					<button id="modal-change-frame-btn" style="padding:10px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">Выбрать рамку</button>
 					<div style="border-top:1px solid #555;margin:5px 0;"></div>
 					<label style="text-align:left;font-size:14px;color:#ccc;">Статус верификации:</label>
@@ -1738,11 +1571,6 @@ document.addEventListener('DOMContentLoaded', function() {
 			</div>`;
 			document.body.appendChild(subModal);
 
-			// Привязка новой кнопки
-			document.getElementById('modal-change-avatar-btn').onclick = () => {
-				openAvatarSelector();
-			};
-
 			document.getElementById('modal-change-frame-btn').onclick = () => { subModal.remove(); if(typeof openFrameSelector==='function') openFrameSelector(); else setTimeout(openProfile,100); };
 			document.getElementById('save-profile-settings-btn').onclick = () => {
 				const newVerify = document.getElementById('verification-select').value;
@@ -1752,7 +1580,7 @@ document.addEventListener('DOMContentLoaded', function() {
 				
 				subModal.remove();
 				setTimeout(() => {
-					const mainModal = document.querySelector('.modal'); 
+					const mainModal = document.querySelector('.modal'); // Находим главное окно профиля
 					if(mainModal) mainModal.remove();
 					openProfile();
 				}, 50);
@@ -1764,6 +1592,9 @@ document.addEventListener('DOMContentLoaded', function() {
 		document.getElementById('avatar-click-area').onclick = () => openAvatarSettingsModal(avatar, pVerify);
 		document.getElementById('edit-player-id-btn').onclick = () => openEditIdModal(pId);
 		document.getElementById('edit-player-name-btn').onclick = () => openEditNameModal(pName);
+
+		const bgBtn = document.getElementById('change-background-btn');
+		if(bgBtn) bgBtn.onclick = () => { modal.remove(); openBackgroundSelector(); };
 		
 		const termBtn = document.getElementById('dev-terminal-btn');
 		if(termBtn) termBtn.onclick = () => { modal.remove(); openDevTerminal(); };
@@ -1833,9 +1664,9 @@ document.addEventListener('DOMContentLoaded', function() {
 		
 		if (isStatTrack) UpdateStatrackFrame(balance);
 	}
-
+	
 	const profileBtn = document.getElementById('profile-btn');
-	if(profileBtn) profileBtn.addEventListener('click', openProfile);
+	profileBtn.addEventListener('click', openProfile);
 	
 	let currentBattlePass = null;
 	let selectedBattlePassId = null;
@@ -1924,11 +1755,9 @@ document.addEventListener('DOMContentLoaded', function() {
 			userExp: userExp,
 			expToNextLevel: expToNextLevel,
 			currentMedals: currentMedals,
-			// Добавляем настройки профиля в экспорт
 			playerId: localStorage.getItem('playerId') || '',
 			playerName: localStorage.getItem('playerName') || '',
-			playerVerification: localStorage.getItem('playerVerification') || 'default',
-			profileAvatar: localStorage.getItem('profile_avatar') || 'images/player.png'
+			playerVerification: localStorage.getItem('playerVerification') || 'default'
 		});
 	}
 
@@ -1953,11 +1782,9 @@ document.addEventListener('DOMContentLoaded', function() {
 			userExp: userExp,
 			expToNextLevel: expToNextLevel,
 			currentMedals: currentMedals,
-			// Сохраняем профиль вместе с игрой
 			playerId: localStorage.getItem('playerId'),
 			playerName: localStorage.getItem('playerName'),
-			playerVerification: localStorage.getItem('playerVerification'),
-			profileAvatar: localStorage.getItem('profile_avatar')
+			playerVerification: localStorage.getItem('playerVerification')
 		}));
 	}
 
@@ -1966,7 +1793,6 @@ document.addEventListener('DOMContentLoaded', function() {
 		if (savedState) {
 			try {
 				const loadedState = JSON.parse(savedState);
-				// Восстановление основных данных
 				if (loadedState.balance !== undefined) balance = loadedState.balance;
 				if (loadedState.inventory) inventory = loadedState.inventory;
 				initializeMedalSlots();
@@ -1978,8 +1804,6 @@ document.addEventListener('DOMContentLoaded', function() {
 				if (loadedState.userExp !== undefined) userExp = loadedState.userExp;
 				if (loadedState.expToNextLevel !== undefined) expToNextLevel = loadedState.expToNextLevel;
 				if (loadedState.currentMedals) currentMedals = loadedState.currentMedals;
-
-				// Логика медалей при отсутствии данных
 				if (!loadedState.currentMedals && inventory) {
 					currentMedals = [null, null, null, null, null];
 					inventory.forEach(item => {
@@ -1994,11 +1818,7 @@ document.addEventListener('DOMContentLoaded', function() {
 				if (loadedState.playerId) localStorage.setItem('playerId', loadedState.playerId);
 				if (loadedState.playerName) localStorage.setItem('playerName', loadedState.playerName);
 				if (loadedState.playerVerification) localStorage.setItem('playerVerification', loadedState.playerVerification);
-				if (loadedState.profileAvatar) {
-					localStorage.setItem('profile_avatar', loadedState.profileAvatar);
-				}
 
-				// Логика рамок
 				if (loadedState.currentFrame && framesDatabase[loadedState.currentFrame]) {
 					Object.values(framesDatabase).forEach(f => f.equipped = false);
 					framesDatabase[loadedState.currentFrame].equipped = true;
@@ -2008,15 +1828,12 @@ document.addEventListener('DOMContentLoaded', function() {
 					framesDatabase['null_frame'].equipped = true;
 					currentFrame = 'null_frame';
 				}
-
-				// Обновление интерфейса
+				
 				if(typeof balanceAmount !== 'undefined') balanceAmount.textContent = balance.toLocaleString('ru-RU');
 				if(typeof UpdateStatrackFrame === 'function') UpdateStatrackFrame(balance);
 				if(typeof updateInventory === 'function') updateInventory();
-				
 			} catch (err) { console.error("Ошибка загрузки:", err); }
 		} else {
-			// Если сохранения нет, ставим дефолты
 			Object.values(framesDatabase).forEach(f => f.equipped = false);
 			framesDatabase['null_frame'].equipped = true;
 			currentFrame = 'null_frame';
@@ -3557,7 +3374,7 @@ document.addEventListener('DOMContentLoaded', function() {
 			if (userRangs.mm.stars >= rangsDatabase[currentRang].stars_for_up && hasNextRang) {
 				const rewardRarity = rangsDatabase[currentRang]?.rewardRarity;
 				if (rewardRarity) {
-					const rewardItem = getRandomItemReward(rewardRarity, 'mm');
+					const rewardItem = getRandomItemReward(rewardRarity);
 					if (rewardItem) {
 						inventory.push(rewardItem);
 						showToast(`Поздравляем! За повышение ранга получен: ${rewardItem.name}`);
@@ -3653,7 +3470,7 @@ document.addEventListener('DOMContentLoaded', function() {
 				const rewardRarity = currentRankData.rewardRarity;
 				if (rewardRarity) {
 					if (typeof getRandomItemReward === 'function') {
-						const rewardItem = getRandomItemReward(rewardRarity, 'souz');
+						const rewardItem = getRandomItemReward(rewardRarity);
 						if (rewardItem) {
 							inventory.push(rewardItem);
 							if (typeof showToast === 'function') {
@@ -3705,7 +3522,7 @@ document.addEventListener('DOMContentLoaded', function() {
 			if (userRangs.duel.stars >= rangsDatabase[currentRang].stars_for_up && hasNextRang) {
 				const rewardRarity = rangsDatabase[currentRang]?.rewardRarity;
 				if (rewardRarity) {
-					const rewardItem = getRandomItemReward(rewardRarity, 'duel');
+					const rewardItem = getRandomItemReward(rewardRarity);
 					if (rewardItem) {
 						inventory.push(rewardItem);
 						showToast(`Поздравляем! За повышение ранга получен: ${rewardItem.name}`);
@@ -3785,61 +3602,6 @@ document.addEventListener('DOMContentLoaded', function() {
 		return totalPrice;
 	}
 	
-	function updateItemPriceInUI(item) {
-	  item = itemsDatabase.find(a => a.id === item.id);
-	  const itemElement = document.getElementById(item.id);
-	  const rentalItemId = item.id + '_rental';
-	  const rentalItem = itemsDatabase.find(a => a.id === rentalItemId);
-	  const rentalItemElement = document.getElementById(rentalItemId);
-	  if (itemElement) {
-		const priceElement = itemElement.querySelector('.item-price');
-		if (priceElement) {
-		  priceElement.textContent = `${item.price.toFixed(2)} ₽`;
-		  item.price = Math.round(item.price * 100) / 100;
-		  if (rentalItemElement) {
-			rentalItem.price =  Math.round(item.price * 0.01 * 100) / 100;
-		  } else if (rentalItem) {
-			  rentalItem.price =  Math.round(item.price * 0.01 * 100) / 100;
-		  }
-		}
-		
-		const buttons = itemElement.querySelectorAll('.add-to-cart, .buy-all-btn');
-		buttons.forEach(btn => {
-		  btn.setAttribute('data-price',  Math.round(item.price * 100) / 100);
-		});
-	  } else {
-		  item.price = Math.round(item.price * 100) / 100;
-		  if (rentalItemElement) {
-			  rentalItem.price =  Math.round(item.price * 0.01 * 100) / 100;
-			  const rentalPriceElement = rentalItemElement.querySelector('.item-price');
-			  if (rentalPriceElement) {
-				  const rentalPrice = Math.round(rentalItem.price * 100) / 100; // 3% от оригинальной цены для аренды
-				  rentalPriceElement.textContent = `${rentalPrice.toFixed(2)} ₽`;
-			  }
-			  const rentalButtons = rentalItemElement.querySelectorAll('.add-to-cart');
-			  rentalButtons.forEach(btn => {
-				  btn.setAttribute('data-price',  Math.round(rentalItem.price * 100) / 100); // Сохраняем цену аренды
-			  });  
-		  } else if (rentalItem) {
-			  rentalItem.price =  Math.round(item.price * 0.01 * 100) / 100;
-		  }
-	  }
-	  const isEligible = !item.isCase && !item.name.endsWith('Fragment') &&  !item.name.startsWith('Medal') && !item.priceMultiply == 0;
-	  if (isEligible) {
-		  if (item.price >= 100000) {
-			  item.priceMultiply = Math.round(item.price / 5000) * 100;
-		  }else if (item.price >= 10000) {
-			  item.priceMultiply = Math.round(item.price / 400) * 10;
-		  } else if (item.price >= 1000) {
-			  item.priceMultiply = Math.round(item.price / 30);
-		  } else if (item.price >= 100) {
-			  item.priceMultiply = Math.round(item.price * 10 / 20) / 10;
-		  } else if (item.price >= 0.05) {
-			item.priceMultiply = Math.round(item.price * 100 / 10) / 100;
-		  }
-	  }
-	}
-	
 	function restoreItemPrice(itemId, quantity = 1) {
 		const shopItem = itemsDatabase.find(item => item.id === itemId);
 		if (shopItem && shopItem.priceMultiply > 0) {
@@ -3847,7 +3609,6 @@ document.addEventListener('DOMContentLoaded', function() {
 				shopItem.initialPrice,
 				shopItem.price - (shopItem.priceMultiply * quantity)
 			);
-			updateItemPriceInUI(shopItem);
 		}
 	}
 	
@@ -3872,31 +3633,33 @@ document.addEventListener('DOMContentLoaded', function() {
 		return stickers[stickers.length - 1];
 	}
 	
+	const skinChangerBtn = document.getElementById('skin-changer-btn');
+	skinChangerBtn.addEventListener('click', openSkinChanger);
+	
 	function exportItemsDatabase() {
 	  const filteredItems = itemsDatabase.filter(item => {
 		return !item.id.endsWith('_rental') && !item.isRental;
 	  });
 	  
 	  const rarityOrder = {
-		'gold-none': 0,
-		'none': 1,
-		'nameless': 2,
-		'arcane': 3,
-		'legendary': 4,
-		'epic': 5,
-		'rare': 6,
-		'uncommon': 7,
-		'common': 8,
-		'case-none': 9,
-		'box-none': 10
+		'none': 0,
+		'nameless': 1,
+		'arcane': 2,
+		'legendary': 3,
+		'epic': 4,
+		'rare': 5,
+		'uncommon': 6,
+		'common': 7,
+		'case-none': 8,
+		'box-none': 9
 	  };
 	  
 	  const sortedItems = filteredItems.sort((a, b) => {
 		const rarityA = a.rarity.toLowerCase();
 		const rarityB = b.rarity.toLowerCase();
 		
-		const orderA = rarityOrder[rarityA] !== undefined ? rarityOrder[rarityA] : 10;
-		const orderB = rarityOrder[rarityB] !== undefined ? rarityOrder[rarityB] : 10;
+		const orderA = rarityOrder[rarityA] !== undefined ? rarityOrder[rarityA] : 9;
+		const orderB = rarityOrder[rarityB] !== undefined ? rarityOrder[rarityB] : 9;
 		
 		return orderA - orderB;
 	  });
@@ -3946,7 +3709,6 @@ document.addEventListener('DOMContentLoaded', function() {
 			.rarity-arcane { color: #ff3333; }
 			.rarity-nameless { color: #ffd700; }
 			.rarity-none { color: lightgrey; }
-			.rarity-gold-none { color: #ffde00; }
 			.rarity-case-none { color: black; }
 			.rairty-box-none { color: black; }
 		</style>
@@ -4008,6 +3770,191 @@ document.addEventListener('DOMContentLoaded', function() {
 	  exportItemsDatabase();
 	});
 	
+	function openSkinChanger() {
+		const modal = document.createElement('div');
+		modal.className = 'modal';
+		modal.style.display = 'flex';
+		modal.style.position = 'fixed';
+		modal.style.top = '0';
+		modal.style.left = '0';
+		modal.style.width = '100%';
+		modal.style.height = '100%';
+		modal.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+		modal.style.zIndex = '1000';
+		modal.style.justifyContent = 'center';
+		modal.style.alignItems = 'center';
+		
+		modal.innerHTML = `
+			<div class="modal-content" style="background-color: rgb(30 30 30 / 85%); padding: 20px; border-radius: 8px; width: 80%; max-width: 1000px; max-height: 80vh; overflow: hidden; display: flex; flex-direction: column;">
+				<h3 style="margin-top: 0;">Skin Changer</h3>
+				<div style="display: flex; gap: 20px; flex: 1; overflow: hidden;">
+					<div style="flex: 1; overflow-y: auto;">
+						<h4>Выберите предмет для замены</h4>
+						<div id="skin-changer-inventory" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px;"></div>
+					</div>
+					<div style="flex: 1; overflow-y: auto; display: none;" id="skin-changer-shop-container" class="global-ui">
+						<h4>Выберите новый предмет</h4>
+						<div id="skin-changer-shop" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px;"></div>
+					</div>
+				</div>
+				<div style="display: flex; justify-content: space-between; margin-top: 20px;">
+					<button id="skin-changer-cancel" style="padding: 10px 20px; background-color: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">Отмена</button>
+					<button id="skin-changer-confirm" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; display: none;">Подтвердить</button>
+				</div>
+			</div>
+		`;
+		
+		document.body.appendChild(modal);
+		
+		let selectedInventoryIndex = null;
+		let selectedShopItemId = null;
+		
+		const inventoryContainer = modal.querySelector('#skin-changer-inventory');
+		inventory.forEach((item, index) => {
+			const itemElement = document.createElement('div');
+			itemElement.className = 'inventory-item-select';
+			itemElement.dataset.index = index;
+			itemElement.innerHTML = `
+				<img src="${item.image}" width="60">
+				<div>${item.name}</div>
+				${item.isRental ? '<div style="color: gold; font-size: 10px;">Аренда</div>' : ''}
+			`;
+			
+			itemElement.addEventListener('click', function() {
+				modal.querySelectorAll('.inventory-item-select').forEach(el => el.style.border = 'none');
+				this.style.border = '2px solid gold';
+				selectedInventoryIndex = index;
+				
+				const shopContainer = modal.querySelector('#skin-changer-shop-container');
+				shopContainer.style.display = 'block';
+				
+				const shopItemsContainer = modal.querySelector('#skin-changer-shop');
+				shopItemsContainer.innerHTML = '';
+				
+				const groupedItems = {};
+				Object.keys(rarities).forEach(rarity => {
+					groupedItems[rarity] = [];
+				});
+				
+				itemsDatabase.forEach(item => {
+					groupedItems[item.rarity].push(item);
+				});
+				
+				const sortedRarities = Object.keys(rarities).sort((a, b) => {
+					return (rarities[b]?.order || 0) - (rarities[a]?.order || 0);
+				});
+				
+				sortedRarities.forEach(rarity => {
+					if (groupedItems[rarity].length > 0) {
+						const rarityHeader = document.createElement('div');
+						rarityHeader.className = 'rarity-header';
+						rarityHeader.style.gridColumn = '1 / -1';
+						rarityHeader.style.color = rarities[rarity].colorHex;
+						rarityHeader.textContent = rarities[rarity].name;
+						shopItemsContainer.appendChild(rarityHeader);
+						
+						groupedItems[rarity].forEach(item => {
+							const shopItemElement = document.createElement('div');
+							shopItemElement.className = 'shop-item-select';
+							shopItemElement.dataset.id = item.id;
+							shopItemElement.innerHTML = `
+								<img src="${item.image}" width="60">
+								<div>${item.name}</div>
+							`;
+							
+							shopItemElement.addEventListener('click', function() {
+								modal.querySelectorAll('.shop-item-select').forEach(el => el.style.border = 'none');
+								this.style.border = '2px solid gold';
+								selectedShopItemId = item.id;
+								modal.querySelector('#skin-changer-confirm').style.display = 'block';
+							});
+							
+							shopItemsContainer.appendChild(shopItemElement);
+						});
+					}
+				});
+			});
+			
+			inventoryContainer.appendChild(itemElement);
+		});
+		
+		modal.querySelector('#skin-changer-cancel').addEventListener('click', function() {
+			modal.remove();
+		});
+		
+		modal.querySelector('#skin-changer-confirm').addEventListener('click', function() {
+			if (selectedInventoryIndex !== null && selectedShopItemId !== null) {
+				const oldItem = inventory[selectedInventoryIndex];
+				const newItemData = itemsDatabase.find(item => item.id === selectedShopItemId);
+				
+				if (newItemData) {
+					const oldStickers = oldItem.stickers ? [...oldItem.stickers] : null;
+					const oldCharm = oldItem.charm ? {...oldItem.charm} : null;
+					
+					const newItem = {
+						id: newItemData.id,
+						name: newItemData.name,
+						rarity: newItemData.rarity,
+						image: newItemData.image
+					};
+					
+					if (newItemData.isRental && oldItem.isRental) {
+						newItem.isRental = true;
+						newItem.rentalExpires = oldItem.rentalExpires;
+					}
+					else if (oldItem.isRental && !newItemData.isRental) {
+					}
+					else if (newItemData.isRental && !oldItem.isRental) {
+						newItem.isRental = true;
+						newItem.rentalExpires = Date.now() + 3 * 60 * 1000; // 3 минуты
+					}
+					
+					if (!newItemData.isItemWithoutSlot && !newItemData.isCase && 
+						!newItemData.isSticker && !newItemData.isCharm) {
+						if (oldStickers) newItem.stickers = oldStickers;
+						if (oldCharm) newItem.charm = oldCharm;
+					} else {
+						if (oldStickers) {
+							oldStickers.forEach(sticker => {
+								inventory.push({
+									id: sticker.id,
+									name: sticker.name,
+									rarity: itemsDatabase.find(i => i.id === sticker.id)?.rarity || 'none',
+									image: sticker.image
+								});
+							});
+						}
+						if (oldCharm) {
+							inventory.push({
+								id: oldCharm.id,
+								name: oldCharm.name,
+								rarity: itemsDatabase.find(i => i.id === oldCharm.id)?.rarity || 'none',
+								image: oldCharm.image
+							});
+						}
+					}
+					
+					inventory[selectedInventoryIndex] = newItem;
+					
+					updateInventory();
+					showToast('Предмет успешно заменен!');
+					modal.remove();
+					
+					if ((oldStickers && oldStickers.length > 0) || oldCharm) {
+						let returnedItems = [];
+						if (oldStickers) returnedItems = returnedItems.concat(oldStickers.map(s => s.name));
+						if (oldCharm) returnedItems.push(oldCharm.name);
+						
+						if (returnedItems.length > 0) {
+							showToast(`Возвращены в инвентарь: ${returnedItems.join(', ')}`);
+						}
+					}
+				}
+			}
+		});
+		saveGameState();
+	}
+	
 	const cart = [];
 	const checkoutBtn = document.getElementById('checkout-btn');
 	const clearCartBtn = document.getElementById('clear-cart-btn');
@@ -4026,16 +3973,7 @@ document.addEventListener('DOMContentLoaded', function() {
 	
 	let sortDescending = true; // Флаг сортировки по убыванию цены
 	const sortPriceBtn = document.getElementById('sort-price-btn');
-	
-	const sortQuantityBtn = document.getElementById('sort-quantity-btn');
-	let sortQtyDescending = true; // Начальная сортировка по убыванию
-	
-	sortQuantityBtn.addEventListener('click', function() {
-		sortQtyDescending = !sortQtyDescending;
-		this.textContent = sortQtyDescending ? 'Сортировать по количеству ↓' : 'Сортировать по количеству ↑';
-		this.classList.toggle('active');
-		sortItemsByQuantity();
-	});
+
 	
 	const sellAllBtn = document.getElementById('sell-all-btn');
 	
@@ -4051,8 +3989,7 @@ document.addEventListener('DOMContentLoaded', function() {
 		'legendary': { name: 'Legendary', color: 'legendary', order: 6, next: 'arcane', colorHex: '#ff66ff', craftsFrom: 'epic'},
 		'arcane': { name: 'Arcane', color: 'arcane', order: 7, next: null, colorHex: '#ff3333', craftsFrom: 'legendary'},
 		'nameless': { name: 'Nameless', color: 'nameless', order: 8, next: null, colorHex: '#ffd700', craftsFrom: null},
-		'none': {name: 'none', color: 'none', order: 10, next: null, ColorHex: 'lightgrey', craftsFrom: null},
-		'gold-none': {name: 'none', color: 'gold-none', order: 11, next: null, ColorHex: '#ffde00', craftsFrom: null}
+		'none': {name: 'none', color: 'none', order: 10, next: null, ColorHex: 'lightgrey', craftsFrom: null}
 	};
 
 	const editItemBtn = document.getElementById('edit-item-btn');
@@ -4333,7 +4270,6 @@ document.addEventListener('DOMContentLoaded', function() {
 		  'arcane': 0.65,
 		  'nameless': 0.75,
 		  'none': 0.9,
-		  'gold-none': 0.9,
 		  'box-none': 0.3,
 		  'case-none': 0.7
 	  }
@@ -4353,7 +4289,6 @@ document.addEventListener('DOMContentLoaded', function() {
 	  };
 		
 		updatedItem.priceMultiply = priceMultiply;
-		updateItemPriceInUI(updatedItem);
 		
 		if (isCase) {
 			updatedItem.contains = contains;
@@ -4482,20 +4417,6 @@ document.addEventListener('DOMContentLoaded', function() {
 		sortItemsByPrice();
 	});
 	
-	function sortItemsByQuantity() {
-		const container = document.getElementById('items-container');
-		const items = Array.from(container.querySelectorAll('.item-card'));
-		
-		items.sort((a, b) => {
-			const qtyA = parseInt(a.querySelector('.available-stock').textContent);
-			const qtyB = parseInt(b.querySelector('.available-stock').textContent);
-			
-			return sortQtyDescending ? qtyB - qtyA : qtyA - qtyB;
-		});
-		
-		container.innerHTML = '';
-		items.forEach(item => container.appendChild(item));
-	}
 	
 	function sortItemsByPrice() {
 		const container = document.getElementById('items-container');
@@ -4642,7 +4563,7 @@ document.addEventListener('DOMContentLoaded', function() {
 					if (randomItem) {
 						const isTemporary = Math.random() < 0.8;
 						
-						if (isTemporary && !randomItem.isCase && !randomItem.isCharm && !randomItem.isSticker && !randomItem.name.endsWith('Fragment')) {
+						if (isTemporary && !randomItem.isCase && !randomItem.isCharm && !randomItem.isSticker && !randomItem.name.startsWith('Fragment')) {
 							const itemName = randomItem.name.includes("(TimeLimited)") 
 								? randomItem.name 
 								: randomItem.name + " (TimeLimited)";
@@ -4829,11 +4750,13 @@ document.addEventListener('DOMContentLoaded', function() {
 				el.style.display = 'block';
 			});
 			editBalanceBtn.style.display = 'block';
+			document.getElementById('skin-changer-btn').style.display = 'block';
 		} else {
 			document.querySelectorAll('.add-item-container, .edit-item-container, .add-rarity-container, .admin-buttons-container').forEach(el => {
 				el.style.display = 'none';
 			});
 			editBalanceBtn.style.display = 'none';
+			document.getElementById('skin-changer-btn').style.display = 'none';
 		}
 		
 		promocodes[code].usedCount++;
@@ -4863,156 +4786,134 @@ document.addEventListener('DOMContentLoaded', function() {
 	}
 
 	const collectionsDatabase = {
-		'none_collection': {
-			id: 'none_collection',
-			name: 'None',
-			image: 'images/none/none_collection_icon.png'
+		'so2_collection': {
+			id: 'so2_collection',
+			name: 'SO2',
+			image: 'images/so2/so2_collection.png'
 		}
 	};
 	
 	const itemsDatabase = [
 		{
 			itemInStore: true,
-			id: 'snowball',
-			name: 'Snowball',
-			collection: 'none_collection',
-			stock: 25,
-			price: 350,
+			id: 'none1',
+			name: 'None Fragment',
+			collection: 'so2_collection',
+			stock: 250,
+			price: 5000,
 			rarity: 'none',
-			image: 'images/none/snowball.png',
+			image: 'images/so2/fragment_default.png',
+			isItemWithoutSlot: true,
+			priceMultiply: 0
+			
+		},
+		{
+			itemInStore: true,
+			id: 'common1',
+			name: 'Common Fragment',
+			collection: 'so2_collection',
+			stock: 1450,
+			price: 0.01,
+			rarity: 'common',
+			image: 'images/so2/common_fragment.png',
+			isItemWithoutSlot: true,
+			priceMultiply: 0
+			
+		},
+		{
+			itemInStore: true,
+			id: 'uncommon1',
+			name: 'Uncommon Fragment',
+			collection: 'so2_collection',
+			stock: 900,
+			price: 0.2,
+			rarity: 'uncommon',
+			image: 'images/so2/uncommon_fragment.png',
+			isItemWithoutSlot: true,
+			priceMultiply: 0
+			
+		},
+		{
+			itemInStore: true,
+			id: 'rare1',
+			name: 'Rare Fragment',
+			collection: 'so2_collection',
+			stock: 620,
+			price: 4,
+			rarity: 'rare',
+			image: 'images/so2/rare_fragment.png',
 			isItemWithoutSlot: true,
 			priceMultiply: 0
 		},
 		{
 			itemInStore: true,
-			id: 'gold50',
-			name: 'Gold50',
-			collection: 'none_collection',
-			stock: 1000,
-			price: 62.5,
-			rarity: 'gold-none',
-			image: 'images/gold/gold1.png',
+			id: 'epic1',
+			name: 'Epic Fragment',
+			collection: 'so2_collection',
+			stock: 430,
+			price: 8,
+			rarity: 'epic',
+			image: 'images/so2/epic_fragment.png',
+			isItemWithoutSlot: true, 
+			priceMultiply: 0
+		},
+		{
+			itemInStore: true,
+			id: 'legendary1',
+			name: 'Legendary Fragment',
+			collection: 'so2_collection',
+			stock: 320,
+			price: 60,
+			rarity: 'legendary',
+			image: 'images/so2/legendary_fragment.png',
 			isItemWithoutSlot: true,
 			priceMultiply: 0
 		},
 		{
 			itemInStore: true,
-			id: 'gold100',
-			name: 'Gold100',
-			collection: 'none_collection',
-			stock: 1000,
-			price: 125,
-			rarity: 'gold-none',
-			image: 'images/gold/gold2.png',
+			id: 'arcane1',
+			name: 'Arcane Fragment',
+			collection: 'so2_collection',
+			stock: 200,
+			price: 300.00,
+			rarity: 'arcane',
+			image: 'images/so2/arcane_fragment.png',
 			isItemWithoutSlot: true,
 			priceMultiply: 0
 		},
 		{
 			itemInStore: true,
-			id: 'gold300',
-			name: 'Gold300',
-			collection: 'none_collection',
-			stock: 1000,
-			price: 375,
-			rarity: 'gold-none',
-			image: 'images/gold/gold3.png',
+			id: 'nameless1',
+			name: 'Nameless Fragment',
+			collection: 'so2_collection',
+			stock: 90,
+			price: 2500.00,
+			rarity: 'nameless',
+			image: 'images/so2/nameless_fragment.png',
 			isItemWithoutSlot: true,
 			priceMultiply: 0
 		},
 		{
 			itemInStore: true,
-			id: 'gold500',
-			name: 'Gold500',
-			collection: 'none_collection',
+			id: 'fragment_box',
+			name: 'FragmentBox',
+			collection: 'so2_collection',
 			stock: 1000,
-			price: 625,
-			rarity: 'gold-none',
-			image: 'images/gold/gold4.png',
-			isItemWithoutSlot: true,
-			priceMultiply: 0
-		},
-		{
-			itemInStore: true,
-			id: 'gold1000',
-			name: 'Gold1000',
-			collection: 'none_collection',
-			stock: 1000,
-			price: 1250,
-			rarity: 'gold-none',
-			image: 'images/gold/gold5.png',
-			isItemWithoutSlot: true,
-			priceMultiply: 0
-		},
-		{
-			itemInStore: true,
-			id: 'gold3000',
-			name: 'Gold3000',
-			collection: 'none_collection',
-			stock: 1000,
-			price: 3750,
-			rarity: 'gold-none',
-			image: 'images/gold/gold6.png',
-			isItemWithoutSlot: true,
-			priceMultiply: 0
-		},
-		{
-			itemInStore: true,
-			id: 'gold5000',
-			name: 'Gold5000',
-			collection: 'none_collection',
-			stock: 1000,
-			price: 6250,
-			rarity: 'gold-none',
-			image: 'images/gold/gold7.png',
-			isItemWithoutSlot: true,
-			priceMultiply: 0
-		},
-		{
-			itemInStore: true,
-			id: 'gold10000',
-			name: 'Gold10000',
-			collection: 'none_collection',
-			stock: 1000,
-			price: 12500,
-			rarity: 'gold-none',
-			image: 'images/gold/gold8.png',
-			isItemWithoutSlot: true,
-			priceMultiply: 0
-		},
-		{
-			itemInStore: true,
-			id: 'gold30000',
-			name: 'Gold30000',
-			collection: 'none_collection',
-			stock: 1000,
-			price: 37500,
-			rarity: 'gold-none',
-			image: 'images/gold/gold9.png',
-			isItemWithoutSlot: true,
-			priceMultiply: 0
-		},
-		{
-			itemInStore: true,
-			id: 'gold50000',
-			name: 'Gold50000',
-			collection: 'none_collection',
-			stock: 1000,
-			price: 62500,
-			rarity: 'gold-none',
-			image: 'images/gold/gold10.png',
-			isItemWithoutSlot: true,
-			priceMultiply: 0
-		},
-		{
-			itemInStore: true,
-			id: 'gold100000',
-			name: 'Gold100000',
-			collection: 'none_collection',
-			stock: 1000,
-			price: 125000,
-			rarity: 'gold-none',
-			image: 'images/gold/gold11.png',
-			isItemWithoutSlot: true,
+			price: 30.00,
+			rarity: 'box-none',
+			image: 'images/so2/fragment_box.png',
+			isCase: true,
+			contains: ['none1', 'nameless1', 'arcane1', 'legendary1', 'epic1', 'rare1', 'uncommon1', 'common1'],
+			dropChances: {
+				'common': 28,
+				'uncommon': 20,
+				'rare': 17,
+				'epic': 13,
+				'legendary': 10,
+				'arcane': 6,
+				'nameless': 4,
+				'none': 2
+			},
 			priceMultiply: 0
 		}
 	];
@@ -5068,48 +4969,48 @@ document.addEventListener('DOMContentLoaded', function() {
 			amount: 50,
 			price: 75,
 			image: 'images/gold/cartG50.png',
-			name: 'gold50',
-			rewards: ['gold50']
+			name: '50 золота',
+			rewards: []
 		},
 		{
 			id: 'pack_100',
 			amount: 100,
 			price: 119,
 			image: 'images/gold/cartG100.png',
-			name: 'gold100',
-			rewards: ['gold100']
+			name: '100 золота',
+			rewards: []
 		},
 		{
 			id: 'pack_300',
 			amount: 300,
 			price: 319,
 			image: 'images/gold/cartG300.png',
-			name: 'gold300',
-			rewards: ['gold300']
+			name: '300 золота',
+			rewards: []
 		},
 		{
 			id: 'pack_500',
 			amount: 500,
 			price: 499,
 			image: 'images/gold/cartG500.png',
-			name: 'gold500',
-			rewards: ['gold500']
+			name: '500 золота',
+			rewards: []
 		},
 		{
 			id: 'pack_1000',
 			amount: 1000,
 			price: 890,
 			image: 'images/gold/cartG1000.png',
-			name: 'gold1000',
-			rewards: ['gold1000']
+			name: '1000 золота',
+			rewards: []
 		},
 		{
 			id: 'pack_3000',
 			amount: 3000,
 			price: 1999,
 			image: 'images/gold/cartG3000.png',
-			name: 'gold3000',
-			rewards: ['gold3000']
+			name: '3000 золота',
+			rewards: []
 		}
 	];
 	
@@ -5135,11 +5036,11 @@ document.addEventListener('DOMContentLoaded', function() {
 		return true;
 	}
 	
-	addCurrencyPack('pack_5000', 5000, 2999, 'images/gold/cartG5000.png', 'gold5000', ['gold5000']);
-	addCurrencyPack('pack_10000', 10000, 5399, 'images/gold/cartG10000.png', 'gold10000', ['gold10000']);
-	addCurrencyPack('pack_30000', 30000, 14999, 'images/gold/cartG30000.png', 'gold30000', ['gold30000']);
-	addCurrencyPack('pack_50000', 50000, 21890, 'images/gold/cartG50000.png', 'gold50000', ['gold50000']);
-	addCurrencyPack('pack_100000', 100000, 32700, 'images/gold/cartG100000.png', 'gold100000', ['gold100000']);
+	addCurrencyPack('pack_5000', 5000, 2999, 'images/gold/cartG5000.png', '5000 золота', []);
+	addCurrencyPack('pack_10000', 10000, 5399, 'images/gold/cartG10000.png', '10000 золота', []);
+	addCurrencyPack('pack_30000', 30000, 14999, 'images/gold/cartG30000.png', '30000 золота', []);
+	addCurrencyPack('pack_50000', 50000, 21890, 'images/gold/cartG50000.png', '50000 золота', []);
+	addCurrencyPack('pack_100000', 100000, 32700, 'images/gold/cartG100000.png', '100000 золота', ['goldpack_graffiti0']);
 	
 	function openCurrencyShop() {
 		const modal = document.createElement('div');
@@ -5158,7 +5059,7 @@ document.addEventListener('DOMContentLoaded', function() {
 		const packsHTML = currencyPacksDatabase.map(function(pack) {
 			return `
 			<div class="currency-pack" style="min-width: 160px; background: #2a2a2a; padding: 20px; border-radius: 8px; text-align: center; border: 1px solid #444; flex-shrink: 0;">
-				<div class="currency-pack-image" style="width: 100px; height: 100px; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; cursor: pointer;" data-pack-name="${pack.name}">
+				<div style="width: 100px; height: 100px; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center;">
 					<img src="${pack.image}" alt="${pack.name}" style="transform: translateY(30px);max-width: 200%;max-height: 200%;object-fit: contain;">
 				</div>
 				<div style="transform: translateY(15px);font-size: 20px;color: gold;margin-bottom: 20px;">${pack.amount.toLocaleString('ru-RU')} ₽</div>
@@ -5187,44 +5088,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
 		document.body.appendChild(modal);
 
-		// Добавляем обработчики клика для просмотра 3D модели валюты
-		const packImages = modal.querySelectorAll('.currency-pack-image');
-		packImages.forEach(function(imgContainer) {
-			imgContainer.addEventListener('click', function(e) {
-				e.stopPropagation();
-				e.preventDefault();
-				
-				const packName = imgContainer.getAttribute('data-pack-name');
-				
-				// Находим предмет в itemsDatabase по pack.name
-				let item = null;
-				itemsDatabase.forEach(dbItem => {
-					if (dbItem.id === packName) {
-						item = dbItem;
-					}
-				});
-				
-				if (item) {
-					const originalItem = itemsDbMap.get(item.id);
-					
-					// Проверяем, можно ли показать 3D
-					const sourceItem = originalItem || item;
-					// Создаем временный контейнер, как в showCraftResult
-					const tempContainer = document.createElement('div');
-					document.body.appendChild(tempContainer);
-					
-					// Вызываем setup3DViewer
-					setup3DViewer(tempContainer, item, originalItem);
-					
-					// Программно кликаем по контейнеру
-					tempContainer.click();
-					
-					// Удаляем временный контейнер
-					document.body.removeChild(tempContainer);
-				}
-			});
-		});
-
 		var buttons = modal.querySelectorAll('.buy-currency-btn');
 		for (var i = 0; i < buttons.length; i++) {
 			buttons[i].addEventListener('click', function() {
@@ -5237,7 +5100,7 @@ document.addEventListener('DOMContentLoaded', function() {
 				});
 				
 				if (currencyPack) {
-					// balance += amount;
+					balance += amount;
 					balanceAmount.textContent = balance.toLocaleString('ru-RU');
 					UpdateStatrackFrame(balance);
 					
@@ -6497,7 +6360,6 @@ document.addEventListener('DOMContentLoaded', function() {
 	}
 
 	function openCaseWithAnimation(index, caseData, boostedItemId = null) {
-		if (isCaseOpening) return; // Защита от повторного вызова
 		isCaseOpening = true;
 		
 		const openBtn = caseModal.querySelector('.open-case-start-btn');
@@ -6527,26 +6389,24 @@ document.addEventListener('DOMContentLoaded', function() {
 			dropItems.style.transform = `translateX(-${targetPosition}px)`;
 			
 			setTimeout(() => {
-				// Передаем false, чтобы использовать стандартную логику (осмотр если возможно)
-				showCaseResultViewer(index, resultItem, false);
+				showCaseResult(index, resultItem);
+				isCaseOpening = false;
 			}, 3500);
 		}, 100);
 	}
 
 	function openCaseWithoutAnimation(index, caseData, boostedItemId = null) {
-		if (isCaseOpening) return; // Защита от повторного вызова
-		isCaseOpening = true;
-		
 		const resultItemId = populateDropContainer(caseData, boostedItemId);
 		const resultItem = itemsDatabase.find(i => i.id === resultItemId);
 		
 		setTimeout(() => {
-			// Передаем false, чтобы использовать стандартную логику
-			showCaseResultViewer(index, resultItem, true);
+			showCaseResult(index, resultItem);
 		}, 100);
 	}
-	
-	function showCaseResultViewer(index, item, skipViewer = false) {
+
+	function showCaseResult(index, item) {
+		const caseItem = inventory[index];
+		
 		const isRental = item.isRental || false;
 		const rentalDuration = 3 * 60 * 1000; // 3 минуты в миллисекундах
 		
@@ -6560,286 +6420,85 @@ document.addEventListener('DOMContentLoaded', function() {
 		if (isRental) {
 			resultItem.isRental = true;
 			resultItem.rentalExpires = Date.now() + rentalDuration;
-			resultItem.originalItemId = item.originalItemId || item.id;
-		}
-		inventory[index] = resultItem;
-		
-		// Проверяем, можно ли открыть 3D-осмотр, только если не установлен флаг пропуска
-		let canShow3D = false;
-		if (!skipViewer) {
-			canShow3D = fxCan3D(item);
+			resultItem.originalItemId = item.originalItemId || item.id; // ID оригинального предмета
 		}
 		
-		if (canShow3D) {
-			// Открываем 3D-осмотр
-			const tempContainer = document.createElement('div');
-			document.body.appendChild(tempContainer);
-			setup3DViewer(tempContainer, resultItem, item);
-			tempContainer.click();
-			document.body.removeChild(tempContainer);
-			
-			// Закрываем модалку кейса
-			if (caseModal) {
-				caseModal.style.display = 'none';
-			}
-			
-			// Сбрасываем флаг сразу, т.к. новая вкладка открылась
-			isCaseOpening = false;
-		} else {
-			// Показываем старое модальное окно
-			const rarityInfo = (typeof rarities !== 'undefined' && rarities[item.rarity]) 
-				? rarities[item.rarity] 
-				: { color: 'gray', name: item.rarity };
-			
-			caseModal.innerHTML = `
-				<div class="case-result" style="background-color: rgb(30 30 30 / 85%); padding: 30px; border-radius: 8px; text-align: center; max-width: 500px;">
-					<h2>Вы получили:</h2>
-					<div style="margin: 20px 0;">
-						<img src="${item.image}" alt="${item.name}" width="150">
-						<div style="font-size: 20px; margin: 10px 0;">${item.name}</div>
-						<div class="case-item-rarity ${rarityInfo.color}" style="padding: 5px 10px; border-radius: 4px; display: inline-block; font-weight: bold;">
-							${rarityInfo.name}
+		caseModal.innerHTML = `
+			<div class="case-result" style="background-color: rgb(30 30 30 / 85%); padding: 30px; border-radius: 8px; text-align: center; max-width: 500px;">
+				<h2>Вы получили:</h2>
+				<div style="margin: 20px 0;">
+					<img src="${item.image}" alt="${item.name}" width="150">
+					<div style="font-size: 20px; margin: 10px 0;">${item.name}</div>
+					<div class="case-item-rarity ${rarities[item.rarity].color}" style="padding: 5px 10px; border-radius: 4px; display: inline-block; font-weight: bold;">
+						${rarities[item.rarity].name}
+					</div>
+					${isRental ? `
+						<div style="margin-top: 10px; color: #ffa500; font-size: 14px;">
+							£ Арендованный предмет (3 минуты)
 						</div>
-						${isRental ? `
-							<div style="margin-top: 10px; color: #ffa500; font-size: 14px;">
-								🕒 Арендованный предмет (3 минуты)
-							</div>
-						` : ''}
-					</div>
-					<button class="close-case-result-btn" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">
-						Закрыть
-					</button>
+					` : ''}
 				</div>
-			`;
-			
-			caseModal.style.display = 'flex';
-			
-			// Сбрасываем флаг ТОЛЬКО после закрытия результата
-			caseModal.querySelector('.close-case-result-btn').addEventListener('click', function() {
-				caseModal.style.display = 'none';
-				isCaseOpening = false; // Разрешаем открывать следующий кейс
-			});
-		}
-		
-		addExp(3000);
-		saveGameState();
-		updateInventory();
-	}
-
-	function showCaseResult(items) {
-		const itemsArray = Array.isArray(items) ? items : [items];
-		const grouped = new Map();
-		itemsArray.forEach(item => {
-			const key = item.id;
-			if (!grouped.has(key)) {
-				grouped.set(key, { item: item, count: 0, isRental: item.isRental || false });
-			}
-			grouped.get(key).count++;
-		});
-		const rarityOrder = ['covert', 'classified', 'restricted', 'milspec', 'industrial', 'consumer', 'none', 'none-rarity'];
-		const groupedArray = Array.from(grouped.values()).sort((a, b) => {
-			const rA = rarityOrder.indexOf(a.item.rarity);
-			const rB = rarityOrder.indexOf(b.item.rarity);
-			const orderA = rA === -1 ? 999 : rA;
-			const orderB = rB === -1 ? 999 : rB;
-			return orderA - orderB;
-		});
-		let itemsHtml = '';
-		groupedArray.forEach(entry => {
-			const item = entry.item;
-			const count = entry.count;
-			const rarityInfo = (typeof rarities !== 'undefined' && rarities[item.rarity]) 
-				? rarities[item.rarity] 
-				: { color: 'gray', name: item.rarity };
-			
-			const countBadge = count > 1 
-				? `<span style="position: absolute; top: 5px; right: 5px; background: rgba(0,0,0,0.75); color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: bold;">x${count}</span>`
-				: '';
-			
-			const rentalBadge = entry.isRental 
-				? `<div style="margin-top: 5px; color: #ffa500; font-size: 11px;">🕒 Аренда (3 мин)</div>`
-				: '';
-			
-			itemsHtml += `
-				<div style="
-					position: relative;
-					background: rgba(50, 50, 50, 0.9);
-					border: 1px solid ${rarityInfo.color || '#555'};
-					border-radius: 8px;
-					padding: 10px;
-					display: flex;
-					flex-direction: column;
-					align-items: center;
-					min-width: 120px;
-					max-width: 140px;
-					box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-				">
-					${countBadge}
-					<img src="${item.image}" alt="${item.name}" style="width: 90px; height: 90px; object-fit: contain; margin-bottom: 8px;">
-					<div style="
-						font-size: 12px;
-						color: ${rarityInfo.color || '#ccc'};
-						font-weight: bold;
-						text-align: center;
-						margin-bottom: 4px;
-						word-break: break-word;
-						line-height: 1.2;
-						min-height: 30px;
-						display: flex;
-						align-items: center;
-					">${item.name}</div>
-					<div style="
-						font-size: 10px;
-						padding: 2px 6px;
-						border-radius: 3px;
-						background: ${rarityInfo.color || '#555'};
-						color: white;
-						font-weight: bold;
-					">${rarityInfo.name || item.rarity}</div>
-					${rentalBadge}
-				</div>
-			`;
-		});
-	
-		const resultModal = document.createElement('div');
-		resultModal.id = 'case-result-modal';
-		resultModal.style.cssText = `
-			position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-			background: rgba(0,0,0,0.85); z-index: 36000;
-			display: flex; justify-content: center; align-items: center;
-			font-family: sans-serif; color: white;
-		`;
-		
-		resultModal.innerHTML = `
-			<div style="
-				background-color: rgb(30 30 30 / 95%);
-				padding: 25px;
-				border-radius: 10px;
-				text-align: center;
-				max-width: 90%;
-				max-height: 85vh;
-				width: 900px;
-				display: flex;
-				flex-direction: column;
-				box-shadow: 0 8px 30px rgba(0,0,0,0.6);
-			">
-				<h2 style="margin: 0 0 15px 0; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">
-					Вы получили ${itemsArray.length} ${itemsArray.length === 1 ? 'предмет' : (itemsArray.length < 5 ? 'предмета' : 'предметов')}:
-				</h2>
-				<div style="
-					overflow-y: auto;
-					flex: 1;
-					padding: 10px;
-					background: rgba(0,0,0,0.3);
-					border-radius: 6px;
-					margin-bottom: 15px;
-				">
-					<div style="
-						display: grid;
-						grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-						gap: 10px;
-						justify-items: center;
-					">
-						${itemsHtml}
-					</div>
-				</div>
-				<button id="close-case-result-btn" style="
-					padding: 10px 30px;
-					background-color: #4CAF50;
-					color: white;
-					border: none;
-					border-radius: 4px;
-					cursor: pointer;
-					font-size: 16px;
-					font-weight: bold;
-					transition: background-color 0.2s;
-				">Закрыть</button>
+				<button class="close-case-result-btn" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">
+					Закрыть
+				</button>
 			</div>
 		`;
 		
-		document.body.appendChild(resultModal);
-		const closeBtn = resultModal.querySelector('#close-case-result-btn');
-		closeBtn.onmouseenter = function() { this.style.backgroundColor = '#45a049'; };
-		closeBtn.onmouseleave = function() { this.style.backgroundColor = '#4CAF50'; };
+		inventory[index] = resultItem;
 		
-		closeBtn.addEventListener('click', function() {
-			resultModal.style.display = 'none';
-			if (resultModal.parentNode) {
-				resultModal.parentNode.removeChild(resultModal);
-			}
+		caseModal.querySelector('.close-case-result-btn').addEventListener('click', function() {
+			caseModal.style.display = 'none';
+			updateInventory();
 		});
-		resultModal.addEventListener('click', function(e) {
-			if (e.target === resultModal) {
-				closeBtn.click();
-			}
-		});
+		
+		addExp(3000);
+		saveGameState();
 	}
 
 	function showCraftResult(item) {
-		const canShow3D = fxCan3D(item);
-
-		if (canShow3D) {
-			const tempContainer = document.createElement('div');
-			document.body.appendChild(tempContainer);
-			setup3DViewer(tempContainer, item, item);
-			tempContainer.click();
-			document.body.removeChild(tempContainer);
-			updateInventory();
-			saveGameState();
-			
-		} else {
-			const craftModal = document.createElement('div');
-			craftModal.className = 'craft-modal';
-			craftModal.style.display = 'flex';
-			craftModal.style.position = 'fixed';
-			craftModal.style.top = '0';
-			craftModal.style.left = '0';
-			craftModal.style.width = '100%';
-			craftModal.style.height = '100%';
-			craftModal.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-			craftModal.style.zIndex = '20000';
-			craftModal.style.justifyContent = 'center';
-			craftModal.style.alignItems = 'center';
-			craftModal.style.flexDirection = 'column';
-			
-			const rarityInfo = (typeof rarities !== 'undefined' && rarities[item.rarity]) 
-				? rarities[item.rarity] 
-				: { color: 'gray', name: item.rarity };
-
-			const collectionName = (typeof collectionsDatabase !== 'undefined' && collectionsDatabase[item.collection]) 
-				? collectionsDatabase[item.collection].name 
-				: (item.collection || '');
-
-			craftModal.innerHTML = `
-				<div class="craft-result" style="background-color: rgb(30 30 30 / 85%); padding: 30px; border-radius: 8px; text-align: center; max-width: 500px;">
-					<h2>Вы получили:</h2>
-					<div style="margin: 20px 0;">
-						<img src="${item.image}" alt="${item.name}" width="150">
-						<div style="font-size: 20px; margin: 10px 0;">${item.name}</div>
-						<div class="craft-item-rarity ${rarityInfo.color}" style="padding: 5px 10px; border-radius: 4px; display: inline-block; font-weight: bold;">
-							${rarityInfo.name}
-						</div>
-						<div class="craft-item-collection" style="margin-top: 10px; color: #aaa;">
-							${collectionName}
-						</div>
+		const craftModal = document.createElement('div');
+		craftModal.className = 'craft-modal';
+		craftModal.style.display = 'flex';
+		craftModal.style.position = 'fixed';
+		craftModal.style.top = '0';
+		craftModal.style.left = '0';
+		craftModal.style.width = '100%';
+		craftModal.style.height = '100%';
+		craftModal.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+		craftModal.style.zIndex = '20000';
+		craftModal.style.justifyContent = 'center';
+		craftModal.style.alignItems = 'center';
+		craftModal.style.flexDirection = 'column';
+		
+		craftModal.innerHTML = `
+			<div class="craft-result" style="background-color: rgb(30 30 30 / 85%); padding: 30px; border-radius: 8px; text-align: center; max-width: 500px;">
+				<h2>Вы получили:</h2>
+				<div style="margin: 20px 0;">
+					<img src="${item.image}" alt="${item.name}" width="150">
+					<div style="font-size: 20px; margin: 10px 0;">${item.name}</div>
+					<div class="craft-item-rarity ${rarities[item.rarity].color}" style="padding: 5px 10px; border-radius: 4px; display: inline-block; font-weight: bold;">
+						${rarities[item.rarity].name}
 					</div>
-					<button class="close-craft-result-btn" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">
-						Закрыть
-					</button>
+					<div class="craft-item-collection" style="margin-top: 10px; color: #aaa;">
+						${collectionsDatabase[item.collection]?.name || item.collection}
+					</div>
 				</div>
-			`;
-			
-			document.body.appendChild(craftModal);
-			craftModal.querySelector('.close-craft-result-btn').addEventListener('click', function() {
-				craftModal.remove();
-				updateInventory();
-				saveGameState();
-			});
-		}
+				<button class="close-craft-result-btn" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">
+					Закрыть
+				</button>
+			</div>
+		`;
+		
+		document.body.appendChild(craftModal);
+		
+		craftModal.querySelector('.close-craft-result-btn').addEventListener('click', function() {
+			craftModal.remove();
+		});
 	}
 	
 	const typeFilterButton = document.createElement('button');
 	typeFilterButton.textContent = 'Фильтр типов';
+	typeFilterButton.id = 'types-filter';
 	typeFilterButton.style.cssText = `
 		padding: 8px 12px;
 		background-color: #414141;
@@ -6938,9 +6597,6 @@ document.addEventListener('DOMContentLoaded', function() {
 			<input type="checkbox" class="type-checkbox" data-type="fragments" checked /> Fragments (Фрагменты)
 		</label>
 		<label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
-			<input type="checkbox" class="type-checkbox" data-type="agents" checked /> Agents (Агенты)
-		</label>
-		<label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
 			<input type="checkbox" class="type-checkbox" data-type="cases" checked /> Cases (кейсы и боксы)
 		</label>
 	`;
@@ -6968,7 +6624,6 @@ document.addEventListener('DOMContentLoaded', function() {
 		if (item.name.startsWith('Graffiti')) return 'graffiti';
 		if (item.name.endsWith('StatTrack') || item.name.endsWith('StatTrack (TimeLimited)')) return 'st_weapons';
 		if (item.name.endsWith('Fragment')) return 'fragments';
-		if (item.name.startsWith('Agent')) return 'agents';
 		if (item.isItemWithoutSlot) return 'items';
 		return 'weapons';
 	}
@@ -7038,54 +6693,44 @@ document.addEventListener('DOMContentLoaded', function() {
 	});
 
 	function initShop() {
-		itemsContainer.textContent = '';
-		const activeBtn = document.querySelector('.filter-btn.active');
-		const selectedRarity = activeBtn ? activeBtn.dataset.rarity : 'all';
-	
-		const collectionFilter = document.getElementById('collection-filter');
-		const selectedCollection = collectionFilter ? collectionFilter.value : 'all';
+		itemsContainer.innerHTML = '';
+		const selectedRarity = (() => {
+			const activeBtn = document.querySelector('.filter-btn.active');
+			return activeBtn ? activeBtn.dataset.rarity : 'all';
+		})();
+
+		const selectedCollection = document.getElementById('collection-filter')?.value || 'all';
 
 		const typeCheckboxes = document.querySelectorAll('#type-checkboxes input[type="checkbox"][data-type]:not([data-type="all"])');
-		const selectedTypes = [];
-		for (let i = 0; i < typeCheckboxes.length; i++) {
-			if (typeCheckboxes[i].checked) {
-				selectedTypes.push(typeCheckboxes[i].dataset.type);
-			}
-		}
+		const selectedTypes = Array.from(typeCheckboxes)
+			.filter(cb => cb.checked)
+			.map(cb => cb.dataset.type);
 
 		const allTypesSelected = selectedTypes.length === typeCheckboxes.length;
 
-		// Оптимизация: один проход фильтрации вместо нескольких filter()
-		const itemsToShow = [];
-		const isRentalMarket = currentMarket === 'rental';
-		for (let i = 0; i < itemsDatabase.length; i++) {
-			const item = itemsDatabase[i];
-			
-			// Фильтр по рынку
-			if (isRentalMarket ? !item.isRental : item.isRental) continue;
-			
-			// Фильтр по наличию в магазине
-			if (!item.itemInStore) continue;
-
-			// Фильтр по редкости
-			if (selectedRarity !== 'all' && item.rarity !== selectedRarity) continue;
-			
-			// Фильтр по коллекции
-			const itemCollection = item.collection || '';
-			if (selectedCollection !== 'all' && itemCollection !== selectedCollection) continue;
-			
-			// Фильтр по типу
-			if (!allTypesSelected) {
-				const itemType = getItemType(item);
-				if (!selectedTypes.includes(itemType)) continue;
+		let itemsToShow = itemsDatabase.filter(item => {
+			if (currentMarket === 'rental') {
+				return item.isRental === true;
+			} else {
+				return item.isRental !== true;
 			}
-			
-			itemsToShow.push(item);
-		}
+		});
+
+		itemsToShow = itemsToShow.filter(item => {
+			if (!item.itemInStore) return false;
+
+			const itemType = getItemType(item);
+			const itemCollection = item.collection || '';
+
+			const matchesRarity = selectedRarity === 'all' || item.rarity === selectedRarity;
+			const matchesCollection = selectedCollection === 'all' || itemCollection === selectedCollection;
+			const matchesType = allTypesSelected || selectedTypes.includes(itemType);
+
+			return matchesRarity && matchesCollection && matchesType;
+		});
 		
 		const cardObserver = new IntersectionObserver((entries) => {
-			for (let i = 0; i < entries.length; i++) {
-				const entry = entries[i];
+			entries.forEach(entry => {
 				if (entry.isIntersecting) {
 					const img = entry.target.querySelector('.item-img img');
 					if (img && img.hasAttribute('data-src')) {
@@ -7094,13 +6739,13 @@ document.addEventListener('DOMContentLoaded', function() {
 					}
 					cardObserver.unobserve(entry.target);
 				}
-			}
+			});
 		}, { threshold: 0.1 });
 		
-		for (let i = 0; i < itemsToShow.length; i++) {
-			const card = addItemToShop(itemsToShow[i]);
+		itemsToShow.forEach(item => {
+			const card = addItemToShop(item); // Предполагается, что addItemToShop возвращает DOM-элемент карточки
 			if (card) cardObserver.observe(card);
-		}
+		});
 		
 		applyTypeFilters();
 		sortItemsByPrice();
@@ -7146,37 +6791,33 @@ document.addEventListener('DOMContentLoaded', function() {
 	
 	function calculateInventoryTotal() {
 	  let total = 0;
-	  // Оптимизация: используем for loop вместо forEach и кэшируем поиск в Map
-	  const invLength = inventory.length;
-	  for (let i = 0; i < invLength; i++) {
-		const item = inventory[i];
-		if (item.isRental) continue;
+	  inventory.forEach(item => {
+		if (item.isRental) return;
 		
-		const originalItem = itemsDbMap.get(item.id);
+		const originalItem = itemsDatabase.find(dbItem => dbItem.id === item.id);
 		
-		if (!originalItem || originalItem.itemInStore === false) continue;
+		if (!originalItem || originalItem.itemInStore === false) return;
 		
-		if (originalItem.isCase) continue;
+		if (originalItem.isCase) return;
 		
 		total += Math.round((originalItem.price * 0.8) * 100) / 100;
 		
-		if (item.stickers && item.stickers.length > 0) {
-		  for (let j = 0; j < item.stickers.length; j++) {
-			const sticker = item.stickers[j];
-			const stickerItem = itemsDbMap.get(sticker.id);
+		if (item.stickers) {
+		  item.stickers.forEach(sticker => {
+			const stickerItem = itemsDatabase.find(dbItem => dbItem.id === sticker.id);
 			if (stickerItem && stickerItem.itemInStore !== false) {
 			  total += Math.round((stickerItem.price * 0.1) * 100) / 100;
 			}
-		  }
+		  });
 		}
 		
 		if (item.charm) {
-		  const charmItem = itemsDbMap.get(item.charm.id);
+		  const charmItem = itemsDatabase.find(dbItem => dbItem.id === item.charm.id);
 		  if (charmItem && charmItem.itemInStore !== false) {
 			total += Math.round((charmItem.price * 0.8) * 100) / 100;
 		  }
 		}
-	  }
+	  });
 	  
 	  return total.toLocaleString('ru-RU', {
 		minimumFractionDigits: 2,
@@ -7199,7 +6840,22 @@ document.addEventListener('DOMContentLoaded', function() {
 	  const rarityInfo = rarities[item.rarity];
 	  const collectionInfo = collectionsDatabase[item.collection] || { name: item.collection, image: '' };
 	  
-	  const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : item.price;
+  let price;
+  if (currentMarket === 'rental') {
+    // Rental price = 1% of online market lowest lot price (or initialPrice fallback)
+    const baseItemId = item.id.replace('_rental', '');
+    const onlineBase = (typeof getOnlinePrice === 'function') ? getOnlinePrice(baseItemId) : null;
+    const basePrice = onlineBase !== null ? onlineBase : (item.initialPrice || item.price) * 100;
+    price = Math.max(0.01, Math.round(basePrice * 0.01 * 100) / 100);
+    item.price = price;
+  } else {
+    // Normal market: use online market lowest lot price
+    price = item.price;
+    if (typeof getOnlinePrice === 'function') {
+      const onlineP = getOnlinePrice(item.id);
+      if (onlineP !== null) { price = onlineP; item.price = onlineP; }
+    }
+  }
 	  
 	  itemCard.innerHTML = `
 		<div class="item-img"><img data-src='${item.image}' alt="" class="logo lazy" width=150></div>
@@ -7210,7 +6866,7 @@ document.addEventListener('DOMContentLoaded', function() {
 		</div>
 		${currentMarket === 'rental' ? 
 		  '<div class="item-stock">Аренда на 3 минуты</div>' : 
-		  `<div class="item-stock">Количество доступных покупок: <span class="available-stock">${item.stock}</span></div>`
+		  ''
 		}
 		<div class="item-price" style="color: ${currencyColor}">${price.toFixed(2)} ₽</div>
 		<div class="item-buttons">
@@ -7224,19 +6880,17 @@ document.addEventListener('DOMContentLoaded', function() {
 			  data-max='${item.stock}' data-rarity='${item.rarity}'>Купить все</button>`
 		  }
 		</div>
-		${currentMarket === 'rental' ? '' : '<div class="stock-warning">Достигнуто максимальное количество покупок</div>'}
 	  `;
 	  
-	  const warning = itemCard.querySelector('.stock-warning');
+	  const warning = null; // removed: unlimited normal market
 	  const addBtn = itemCard.querySelector('.add-to-cart');
 	  const buyAllBtn = itemCard.querySelector('.buy-all-btn');
-	  if (warning) {
-		warning.style.display = item.stock <= 0 ? 'block' : 'none';
-		addBtn.disabled = item.stock <= 0;
-		buyAllBtn.disabled = item.stock <= 0;
-	  }
 
-	  const canShow3D = fxCan3D(item);
+	  const canShow3D = !item.isSticker && 
+						!item.isCharm && 
+						!item.name.endsWith("Fragment") && 
+						!(item.name.startsWith("Graffiti") && !item.name.startsWith("GraffitiPack")) && 
+						!item.name.startsWith("Medal");
 
 	  if (canShow3D) {
 		  const imgContainer = itemCard.querySelector('.item-img');
@@ -7280,37 +6934,12 @@ document.addEventListener('DOMContentLoaded', function() {
 			if(typeof updateInventory === 'function') updateInventory();
 			if(typeof saveGameState === 'function') saveGameState();
 		  } else {
-			const stockSpan = itemCard.querySelector('.available-stock');
-			if (!stockSpan) return;
-			
-			const currentStock = parseFloat(stockSpan.textContent);
-			if (currentStock <= 0) {
-			  showToast('Товар закончился!', true);
-			  return;
-			}
-
-			let quantityToAdd = 1;
-			if (e.shiftKey) {
-			  quantityToAdd = Math.min(10, currentStock);
-			}
-
+			// Normal market: unlimited stock
+			let quantityToAdd = e.shiftKey ? 10 : 1;
 			for (let i = 0; i < quantityToAdd; i++) {
 			  if(typeof addToCart === 'function') addToCart(id, name, price, false);
 			}
-
-			if(typeof updateStock === 'function') {
-				updateStock(itemCard, currentStock - quantityToAdd, max);
-			} else {
-				stockSpan.textContent = currentStock - quantityToAdd;
-				if (warning) warning.style.display = (currentStock - quantityToAdd) <= 0 ? 'block' : 'none';
-				if (addBtn) addBtn.disabled = (currentStock - quantityToAdd) <= 0;
-				if (buyAllBtn) buyAllBtn.disabled = (currentStock - quantityToAdd) <= 0;
-			}
-
-			const message = quantityToAdd === 1
-			  ? 'Добавлено в корзину!'
-			  : `Добавлено ${quantityToAdd} шт. в корзину!`;
-
+			const message = quantityToAdd === 1 ? 'Добавлено в корзину!' : `Добавлено ${quantityToAdd} шт. в корзину!`;
 			showToast(message);
 		  }
 		});
@@ -7322,29 +6951,12 @@ document.addEventListener('DOMContentLoaded', function() {
 		  const id = this.getAttribute('data-id');
 		  const name = this.getAttribute('data-name');
 		  const price = parseFloat(this.getAttribute('data-price'));
-		  const max = parseInt(this.getAttribute('data-max'));
-		  
-		  const stockSpan = itemCard.querySelector('.available-stock');
-		  if (!stockSpan) return;
-		  
-		  const currentStock = parseFloat(stockSpan.textContent);
-		  
-		  if (currentStock > 0) {
-			for (let i = 0; i < currentStock; i++) {
-			  if(typeof addToCart === 'function') addToCart(id, name, price, false);
-			}
-			
-			if(typeof updateStock === 'function') {
-				updateStock(itemCard, 0, max);
-			} else {
-				stockSpan.textContent = 0;
-				if (warning) warning.style.display = 'block';
-				if (addBtn) addBtn.disabled = true;
-				buyAllBtn.disabled = true;
-			}
-			
-			showToast(`Все ${currentStock} шт. добавлены в корзину!`);
+		  // Normal market: unlimited – add 100 items to cart
+		  const qty = 100;
+		  for (let i = 0; i < qty; i++) {
+			if(typeof addToCart === 'function') addToCart(id, name, price, false);
 		  }
+		  showToast(`${qty} шт. добавлено в корзину!`);
 		});
 	  }
 	  
@@ -7586,35 +7198,17 @@ document.addEventListener('DOMContentLoaded', function() {
 	
 	function addToCart(id, name, price) {
 		const existingItem = cart.find(item => item.id === id);
-		const shopItem = itemsDatabase.find(item => item.id === id);
-		
-		if (shopItem && shopItem.stock <= 0) {
-			showToast('Товара нет в наличии!', true);
-			return;
-		}
-		
+		// Use current online market price (lowest lot) if available
+		const currentPrice = (typeof getOnlinePrice === 'function' && getOnlinePrice(id) !== null)
+			? getOnlinePrice(id)
+			: price;
+
 		if (existingItem) {
+			existingItem.price = currentPrice; // keep price fresh
 			existingItem.quantity += 1;
 		} else {
-			cart.push({ id, name, price, quantity: 1 });
+			cart.push({ id, name, price: currentPrice, quantity: 1 });
 		}
-		
-		const itemElement = document.getElementById(id);
-		if (itemElement) {
-			const currentStock = parseInt(itemElement.querySelector('.available-stock').textContent);
-			const max = parseInt(itemElement.querySelector('.add-to-cart').getAttribute('data-max'));
-			
-			if (shopItem.priceMultiply > 0) {
-				shopItem.price += shopItem.priceMultiply;
-				if (shopItem.price > 1000000) {
-					shopItem.price = 1000000;
-				}
-				updateItemPriceInUI(shopItem);
-			}
-			
-			updateStock(itemElement, currentStock - 1, max);
-		}
-		
 		updateCart();
 	}
 
@@ -7641,40 +7235,25 @@ document.addEventListener('DOMContentLoaded', function() {
 			}
 		}
 
-		const stockDelta = quantityToRemove;
-		if (itemElement) {
-			const currentStock = parseInt(itemElement.querySelector('.available-stock').textContent);
-			const max = parseInt(itemElement.querySelector('.add-to-cart').getAttribute('data-max'));
-			updateStock(itemElement, currentStock + stockDelta, max);
-		} else {
-			shopItem.stock += stockDelta;
-		}
-
-		if (shopItem.priceMultiply > 0) {
-			shopItem.price = Math.max(0, shopItem.price - shopItem.priceMultiply * stockDelta);
-			if (shopItem.price > 1000000) {
-				shopItem.price = 1000000;
-			}
-			updateItemPriceInUI(shopItem);
-		}
-
+		// Normal market has no stock display – nothing to update
+		// No price restoration needed – prices are managed by online market
 		updateCart();
 	}
 
 	function updateStock(element, newStock, max) {
-		const stockElement = element.querySelector('.available-stock');
-		const addBtn = element.querySelector('.add-to-cart');
-		const buyAllBtn = element.querySelector('.buy-all-btn');
-		const warning = element.querySelector('.stock-warning');
-		
-		stockElement.textContent = newStock;
-		addBtn.disabled = newStock <= 0;
-		buyAllBtn.disabled = newStock <= 0;
-		warning.style.display = newStock <= 0 ? 'block' : 'none';
-		
-		const serchItem = itemsDatabase.find(item => item.id === element.id);
-		serchItem.stock = newStock;
-		
+		const stockElement = element ? element.querySelector('.available-stock') : null;
+		const addBtn = element ? element.querySelector('.add-to-cart') : null;
+		const buyAllBtn = element ? element.querySelector('.buy-all-btn') : null;
+		const warning = element ? element.querySelector('.stock-warning') : null;
+		// Normal market cards no longer have .available-stock
+		if (stockElement) stockElement.textContent = newStock;
+		if (addBtn) addBtn.disabled = newStock <= 0;
+		if (buyAllBtn) buyAllBtn.disabled = newStock <= 0;
+		if (warning) warning.style.display = newStock <= 0 ? 'block' : 'none';
+		if (element) {
+			const serchItem = itemsDatabase.find(item => item.id === element.id);
+			if (serchItem) serchItem.stock = newStock;
+		}
 		checkoutBtn.disabled = cart.length === 0;
 		clearCartBtn.disabled = cart.length === 0;
 	}
@@ -7774,29 +7353,7 @@ document.addEventListener('DOMContentLoaded', function() {
 	}
 	
 	function clearCart() {
-		cart.forEach(item => {
-			const shopItem = itemsDatabase.find(dbItem => dbItem.id === item.id);
-			const itemElement = document.getElementById(item.id);
-			
-			if (itemElement && shopItem) {
-				const currentStock = parseInt(itemElement.querySelector('.available-stock').textContent);
-				const max = parseInt(itemElement.querySelector('.add-to-cart').getAttribute('data-max'));
-				
-				if (shopItem.priceMultiply > 0) {
-					shopItem.price = Math.max(0, shopItem.price - (shopItem.priceMultiply * item.quantity));
-					updateItemPriceInUI(shopItem);
-				}
-				
-				updateStock(itemElement, currentStock + item.quantity, max);
-			} else if (shopItem) {
-				shopItem.stock = shopItem.stock + item.quantity;
-				if (shopItem.priceMultiply > 0) {
-					shopItem.price = Math.max(0, shopItem.price - (shopItem.priceMultiply * item.quantity));
-					updateItemPriceInUI(shopItem);
-				}
-			}
-		});
-
+		// Normal market is unlimited — no stock/price restoration needed
 		cart.length = 0;
 		updateCart();
 		showToast('Корзина очищена');
@@ -7837,8 +7394,6 @@ document.addEventListener('DOMContentLoaded', function() {
 	}
 	
 	function sortInventoryByRarity() {
-		const typeOrder = { 'case': 0, 'withSlots': 1, 'withoutSlots': 2, 'charm': 3, 'sticker': 4, 'rental': 5 };
-		
 		inventory.sort((a, b) => {
 			const rarityA = rarities[a.rarity]?.order || 0;
 			const rarityB = rarities[b.rarity]?.order || 0;
@@ -7858,6 +7413,7 @@ document.addEventListener('DOMContentLoaded', function() {
 				return 'withSlots';
 			};
 			
+			const typeOrder = { 'case': 0, 'withSlots': 1, 'withoutSlots': 2, 'charm': 3, 'sticker': 4, 'rental': 5 };
 			const typeA = getType(a, originalItemA);
 			const typeB = getType(b, originalItemB);
 			
@@ -7874,11 +7430,8 @@ document.addEventListener('DOMContentLoaded', function() {
 	
 	function groupFragmentsInInventory() {
 	  const fragmentGroups = {};
-	  const invLength = inventory.length;
 	  
-	  // Оптимизация: используем for loop вместо forEach
-	  for (let i = 0; i < invLength; i++) {
-		const item = inventory[i];
+	  inventory.forEach((item, index) => {
 		if (item.name.endsWith('Fragment') && !item.isRental) {
 		  if (!fragmentGroups[item.id]) {
 			fragmentGroups[item.id] = {
@@ -7887,10 +7440,10 @@ document.addEventListener('DOMContentLoaded', function() {
 			  count: 0
 			};
 		  }
-		  fragmentGroups[item.id].indices.push(i);
+		  fragmentGroups[item.id].indices.push(index);
 		  fragmentGroups[item.id].count++;
 		}
-	  }
+	  });
 	  
 	  return fragmentGroups;
 	}
@@ -8611,144 +8164,101 @@ document.addEventListener('DOMContentLoaded', function() {
 	}
 
 	function openFragmentCaseWithAnimation(fragmentIndex, caseData, boostedItemId = null) {
-		if (isCaseOpening) return; // Защита от повторного вызова
-		isCaseOpening = true;
-		
-		const openBtn = fragmentCaseModal.querySelector('.open-case-start-btn');
-		const skipBtn = fragmentCaseModal.querySelector('.skip-animation-btn');
-		const closeBtn = fragmentCaseModal.querySelector('.case-close-btn');
-		
-		openBtn.disabled = true;
-		skipBtn.disabled = true;
-		closeBtn.disabled = true;
-		openBtn.textContent = 'Открывается...';
-		openBtn.style.backgroundColor = '#666';
-		
-		const dropContainer = fragmentCaseModal.querySelector('.case-drop-container');
-		const dropItems = fragmentCaseModal.querySelector('.case-drop-items');
-		
-		const resultItemId = populateFragmentDropContainer(caseData, boostedItemId);
-		const resultItem = itemsDatabase.find(i => i.id === resultItemId);
-		
-		const itemWidth = 80 + 10; // width + gap
-		const targetPosition = 40 * itemWidth; // 40-й предмет должен оказаться по центру
-		
-		dropItems.style.transition = 'none';
-		dropItems.style.transform = 'translateX(0)';
+	  isCaseOpening = true;
+	  
+	  const openBtn = fragmentCaseModal.querySelector('.open-case-start-btn');
+	  const skipBtn = fragmentCaseModal.querySelector('.skip-animation-btn');
+	  const closeBtn = fragmentCaseModal.querySelector('.case-close-btn');
+	  
+	  openBtn.disabled = true;
+	  skipBtn.disabled = true;
+	  closeBtn.disabled = true;
+	  openBtn.textContent = 'Открывается...';
+	  openBtn.style.backgroundColor = '#666';
+	  
+	  const dropContainer = fragmentCaseModal.querySelector('.case-drop-container');
+	  const dropItems = fragmentCaseModal.querySelector('.case-drop-items');
+	  
+	  const resultItemId = populateFragmentDropContainer(caseData, boostedItemId);
+	  const resultItem = itemsDatabase.find(i => i.id === resultItemId);
+	  
+	  const itemWidth = 80 + 10; // width + gap
+	  const targetPosition = 40 * itemWidth; // 40-й предмет должен оказаться по центру
+	  
+	  dropItems.style.transition = 'none';
+	  dropItems.style.transform = 'translateX(0)';
+	  
+	  setTimeout(() => {
+		dropItems.style.transition = 'transform 3.5s cubic-bezier(0.1, 0.8, 0.2, 1)';
+		dropItems.style.transform = `translateX(-${targetPosition}px)`;
 		
 		setTimeout(() => {
-			dropItems.style.transition = 'transform 3.5s cubic-bezier(0.1, 0.8, 0.2, 1)';
-			dropItems.style.transform = `translateX(-${targetPosition}px)`;
-			
-			setTimeout(() => {
-				// Передаем false для стандартной логики
-				showFragmentCaseResult(fragmentIndex, resultItem, false);
-			}, 3500);
-		}, 100);
-		
-		updateSouzRang(caseData.rarity);
+		  showFragmentCaseResult(fragmentIndex, resultItem);
+		  isCaseOpening = false;
+		}, 3500);
+	  }, 100);
+	  
+	  updateSouzRang(caseData.rarity);
 	}
 
 	function openFragmentCaseWithoutAnimation(fragmentIndex, caseData, boostedItemId = null) {
-		if (isCaseOpening) return; // Защита от повторного вызова
-		isCaseOpening = true;
-		
-		const resultItemId = populateFragmentDropContainer(caseData, boostedItemId);
-		const resultItem = itemsDatabase.find(i => i.id === resultItemId);
-		
-		setTimeout(() => {
-			// Передаем false для стандартной логики
-			showFragmentCaseResult(fragmentIndex, resultItem, true);
-		}, 100);
-		
-		updateSouzRang(caseData.rarity);
+	  const resultItemId = populateFragmentDropContainer(caseData, boostedItemId);
+	  const resultItem = itemsDatabase.find(i => i.id === resultItemId);
+	  
+	  setTimeout(() => {
+		showFragmentCaseResult(fragmentIndex, resultItem);
+	  }, 100);
+	  updateSouzRang(caseData.rarity);
 	}
 
-	// Добавлен третий параметр skipViewer
-	function showFragmentCaseResult(fragmentIndex, item, skipViewer = false) {
-		const fragmentItem = inventory[fragmentIndex];
-		
-		// Добавляем предмет в инвентарь
-		removeFragments(fragmentItem.id, 10);
-		
-		inventory.push({
-			id: item.id,
-			name: item.name,
-			rarity: item.rarity,
-			image: item.image
-		});
-		
-		// Проверяем, можно ли открыть 3D-осмотр
-		let canShow3D = false;
-		if (!skipViewer) {
-			canShow3D = fxCan3D(item);
-		}
-		
-		if (canShow3D) {
-			// Открываем 3D-осмотр
-			const tempContainer = document.createElement('div');
-			document.body.appendChild(tempContainer);
-			setup3DViewer(tempContainer, item, item);
-			tempContainer.click();
-			document.body.removeChild(tempContainer);
-			
-			// Закрываем модалку фрагментов
-			if (fragmentCaseModal) {
-				fragmentCaseModal.style.display = 'none';
-			}
-			
-			// Сбрасываем флаг сразу
-			isCaseOpening = false;
-			
-			// Обновляем инвентарь
-			updateInventory();
-			saveGameState();
-		} else {
-			// Показываем стандартное модальное окно
-			const rarityInfo = (typeof rarities !== 'undefined' && rarities[item.rarity]) 
-				? rarities[item.rarity] 
-				: { color: 'gray', name: item.rarity };
-			
-			fragmentCaseModal.innerHTML = `
-				<div class="case-result" style="background-color: rgb(30 30 30 / 85%); padding: 30px; border-radius: 8px; text-align: center; max-width: 500px;">
-					<h2>Вы получили:</h2>
-					<div style="margin: 20px 0;">
-						<img src="${item.image}" alt="${item.name}" width="150">
-						<div style="font-size: 20px; margin: 10px 0;">${item.name}</div>
-						<div class="case-item-rarity ${rarityInfo.color}" style="padding: 5px 10px; border-radius: 4px; display: inline-block; font-weight: bold;">
-							${rarityInfo.name}
-						</div>
-					</div>
-					<button class="close-case-result-btn" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">
-						Закрыть
-					</button>
-				</div>
-			`;
-			
-			// Сбрасываем флаг ТОЛЬКО после закрытия результата
-			fragmentCaseModal.querySelector('.close-case-result-btn').addEventListener('click', function() {
-				fragmentCaseModal.style.display = 'none';
-				updateInventory();
-				isCaseOpening = false; // Разрешаем открывать следующий кейс
-			});
-			
-			saveGameState();
-		}
-		
-		const stars_rairty = {
-			'common': 0,
-			'uncommon': 2,
-			'rare': 4,
-			'epic': 8,
-			'legendary': 16,
-			'arcane': 32,
-			'nameless': 64,
-			'none': 128
-		}
-		const starsGain = stars_rairty[item.rarity] || 0;
-		const starsToAdd = starsGain * 125;
-		
-		addExp(starsToAdd);
+	function showFragmentCaseResult(fragmentIndex, item) {
+	  const fragmentItem = inventory[fragmentIndex];
+	  
+	  fragmentCaseModal.innerHTML = `
+		<div class="case-result" style="background-color: rgb(30 30 30 / 85%); padding: 30px; border-radius: 8px; text-align: center; max-width: 500px;">
+		  <h2>Вы получили:</h2>
+		  <div style="margin: 20px 0;">
+			<img src="${item.image}" alt="${item.name}" width="150">
+			<div style="font-size: 20px; margin: 10px 0;">${item.name}</div>
+			<div class="case-item-rarity ${rarities[item.rarity].color}" style="padding: 5px 10px; border-radius: 4px; display: inline-block; font-weight: bold;">
+			  ${rarities[item.rarity].name}
+			</div>
+		  </div>
+		  <button class="close-case-result-btn" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">
+			Закрыть
+		  </button>
+		</div>
+	  `;
+	  
+	  removeFragments(fragmentItem.id, 10);
+	  
+	  inventory.push({
+		id: item.id,
+		name: item.name,
+		rarity: item.rarity,
+		image: item.image
+	  });
+	  
+	  fragmentCaseModal.querySelector('.close-case-result-btn').addEventListener('click', function() {
+		fragmentCaseModal.style.display = 'none';
+		updateInventory();
+	  });
+	  
+	  const stars_rairty = {
+		'common': 0,
+		'uncommon': 2,
+		'rare': 4,
+		'epic': 8,
+		'legendary': 16,
+		'arcane': 32,
+		'nameless': 64,
+		'none': 128
+	  }
+	  const starsGain = stars_rairty[item.rarity] || 0;
+	  const starsToAdd = starsGain * 125;
+	  
+	  addExp(starsToAdd);
+	  saveGameState();
 	}
 
 	function sellFragment(index, price) {
@@ -8787,18 +8297,6 @@ document.addEventListener('DOMContentLoaded', function() {
 	  if (shopItem && shopItem.priceMultiply > 0) {
 		const newPrice = Math.max(0, shopItem.price - shopItem.priceMultiply);
 		shopItem.price = newPrice;
-		updateItemPriceInUI(shopItem);
-	  }
-	  
-	  if (shopItem && shopItem.name.endsWith('Fragment')) {
-		const itemElement = document.getElementById(shopItem.id);
-		if (itemElement) {
-		  const currentStock = parseInt(itemElement.querySelector('.available-stock').textContent);
-		  const max = parseInt(itemElement.querySelector('.add-to-cart').getAttribute('data-max'));
-		  updateStock(itemElement, currentStock + 1, max);
-		} else {
-			shopItem.stock = shopItem.stock + 1;
-		}
 	  }
 	  
 	  inventory.splice(index, 1);
@@ -9807,7 +9305,6 @@ document.addEventListener('DOMContentLoaded', function() {
 		const total = indices.length;
 		
 		const BATCH_SIZE = 100; 
-		const droppedItems = []; // Собираем все выпавшие предметы
 		
 		const progressOverlay = document.createElement('div');
 		progressOverlay.id = 'quick-open-progress-overlay';
@@ -9876,8 +9373,6 @@ document.addEventListener('DOMContentLoaded', function() {
 				}
 
 				inventory[index] = newItem;
-				droppedItems.push(newItem); // Сохраняем выпавший предмет
-				
 				if (typeof addExp === 'function') addExp(3000); 
 			}
 
@@ -9892,25 +9387,24 @@ document.addEventListener('DOMContentLoaded', function() {
 				requestAnimationFrame(processBatch);
 			} else {
 				setTimeout(() => {
-					finishOpeningProcess(total, droppedItems);
-				}, 500);
+					finishOpeningProcess(total);
+				}, 500); // Небольшая задержка, чтобы пользователь увидел 100%
 			}
 		}
 
-		function finishOpeningProcess(count, items) {
+		function finishOpeningProcess(count) {
 			if (progressOverlay.parentNode) {
 				progressOverlay.parentNode.removeChild(progressOverlay);
 			}
 
+			if (typeof showToast === 'function') {
+				showToast(`Успешно открыто ${count} кейсов!`, false);
+			} else {
+				console.log(`Opened ${count} cases`);
+			}
+
 			if (typeof updateInventory === 'function') updateInventory();
 			if (typeof saveGameState === 'function') saveGameState();
-			
-			// Показываем список выпавших предметов
-			if (items.length > 0 && typeof showCaseResult === 'function') {
-				showCaseResult(items);
-			} else if (typeof showToast === 'function') {
-				showToast(`Успешно открыто ${count} кейсов!`, false);
-			}
 		}
 
 		requestAnimationFrame(processBatch);
@@ -10551,11 +10045,9 @@ document.addEventListener('DOMContentLoaded', function() {
 	}
 	
 	function mergeRentalStacks() {
-		const rentalGroups = new Map();
+		const rentalGroups = new Map(); // Map<itemId, { indices: [], totalExtraTime: 0 }>
 		
 		inventory.forEach((item, index) => {
-			if (!item) return; // Пропускаем null/undefined элементы
-			
 			if (item.isRental && item.rentalExpires) {
 				if (!rentalGroups.has(item.id)) {
 					rentalGroups.set(item.id, { indices: [], baseExpires: 0 });
@@ -10574,22 +10066,17 @@ document.addEventListener('DOMContentLoaded', function() {
 			if (group.indices.length > 1) {
 				const [keepIndex, ...duplicateIndices] = group.indices;
 				const keepItem = inventory[keepIndex];
-				
-				if (!keepItem) return; // Защита от null
-				
 				const now = Date.now();
 				
 				let extraTime = 0;
 				duplicateIndices.forEach(idx => {
 					const dupItem = inventory[idx];
-					if (!dupItem || !dupItem.rentalExpires) return; // Защита
-					
 					const remaining = Math.max(0, dupItem.rentalExpires - now);
 					extraTime += remaining;
 					itemsToRemove.add(idx);
 				});
 				
-				keepItem.rentalExpires = Math.max(keepItem.rentalExpires || now, now) + extraTime;
+				keepItem.rentalExpires = Math.max(keepItem.rentalExpires, now) + extraTime;
 			}
 		});
 		
@@ -10598,69 +10085,62 @@ document.addEventListener('DOMContentLoaded', function() {
 			for (const idx of sortedToRemove) {
 				inventory.splice(idx, 1);
 			}
-			return true;
+			return true; // Инвентарь изменился
 		}
 		return false;
 	}
 	
+	// Debounced version – safe to call many times in rapid succession
+	let _invUpdateTimer = null;
+	function debouncedUpdateInventory() {
+		if (_invUpdateTimer) return;
+		_invUpdateTimer = requestAnimationFrame(() => { _invUpdateTimer = null; updateInventory(); });
+	}
+
 	function updateInventory() {
 		mergeRentalStacks();
-		scheduleNextRentalCheck();
+		scheduleNextRentalCheck(); // Пересчитать таймеры после объединения
 		sortInventoryByRarity();
 		const fragmentGroups = groupFragmentsInInventory();
 		const groupedData = {};
 		
-		// Оптимизация: кэшируем keys раритетов
-		const rarityKeys = Object.keys(rarities);
-		for (let i = 0; i < rarityKeys.length; i++) {
-			const rarity = rarityKeys[i];
+		Object.keys(rarities).forEach(rarity => {
 			groupedData[rarity] = {
 				withoutSlots: [], charms: [], withSlots: [], stickers: [], cases: [], rentals: [], fragments: []
 			};
-		}
+		});
 
-		// Оптимизация: используем for loop вместо forEach для лучшей производительности
-		const invLength = inventory.length;
-		for (let idx = 0; idx < invLength; idx++) {
-			const item = inventory[idx];
+		inventory.forEach((item, index) => {
 			const originalItem = itemsDbMap.get(item.id);
 			const rarity = item.rarity;
 			
-			if (!groupedData[rarity]) continue;
+			if (!groupedData[rarity]) return;
 
 			if (item.name.endsWith('Fragment') && !item.isRental && fragmentGroups[item.id]) {
 				const fg = fragmentGroups[item.id];
-				if (idx === fg.indices[0]) {
-					groupedData[rarity].fragments.push({ item, index: idx, count: fg.count });
+				if (index === fg.indices[0]) {
+					groupedData[rarity].fragments.push({ item, index, count: fg.count });
 				}
 			} 
 			else if (item.isRental) {
-				groupedData[rarity].rentals.push({ item, index: idx });
+				groupedData[rarity].rentals.push({ item, index });
 			} 
 			else if (originalItem || item) {
-				if (originalItem?.isCase) groupedData[rarity].cases.push({ item, index: idx });
-				else if (originalItem?.isCharm) groupedData[rarity].charms.push({ item, index: idx });
-				else if (originalItem?.isSticker) groupedData[rarity].stickers.push({ item, index: idx });
-				else if (originalItem?.isItemWithoutSlot) groupedData[rarity].withoutSlots.push({ item, index: idx });
-				else groupedData[rarity].withSlots.push({ item, index: idx });
+				if (originalItem?.isCase) groupedData[rarity].cases.push({ item, index });
+				else if (originalItem?.isCharm) groupedData[rarity].charms.push({ item, index });
+				else if (originalItem?.isSticker) groupedData[rarity].stickers.push({ item, index });
+				else if (originalItem?.isItemWithoutSlot) groupedData[rarity].withoutSlots.push({ item, index });
+				else groupedData[rarity].withSlots.push({ item, index });
 			}
-		}
+		});
 
-		// Оптимизация: более эффективная сортировка
-		for (const rarity in groupedData) {
-			const groups = groupedData[rarity];
-			for (const key in groups) {
-				const list = groups[key];
-				if (list.length > 1) {
-					list.sort((a, b) => a.item.name.localeCompare(b.item.name));
-				}
-			}
-		}
+		Object.values(groupedData).forEach(groups => {
+			Object.values(groups).forEach(list => list.sort((a, b) => a.item.name.localeCompare(b.item.name)));
+		});
 
-		const sortedRarities = rarityKeys.sort((a, b) => (rarities[b]?.order || 0) - (rarities[a]?.order || 0));
+		const sortedRarities = Object.keys(rarities).sort((a, b) => (rarities[b]?.order || 0) - (rarities[a]?.order || 0));
 		
-		const fragment = document.createDocumentFragment();
-		inventoryItemsElement.textContent = ''; // textContent быстрее чем innerHTML
+		inventoryItemsElement.innerHTML = '';
 
 		if (inventory.length === 0) {
 			inventoryItemsElement.innerHTML = '<p>Ваш инвентарь пуст</p>';
@@ -10724,17 +10204,17 @@ document.addEventListener('DOMContentLoaded', function() {
 					<div class="item-actions">
 						<button class="upgrade-fragment-btn" data-index="${index}" data-count="${count}">Улучшить</button>
 						<button class="open-fragment-btn" data-index="${index}" data-count="${count}">Открыть</button>
-						${originalItem?.itemInStore !== false ? `<button class="sell-fragment-btn" data-index="${index}" data-price="${basePrice}">Продать (<a style="color: ${currencyColor}">${basePrice.toFixed(2)} ₽</a>)</button>` : `<div class="rental-notice">Нет на рынке</div>`}
+						<button class="sell-fragment-btn" data-index="${index}" data-price="${basePrice}">Продать (<a style="color: ${currencyColor}">${basePrice.toFixed(2)} ₽</a>)</button>
 					</div>`;
 			} else if (isCase) {
 				actionsHTML = `<div class="item-actions">
 					<button class="open-case-btn" data-index="${index}">Открыть</button>
-					${originalItem?.itemInStore !== false ? `<button class="sell-btn" data-index="${index}" data-price="${displayPrice}">Продать (<a style="color: ${currencyColor}">${displayPrice.toFixed(2)} ₽</a>)</button>` : `<div class="rental-notice">Нет на рынке</div>`}
+					<button class="sell-btn" data-index="${index}" data-price="${displayPrice}">Продать (<a style="color: ${currencyColor}">${displayPrice.toFixed(2)} ₽</a>)</button>
 				</div>`;
 			} else if (isCharm || isSticker) {
 				actionsHTML = `<div class="item-actions">
 					<button class="apply-item-btn" data-index="${index}">Применить</button>
-					${!isRental && originalItem?.itemInStore !== false ? `<button class="sell-btn" data-index="${index}" data-price="${displayPrice}">Продать (<a style="color: ${currencyColor}">${displayPrice.toFixed(2)} ₽</a>)</button>` : `<div class="rental-notice">Нет на рынке</div>`}
+					${!isRental && originalItem?.itemInStore !== false ? `<button class="sell-btn" data-index="${index}" data-price="${displayPrice}">Продать (<a style="color: ${currencyColor}">${displayPrice.toFixed(2)} ₽</a>)</button>` : ''}
 				</div>`;
 			} else if (isRental) {
 				actionsHTML = `<div class="rental-notice">Арендованный предмет</div>`;
@@ -10861,20 +10341,52 @@ document.addEventListener('DOMContentLoaded', function() {
 			return el;
 		};
 
+		// Flatten all items to render in display order
+		const allRenderData = [];
 		sortedRarities.forEach(rarity => {
 			const g = groupedData[rarity];
 			if (Object.values(g).every(arr => arr.length === 0)) return;
-
-			g.fragments.forEach(d => fragment.appendChild(createItemElement(d, false, true, d.count)));
-			g.withoutSlots.forEach(d => fragment.appendChild(createItemElement(d)));
-			g.charms.forEach(d => fragment.appendChild(createItemElement(d)));
-			g.withSlots.forEach(d => fragment.appendChild(createItemElement(d)));
-			g.stickers.forEach(d => fragment.appendChild(createItemElement(d)));
-			g.cases.forEach(d => fragment.appendChild(createItemElement(d)));
-			g.rentals.forEach(d => fragment.appendChild(createItemElement(d, true)));
+			g.fragments.forEach(d => allRenderData.push({ d, isRental: false, isFragment: true, count: d.count }));
+			g.withoutSlots.forEach(d => allRenderData.push({ d, isRental: false, isFragment: false, count: 0 }));
+			g.charms.forEach(d => allRenderData.push({ d, isRental: false, isFragment: false, count: 0 }));
+			g.withSlots.forEach(d => allRenderData.push({ d, isRental: false, isFragment: false, count: 0 }));
+			g.stickers.forEach(d => allRenderData.push({ d, isRental: false, isFragment: false, count: 0 }));
+			g.cases.forEach(d => allRenderData.push({ d, isRental: false, isFragment: false, count: 0 }));
+			g.rentals.forEach(d => allRenderData.push({ d, isRental: true, isFragment: false, count: 0 }));
 		});
 
-		inventoryItemsElement.appendChild(fragment);
+		// Render first 40 items immediately, then lazy-load the rest via a sentinel
+		const INITIAL_BATCH = 40;
+		const firstBatch = allRenderData.slice(0, INITIAL_BATCH);
+		const restBatch = allRenderData.slice(INITIAL_BATCH);
+
+		const frag = document.createDocumentFragment();
+		firstBatch.forEach(({ d, isRental, isFragment, count }) =>
+			frag.appendChild(createItemElement(d, isRental, isFragment, count))
+		);
+
+		// Sentinel element triggers loading the rest when scrolled into view
+		if (restBatch.length > 0) {
+			const sentinel = document.createElement('div');
+			sentinel.className = 'inv-lazy-sentinel';
+			sentinel.style.cssText = 'height:1px;width:100%;grid-column:1/-1;';
+			frag.appendChild(sentinel);
+			inventoryItemsElement.appendChild(frag);
+
+			const lazyObserver = new IntersectionObserver((entries) => {
+				if (!entries[0].isIntersecting) return;
+				lazyObserver.disconnect();
+				sentinel.remove();
+				const restFrag = document.createDocumentFragment();
+				restBatch.forEach(({ d, isRental, isFragment, count }) =>
+					restFrag.appendChild(createItemElement(d, isRental, isFragment, count))
+				);
+				inventoryItemsElement.appendChild(restFrag);
+			}, { rootMargin: '300px' });
+			lazyObserver.observe(sentinel);
+		} else {
+			inventoryItemsElement.appendChild(frag);
+		}
 
 		if (!window.rentalTimerInterval) {
 			window.rentalTimerInterval = setInterval(() => {
@@ -11626,9 +11138,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 			const targetItemDb = itemsDatabase.find(i => i.id === selectedTargetItemId);
 			const avgSourcePrice = cachedAvgSourcePrice;
-			
-			balance = Math.round(balance * 100) / 100;
-			addedBalance = Math.round(addedBalance * 100) / 100;
+
 			if (balance < addedBalance) {
 				showToast('Недостаточно баланса!', true);
 				return;
@@ -11645,8 +11155,7 @@ document.addEventListener('DOMContentLoaded', function() {
 			
 			if (isSuccess) {
 				balance -= addedBalance;
-				balance = Math.round(balance * 100) / 100;
-				balanceAmount.textContent = balance.toLocaleString('ru-RU');
+				balance = Math.round(balance * 100) / 100; 
 				selectedInventoryIndices.forEach(idx => {
 					const oldItem = inventory[idx];
 					const newItem = {
@@ -12095,23 +11604,6 @@ document.addEventListener('DOMContentLoaded', function() {
 		});
 	  }
 	  
-	  if (shopItem && shopItem.priceMultiply > 0) {
-		const newPrice = Math.max(0, shopItem.price - shopItem.priceMultiply);
-		shopItem.price = newPrice;
-		updateItemPriceInUI(shopItem);
-	  }
-	  
-	  if (shopItem && !shopItem.name.endsWith('Fragment')) {
-		const itemElement = document.getElementById(shopItem.id);
-		if (itemElement) {
-		  const currentStock = parseInt(itemElement.querySelector('.available-stock').textContent);
-		  const max = parseInt(itemElement.querySelector('.add-to-cart').getAttribute('data-max'));
-		  updateStock(itemElement, currentStock + 1, max);
-		} else {
-			shopItem.stock += 1;
-		}
-	  }
-	  
 	  inventory.splice(index, 1);
 	  balance += Math.round(totalPrice * 100) / 100;
 	  balance = Math.round(balance * 100) / 100;
@@ -12156,19 +11648,6 @@ document.addEventListener('DOMContentLoaded', function() {
 			if (originalItem) {
 				total += Math.round((originalItem.price * 0.8) * 100) / 100;
 				itemsToRemove.push(item);
-				if (originalItem.priceMultiply > 0) {
-					originalItem.price = Math.max(0, originalItem.price - originalItem.priceMultiply);
-					updateItemPriceInUI(originalItem);
-				}
-				
-				const shopItem = document.getElementById(originalItem.id);
-				if (shopItem) {
-					const currentStock = parseInt(shopItem.querySelector('.available-stock').textContent);
-					const max = parseInt(shopItem.querySelector('.add-to-cart').getAttribute('data-max'));
-					updateStock(shopItem, currentStock + 1, max);
-				} else {
-					originalItem.stock += 1;
-				}
 				
 				if (item.charm) {
 					const charmItem = itemsDatabase.find(dbItem => dbItem.id === item.charm.id);
@@ -12787,14 +12266,12 @@ document.addEventListener('DOMContentLoaded', function() {
 				<div class="pass-actions" style="display: flex; justify-content: space-between;">
 					<button class="buy-bp-btn" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; ${passState.goldPass || isLocked ? 'display: none;' : ''}">Купить БП</button>
 					<button class="buy-levels-btn" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; ${isLocked ? 'display: none;' : ''}">Купить уровни</button>
-					
+					<button class="confirm-pass-btn" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; ${selectedBattlePassId === passState.id || isLocked ? 'display: none;' : ''}">Подтвердить</button>
 					<button class="complete-pass-btn" style="padding: 10px 20px; background-color: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; ${isLocked ? 'display: none;' : ''}">Завершить</button>
 				</div>
 			</div>
 		`;
 
-		// <button class="confirm-pass-btn" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; ${selectedBattlePassId === passState.id || isLocked ? 'display: none;' : ''}">Подтвердить</button>
-		
 		document.body.appendChild(modal);
 		
 		fillPassLevels(modal, currentBattlePass, passState);
@@ -12989,7 +12466,7 @@ document.addEventListener('DOMContentLoaded', function() {
 				
 				<div style="margin-bottom: 20px;">
 					<div style="font-size: 18px; margin-bottom: 10px;">${battlePass.name}</div>
-					<div style="font-size: 24px; color: gold; margin-bottom: 20px;">${battlePass.cost_gold_pass?.toFixed(2)} ₽</div>
+					<div style="font-size: 24px; color: gold; margin-bottom: 20px;">${battlePass.cost_gold_pass.toFixed(2)} ₽</div>
 					
 					<div style="margin-bottom: 15px;">
 						<div style="font-weight: bold; margin-bottom: 5px;">Включает:</div>
@@ -13011,7 +12488,7 @@ document.addEventListener('DOMContentLoaded', function() {
 		});
 		
 		modal.querySelector('.confirm-buy-bp-btn').addEventListener('click', () => {
-			if (balance >= battlePass.cost_gold_pass & battlePass.cost_gold_pass != null) {
+			if (balance >= battlePass.cost_gold_pass) {
 				balance = Math.round((balance - battlePass.cost_gold_pass) * 100) / 100;
 				addExp(Math.round(battlePass.cost_gold_pass));
 				balanceAmount.textContent = balance.toLocaleString('ru-RU');
@@ -13033,11 +12510,7 @@ document.addEventListener('DOMContentLoaded', function() {
 				parentModal.remove();
 				openBattlePassMenu();
 			} else {
-				if (battlePass.cost_gold_pass == null) {
-					showToast('Этот пропуск невозможно купить!', true);
-				} else {
-					showToast('Недостаточно средств!', true);
-				}
+				showToast('Недостаточно средств!', true);
 			}
 		});
 	}
@@ -13277,6 +12750,8 @@ document.addEventListener('DOMContentLoaded', function() {
 	  });
 	}
 	
+	
+	// ПРОМОКОДЫ
 	addNewPromocode('admin', 0, [], true, 0); // 0 В КОНЦЕ - промокод без ограничений
 	
 	addNewPromocode('STARTER', 300, () => {
@@ -15302,7 +14777,7 @@ document.addEventListener('DOMContentLoaded', function() {
 				return true;
 			}
 			
-			if (originalItem.name.endsWith('Fragment') || inventoryItem.name.endsWith('Fragment')) {
+			if (originalItem.name.startsWith('Fragment') || inventoryItem.name.startsWith('Fragment')) {
 				return true;
 			}
 		}
@@ -15438,7 +14913,6 @@ document.addEventListener('DOMContentLoaded', function() {
 				
 				addNumberField(fieldsContainer, 'Цена', item.price, (value) => {
 					item.price = parseFloat(value);
-					updateItemPriceInUI(item);
 					showToast('Цена предмета обновлена');
 				});
 				
@@ -16179,4 +15653,2086 @@ document.addEventListener('DOMContentLoaded', function() {
 	addQuickOpenButtonToInventory();
 
 	console.log('Element Editor loaded. Press Alt+A to open editor.');
+
+
+	// ===== ONLINE MARKET ITEM TOAST =====
+	function showItemToast(type, item, price) {
+		const existing = document.getElementById('om-item-toast');
+		if (existing) { clearTimeout(existing._hideTimer); existing.remove(); }
+
+		const rarityInfo = rarities[item.rarity] || { color: 'none', name: item.rarity, colorHex: '#aaa' };
+		const labels = { listed: 'Выставлен предмет', sold: 'Предмет продан', bought: 'Предмет куплен' };
+		const colors  = { listed: '#1a6bb5', sold: '#4CAF50', bought: '#ff9800' };
+		const icons   = { listed: '📤', sold: '💰', bought: '🛒' };
+
+		const toast = document.createElement('div');
+		toast.id = 'om-item-toast';
+		toast.style.cssText = `
+			position:fixed;top:28px;left:50%;
+			transform:translateX(-50%) translateY(-18px);
+			z-index:99999;
+			background:rgba(18,18,18,0.97);
+			border:2px solid ${colors[type]};
+			border-radius:12px;
+			padding:14px 20px;
+			display:flex;align-items:center;gap:14px;
+			min-width:280px;max-width:420px;
+			box-shadow:0 8px 32px rgba(0,0,0,0.7);
+			opacity:0;
+			transition:opacity 0.22s ease,transform 0.22s ease;
+			pointer-events:none;
+		`;
+		toast.innerHTML = `
+			<img src="${item.image}" alt="" style="width:60px;height:60px;object-fit:contain;border-radius:6px;flex-shrink:0;background:rgba(255,255,255,0.04)">
+			<div style="flex:1;min-width:0">
+				<div style="font-size:11px;color:${colors[type]};font-weight:bold;margin-bottom:4px;letter-spacing:0.5px">${icons[type]} ${labels[type]}</div>
+				<div style="font-size:14px;font-weight:bold;color:#fff;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${item.name}</div>
+				<div style="margin-top:3px"><span class="item-rarity ${rarityInfo.color}" style="font-size:11px;padding:2px 7px;border-radius:3px;display:inline-block;transform:none;width:auto">${rarityInfo.name}</span></div>
+				${price !== undefined ? `<div style="color:gold;font-size:13px;font-weight:bold;margin-top:4px">${price.toFixed(2)} ₽</div>` : ''}
+			</div>
+		`;
+		document.body.appendChild(toast);
+		requestAnimationFrame(() => { toast.style.opacity='1'; toast.style.transform='translateX(-50%) translateY(0)'; });
+		const hideTimer = setTimeout(() => {
+			toast.style.opacity='0'; toast.style.transform='translateX(-50%) translateY(-15px)';
+			setTimeout(() => { if(toast.parentNode) toast.remove(); }, 280);
+		}, 3200);
+		toast._hideTimer = hideTimer;
+	}
+
+	// ===== ONLINE MARKET =====
+	function initOnlineMarket() {
+		onlineMarket.currentFilterTypes = ['all'];
+
+		// Registry of currently open platform modals: itemId -> overlay element
+		const activeModals = {};
+		
+		function getStickerValueAdjustment(stickers, multiplier) {
+			if (!stickers || !stickers.length) return 0;
+			let total = 0;
+			stickers.forEach(s => {
+				const stickerItem = itemsDatabase.find(i => i.id === s.id);
+				if (stickerItem && stickerItem.price) {
+					total += stickerItem.price * multiplier;
+				}
+			});
+			return total;
+		}
+
+		// Refresh lots panel in any open modal for a given itemId
+		function refreshOpenModal(itemId) {
+			const overlay = activeModals[itemId];
+			if (overlay && document.body.contains(overlay)) {
+				renderLotsPanel(itemId, overlay);
+				
+				// Обновляем баннер активной заявки
+				const myReq = onlineMarket.buyRequests.find(r => r.itemId === itemId && r.remaining > 0);
+				const banner = overlay.querySelector('.om-active-req-banner');
+				if (myReq && !banner) {
+					const lotsPanel = overlay.querySelector('.om-lots-panel');
+					if (lotsPanel) {
+						const b = document.createElement('div');
+						b.className = 'om-active-req-banner';
+						b.id = 'om-active-req-banner-' + myReq.id;
+						b.innerHTML = `<span>📋 Активная заявка: ${myReq.price.toFixed(2)} ₽ × ${myReq.remaining} шт.</span><button class="om-cancel-active-req-btn" data-req-id="${myReq.id}">Отменить</button>`;
+						lotsPanel.insertBefore(b, lotsPanel.firstChild);
+					}
+				} else if (!myReq && banner) {
+					banner.remove();
+				} else if (myReq && banner) {
+					banner.querySelector('span').textContent = `📋 Активная заявка: ${myReq.price.toFixed(2)} ₽ × ${myReq.remaining} шт.`;
+				}
+				
+				// === ОБНОВЛЯЕМ КНОПКУ "ОТМЕНИТЬ ВСЕ МОИ ЛОТЫ" ===
+				const header = overlay.querySelector('.om-lots-header h3');
+				const headerContainer = overlay.querySelector('.om-lots-header');
+				if (headerContainer && header) {
+					const existingBtn = headerContainer.querySelector('#om-cancel-all-my-lots-btn');
+					if (existingBtn) existingBtn.remove();
+					
+					const lots = onlineMarket.listings[itemId] || [];
+					const myLotsCount = lots.filter(l => l.isMine).length;
+					if (myLotsCount > 0) {
+						const cancelAllBtn = document.createElement('button');
+						cancelAllBtn.id = 'om-cancel-all-my-lots-btn';
+						cancelAllBtn.textContent = `× Снять мои лоты (${myLotsCount})`;
+						cancelAllBtn.style.cssText = 'margin-left:10px;padding:4px 10px;background:#f44336;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;';
+						cancelAllBtn.addEventListener('click', (e) => {
+							e.stopPropagation();
+							
+							const myLots = lots.filter(l => l.isMine);
+							myLots.forEach(lot => {
+								if (lot.sellReqTimerId) clearTimeout(lot.sellReqTimerId);
+								if (lot.inventoryItem) inventory.push(lot.inventoryItem);
+								onlineMarket.sellRequests = onlineMarket.sellRequests.filter(r => r.lotId !== lot.id);
+							});
+							onlineMarket.listings[itemId] = lots.filter(l => !l.isMine);
+							if (onlineMarket.listings[itemId]?.length === 0) delete onlineMarket.listings[itemId];
+							
+							updateInventory();
+							saveGameState();
+							showToast(`Отменено лотов: ${myLotsCount}`);
+							updatePlatformCard(itemId);
+							updateNormalMarketCardPrice(itemId);
+							renderLotsPanel(itemId, overlay);
+							renderMyRequests();
+						});
+						header.appendChild(cancelAllBtn);
+					}
+				}
+				
+			} else if (overlay && !document.body.contains(overlay)) {
+				delete activeModals[itemId];
+			}
+		}
+		
+		// === Очистка "осиротевших" лотов при старте ===
+		Object.keys(onlineMarket.listings).forEach(itemId => {
+			const itemExists = itemsDatabase.find(i => i.id === itemId);
+			if (!itemExists) {
+				delete onlineMarket.listings[itemId];
+			} else {
+				// Также фильтруем внутри массива
+				onlineMarket.listings[itemId] = onlineMarket.listings[itemId].filter(lot => {
+					return itemsDatabase.find(i => i.id === itemId) !== undefined;
+				});
+				if (onlineMarket.listings[itemId].length === 0) {
+					delete onlineMarket.listings[itemId];
+				}
+			}
+		});
+
+		// ---- Bot price logic: min = market*0.70, max = min(market*3, 1000000) ----
+		// Returns lowest online market lot price for an item, or item.initialPrice as fallback
+		function getOnlinePrice(itemId) {
+			const lots = onlineMarket.listings[itemId];
+			if (lots && lots.length > 0) {
+				return Math.min(...lots.map(l => l.price));
+			}
+			return null;
+		}
+
+		function getBotPrice(item, currentLotCount, botStickers = null) {
+			const allCurrentLots = onlineMarket.listings[item.id] 
+				? onlineMarket.listings[item.id].filter(l => !l.isMine) 
+				: [];
+			
+			const cleanLots = allCurrentLots.filter(l => !l.stickers || l.stickers.length === 0);
+			
+			let basePrice;
+			if (cleanLots.length > 0) {
+				const sum = cleanLots.reduce((acc, lot) => acc + lot.price, 0);
+				basePrice = sum / cleanLots.length;
+			} 
+			else if (allCurrentLots.length > 0) {
+				const minLotPrice = Math.min(...allCurrentLots.map(l => l.price));
+				basePrice = minLotPrice; 
+			} 
+			else {
+				basePrice = item.initialPrice || item.price || 1000000;
+			}
+			
+			if (botStickers && botStickers.length > 0) {
+				const stickerBonus = getStickerValueAdjustment(botStickers, 0.05);
+				basePrice += stickerBonus;
+			}
+			
+			const totalLots = currentLotCount !== undefined ? currentLotCount : allCurrentLots.length;
+			const initialStock = Math.max(1, item.stock || 5);
+			const scarcity = Math.max(0, 1 - totalLots / initialStock);
+			const floorMult = 0.95 + (scarcity * 0.05); // Узкий коридор 0.95 - 1.00
+			const ceilMult = 1.05 + (scarcity * 0.10);  // Узкий коридор 1.05 - 1.15
+			
+			const floor = basePrice * floorMult;
+			const ceil = basePrice * ceilMult;
+			
+			let finalPrice = floor + Math.random() * (ceil - floor);
+			finalPrice = Math.max(0.01, Math.min(1000000, Math.round(finalPrice * 100) / 100));
+			return finalPrice;
+		}
+
+		// Track which items have been initially populated
+		const omInitialized = new Set();
+
+		function ensureBotsForItem(itemId, item) {
+			if (!onlineMarket.listings[itemId]) onlineMarket.listings[itemId] = [];
+			
+			// Use initialStock; clamp between 3 and 10000
+			const target = Math.min(10000, Math.max(3, item.stock || 5));
+			const needed = target - onlineMarket.listings[itemId].filter(l => !l.isMine).length;
+			if (needed <= 0) return;
+
+			// Helper: generate stickers for a bot lot (same logic as checkout)
+			function generateBotStickers() {
+				if (item.isCase || item.isCharm || item.isSticker || item.isItemWithoutSlot) return undefined;
+				if (item.name.endsWith('Fragment') || item.name.startsWith('Graffiti') || item.name.startsWith('Medal')) return undefined;
+				
+				// Шанс 40% на генерацию стикеров
+				if (Math.random() < 0.40) {
+					const allStickers = itemsDatabase.filter(s => s.isSticker);
+					if (!allStickers.length) return undefined;
+					const stickerCount = Math.min(4, Math.max(1, Math.floor(Math.random() * 4) + 1));
+					const stickers = [];
+					for (let j = 0; j < stickerCount; j++) {
+						const sel = allStickers[Math.floor(Math.random() * allStickers.length)];
+						if (sel) stickers.push({ id: sel.id, name: sel.name, image: sel.image });
+					}
+					return stickers.length ? stickers : undefined;
+				}
+				return undefined;
+			}
+			
+
+			// Generate in batches to avoid blocking for large counts
+			const batchSize = 500;
+			let generated = 0;
+			function addBatch() {
+				const n = Math.min(batchSize, needed - generated);
+				for (let i = 0; i < n; i++) {
+					const lotsSoFar = onlineMarket.listings[itemId].filter(l => !l.isMine).length;
+					// === ПРАВИЛО: Первый лот всегда без стикеров ===
+					const isFirstBotLot = (lotsSoFar === 0);
+					const botStickers = isFirstBotLot ? undefined : generateBotStickers();
+					
+					// === ИСПРАВЛЕНИЕ ID: Используем время + случайное число для уникальности ===
+					// Так как функция может вызываться много раз, старый счетчик мог создавать дубликаты
+					const lot = {
+						id: 'bot_' + itemId + '_' + Date.now() + '_' + Math.random(),
+						price: getBotPrice(item, lotsSoFar, botStickers),
+						isMine: false,
+						seller: 'Bot #' + (Math.floor(Math.random() * 9000) + 1000)
+					};
+					if (botStickers) lot.stickers = botStickers;
+					onlineMarket.listings[itemId].push(lot);
+				}
+				generated += n;
+				if (generated < needed) {
+					setTimeout(addBatch, 0);
+				} else {
+					onlineMarket.listings[itemId].sort((a, b) => a.price - b.price);
+					updateNormalMarketCardPrice(itemId);
+				}
+			}
+			addBatch();
+		}
+
+		// When a bot lot is bought, it does NOT replenish automatically.
+		// When user's lot is sold (bot buys it), bot relists at its own price.
+		function botRelistAfterSale(itemId, item, soldPrice) {
+			const currentLots = onlineMarket.listings[itemId] || [];
+			const botLots = currentLots.filter(l => !l.isMine);
+			
+			// === ПРАВИЛО: Первый лот всегда без стикеров ===
+			const isFirstBotLot = (botLots.length === 0);
+			
+			// === Helper: generate stickers for a bot lot ===
+			function generateBotStickers() {
+				if (item.isCase || item.isCharm || item.isSticker || item.isItemWithoutSlot) return undefined;
+				if (item.name.endsWith('Fragment') || item.name.startsWith('Graffiti') || item.name.startsWith('Medal')) return undefined;
+				// Шанс 40% на генерацию стикеров
+				if (Math.random() < 0.40) {
+					const allStickers = itemsDatabase.filter(s => s.isSticker);
+					if (!allStickers.length) return undefined;
+					const stickerCount = Math.min(4, Math.max(1, Math.floor(Math.random() * 4) + 1));
+					const stickers = [];
+					for (let j = 0; j < stickerCount; j++) {
+						const sel = allStickers[Math.floor(Math.random() * allStickers.length)];
+						if (sel) stickers.push({ id: sel.id, name: sel.name, image: sel.image });
+					}
+					return stickers.length ? stickers : undefined;
+				}
+				return undefined;
+			}
+			const botStickers = isFirstBotLot ? undefined : generateBotStickers();
+			let finalPrice;
+			if (botLots.length === 0) {
+				finalPrice = soldPrice; 
+			} else {
+				const calculatedPrice = getBotPrice(item, botLots.length, botStickers);
+				
+				const avgBotPrice = botLots.reduce((acc, l) => acc + l.price, 0) / botLots.length;
+				if (soldPrice > avgBotPrice * 1.1) {
+					finalPrice = Math.min(soldPrice, calculatedPrice * 1.05); 
+				} else {
+					finalPrice = calculatedPrice;
+				}
+			}
+
+			finalPrice = Math.max(0.01, Math.min(1000000, finalPrice));
+			finalPrice = Math.round(finalPrice * 100) / 100;
+			
+			if (!onlineMarket.listings[itemId]) onlineMarket.listings[itemId] = [];
+			
+			const newLot = {
+				id: 'bot_relist_' + Date.now() + '_' + Math.random(),
+				price: finalPrice,
+				isMine: false,
+				seller: 'Bot #' + (Math.floor(Math.random() * 9000) + 1000)
+			};
+			if (botStickers) {
+				newLot.stickers = botStickers;
+			}
+			onlineMarket.listings[itemId].push(newLot);
+			onlineMarket.listings[itemId].sort((a, b) => a.price - b.price);
+			updatePlatformCard(itemId);
+			updateNormalMarketCardPrice(itemId);
+			refreshOpenModal(itemId);
+		}
+
+		// Update the normal market item card price to reflect the online market
+		function updateNormalMarketCardPrice(itemId) {
+			const onlinePrice = getOnlinePrice(itemId);
+			if (onlinePrice === null) return;
+			// Update normal market card
+			const card = document.getElementById(itemId);
+			if (card) {
+				const priceEl = card.querySelector('.item-price');
+				if (priceEl) priceEl.textContent = onlinePrice.toFixed(2) + ' ₽';
+				// Update button data-price so cart gets fresh price
+				card.querySelectorAll('.add-to-cart, .buy-all-btn').forEach(btn => {
+					btn.setAttribute('data-price', onlinePrice.toFixed(2));
+				});
+			}
+			// Update item.price so cart uses correct value
+			const dbItem = itemsDatabase.find(i => i.id === itemId);
+			if (dbItem) dbItem.price = onlinePrice;
+			// Update rental card price = 1% of online price
+			const rentalId = itemId + '_rental';
+			const rentalCard = document.getElementById(rentalId);
+			const rentalDbItem = itemsDatabase.find(i => i.id === rentalId);
+			if (rentalDbItem) {
+				const newRentalPrice = Math.max(0.01, Math.round(onlinePrice * 0.01 * 100) / 100);
+				rentalDbItem.price = newRentalPrice;
+				if (rentalCard) {
+					const rPriceEl = rentalCard.querySelector('.item-price');
+					if (rPriceEl) rPriceEl.textContent = newRentalPrice.toFixed(2) + ' ₽';
+					rentalCard.querySelectorAll('.add-to-cart').forEach(btn => {
+						btn.setAttribute('data-price', newRentalPrice.toFixed(2));
+					});
+				}
+			}
+		}
+
+		// ---- Buy request timing: 50% diff ≈ 0.5s, 70% diff ≈ 20s, 90%+ ≈ 60s ----
+		function calcBuyDelay(reqPrice, lotPrice) {
+			if (reqPrice >= lotPrice) return 0;
+			const diff = (lotPrice - reqPrice) / lotPrice; // 0..1
+			if (diff <= 0.50) return 200 + Math.random() * 800;          // <1s
+			if (diff <= 0.70) return 3000 + diff * 60000;                 // ~3-6s
+			if (diff <= 0.90) return 10000 + diff * 100000;               // ~20s at 10%
+			if (diff <= 1.00) return 20000 + diff * 80000;
+			return Math.min(60000, 40000 + diff * 40000);                 // max 60s
+		}
+
+		// ---- Sell request timing: close to cheapest ≈ fast, above average ≈ slow ----
+		function calcSellDelay(listPrice, item) {
+			const lots = onlineMarket.listings[item.id] || [];
+			const prices = lots.filter(l => !l.isMine).map(l => l.price);
+			if (!prices.length) prices.push(item.price);
+			const minBot = Math.min(...prices);
+			const avgBot = prices.reduce((a, b) => a + b, 0) / prices.length;
+			const maxAllowed = Math.min(1000000, item.price * 2); // +100%
+			if (listPrice > maxAllowed) return Infinity; // won't sell
+			const diff = (listPrice - minBot) / Math.max(1, avgBot); // how much above cheapest, normalised
+			if (diff <= 0.50) return 100 + Math.random() * 400;       // <0.5s
+			if (diff <= 0.70) return 1000 + diff * 20000;
+			if (diff <= 0.90) return 5000 + diff * 30000;
+			if (diff <= 1.00) return 15000 + diff * 40000;
+			return 40000 + diff * 20000;                               // slow but possible
+		}
+
+		// Formatted countdown string
+		function formatDelay(ms) {
+			if (ms <= 0) return 'скоро';
+			if (ms < 1000) return 'менее секунды';
+			const s = Math.round(ms / 1000);
+			if (s < 60) return `~${s} сек.`;
+			const m = Math.floor(s / 60), sec = s % 60;
+			return `~${m} мин. ${sec > 0 ? sec + ' сек.' : ''}`;
+		}
+
+		// ---- Container ----
+		const omContainer = document.createElement('div');
+		omContainer.id = 'online-market-section';
+		omContainer.className = 'online-market-container';
+		omContainer.innerHTML = `
+			<div class="online-market-subtabs">
+				<button class="online-market-subtab active" data-tab="platform">Платформа</button>
+				<button class="online-market-subtab" data-tab="requests">Мои заявки</button>
+			</div>
+			<div class="om-platform-container active" id="om-platform-container">
+				<!-- Filters bar -->
+				<div class="om-filters-bar">
+					<div class="filters" id="om-rarity-filters">
+						<button class="filter-btn active" data-rarity="all">Все</button>
+					</div>
+					<div class="om-filters-row2">
+						<input type="text" id="om-name-filter" class="name-filter-input" placeholder="Поиск по названию" style="padding:6px 10px;border-radius:4px;border:none;background:#434343;color:#fff">
+						<select id="om-collection-filter" class="collection-filter">
+							<option value="all">Все коллекции</option>
+						</select>
+						<button class="sort-btn" id="om-sort-price-btn">По цене ↑</button>
+					</div>
+				</div>
+				<div class="om-platform-grid" id="om-platform-grid"></div>
+			</div>
+			<div class="om-requests-container" id="om-requests-container">
+				<div class="om-requests-subtabs">
+					<button class="om-requests-subtab active" data-rtab="buy">Заявки на покупку</button>
+					<button class="om-requests-subtab" data-rtab="sell">Заявки на продажу</button>
+				</div>
+				<div id="om-buy-requests-panel"><div id="om-buy-requests-list"></div></div>
+				<div id="om-sell-requests-panel" style="display:none"><div id="om-sell-requests-list"></div></div>
+			</div>
+		`;
+
+		const itemsContainerEl = document.getElementById('items-container');
+		itemsContainerEl.parentNode.insertBefore(omContainer, itemsContainerEl.nextSibling);
+		
+		// ---- Type Filter Button for OnlineMarket ----
+		const omTypeFilterBtn = document.createElement('button');
+		omTypeFilterBtn.textContent = 'Фильтр типов';
+		omTypeFilterBtn.id = 'om-types-filter';
+		omTypeFilterBtn.style.cssText = `
+			padding: 8px 12px; 
+			background-color: rgb(65, 65, 65); 
+			color: rgb(177, 177, 177); 
+			border-width: medium; 
+			border-style: none; 
+			border-color: currentcolor; 
+			border-image: initial; 
+			border-radius: 4px; cursor: pointer; 
+			margin-bottom: 15px; 
+			font-size: 14px; display: block;
+		`;
+
+		// Вставляем кнопку в строку фильтров
+		const filtersRow2 = document.querySelector('.om-filters-row2');
+		if (filtersRow2) {
+			filtersRow2.insertBefore(omTypeFilterBtn, filtersRow2.firstChild);
+		}
+		
+		// ---- Type Filter Modal for OnlineMarket ----
+		const omTypeFilterModal = document.createElement('div');
+		omTypeFilterModal.id = 'om-type-filter-modal';
+		omTypeFilterModal.style.cssText = `
+			display: none;
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+			background-color: rgba(0, 0, 0, 0.6);
+			z-index: 1000;
+			justify-content: center;
+			align-items: flex-start;
+			padding-top: 60px;
+		`;
+
+		omTypeFilterModal.innerHTML = `
+			<div style="
+				transform: translateY(175px);
+				background: #222;
+				color: #b1b1b1;
+				padding: 20px;
+				border-radius: 8px;
+				max-width: 320px;
+				width: 90%;
+				max-height: 70vh;
+				overflow-y: auto;
+				box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+				font-size: 14px;
+			">
+				<style>
+					.om-type-checkbox {
+						appearance: none;
+						width: 18px;
+						height: 18px;
+						border: 2px solid #555;
+						border-radius: 4px;
+						background: #2a2a2a;
+						position: relative;
+						cursor: pointer;
+						transition: all 0.2s;
+					}
+					.om-type-checkbox:checked {
+						background: #4CAF50;
+						border-color: #4CAF50;
+					}
+					.om-type-checkbox:checked::after {
+						content: " ";
+						color: #4CAF50;
+						font-size: 14px;
+						position: absolute;
+						top: -1px;
+						left: 3px;
+						font-weight: bold;
+					}
+				</style>
+				<h3 style="margin-top: 0; margin-bottom: 14px; font-size: 18px;">Тип предмета</h3>
+				<label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+					<input type="checkbox" class="om-type-checkbox" data-type="all" checked /> Все
+				</label>
+				<label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+					<input type="checkbox" class="om-type-checkbox" data-type="weapons" checked /> Weapons (со слотами)
+				</label>
+				<label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+					<input type="checkbox" class="om-type-checkbox" data-type="st_weapons" checked /> StatTrack Weapons
+				</label>
+				<label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+					<input type="checkbox" class="om-type-checkbox" data-type="items" checked /> Items (без слотов)
+				</label>
+				<label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+					<input type="checkbox" class="om-type-checkbox" data-type="stickers" checked /> Stickers (наклейки)
+				</label>
+				<label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+					<input type="checkbox" class="om-type-checkbox" data-type="charms" checked /> Charms (брелки)
+				</label>
+				<label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+					<input type="checkbox" class="om-type-checkbox" data-type="medals" checked /> Medals (медали)
+				</label>
+				<label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+					<input type="checkbox" class="om-type-checkbox" data-type="graffiti" checked /> Graffiti (граффити)
+				</label>
+				<label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+					<input type="checkbox" class="om-type-checkbox" data-type="fragments" checked /> Fragments (Фрагменты)
+				</label>
+				<label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+					<input type="checkbox" class="om-type-checkbox" data-type="cases" checked /> Cases (кейсы и боксы)
+				</label>
+				<div style="display:flex;gap:10px;margin-top:20px;">
+					<button id="om-type-filter-apply" style="flex:1;padding:8px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer;">Применить</button>
+					<button id="om-type-filter-reset" style="flex:1;padding:8px;background:#f44336;color:white;border:none;border-radius:4px;cursor:pointer;">Сбросить</button>
+				</div>
+			</div>
+		`;
+		document.body.appendChild(omTypeFilterModal);
+		
+		// ---- Type Filter Event Handlers ----
+		omTypeFilterBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			omTypeFilterModal.style.display = 'flex';
+		});
+
+		omTypeFilterModal.addEventListener('click', (e) => {
+			if (e.target === omTypeFilterModal) {
+				omTypeFilterModal.style.display = 'none';
+			}
+		});
+
+		// "Все" чекбокс управляет остальными
+		const allCheckbox = omTypeFilterModal.querySelector('[data-type="all"]');
+		const otherCheckboxes = omTypeFilterModal.querySelectorAll('.om-type-checkbox:not([data-type="all"])');
+
+		allCheckbox.addEventListener('change', function() {
+			const checked = this.checked;
+			otherCheckboxes.forEach(cb => cb.checked = checked);
+		});
+
+		// Если изменён любой другой чекбокс — обновляем "Все"
+		otherCheckboxes.forEach(cb => {
+			cb.addEventListener('change', () => {
+				const checkedCount = Array.from(otherCheckboxes).filter(c => c.checked).length;
+				allCheckbox.checked = checkedCount === otherCheckboxes.length;
+				allCheckbox.indeterminate = checkedCount > 0 && checkedCount < otherCheckboxes.length;
+			});
+		});
+
+		// Применить фильтр
+		document.getElementById('om-type-filter-apply').addEventListener('click', () => {
+			const selectedTypes = Array.from(otherCheckboxes)
+				.filter(cb => cb.checked)
+				.map(cb => cb.dataset.type);
+			
+			onlineMarket.currentFilterTypes = selectedTypes.length === otherCheckboxes.length ? ['all'] : selectedTypes;
+			omTypeFilterModal.style.display = 'none';
+			renderPlatformGrid();
+		});
+
+		// Сбросить фильтр
+		document.getElementById('om-type-filter-reset').addEventListener('click', () => {
+			otherCheckboxes.forEach(cb => cb.checked = true);
+			allCheckbox.checked = true;
+			allCheckbox.indeterminate = false;
+			onlineMarket.currentFilterTypes = ['all'];
+			omTypeFilterModal.style.display = 'none';
+			renderPlatformGrid();
+		});
+
+		// Populate rarity filter buttons (clone from main filters)
+		function buildRarityFilters() {
+			const bar = document.getElementById('om-rarity-filters');
+			if (!bar) return;
+			bar.innerHTML = '<button class="filter-btn active" data-rarity="all">Все</button>';
+			Object.keys(rarities).forEach(r => {
+				const info = rarities[r];
+				const btn = document.createElement('button');
+				btn.className = 'filter-btn';
+				btn.dataset.rarity = r;
+				btn.textContent = info.name;
+				btn.style.backgroundColor = info.colorHex || '';
+				bar.appendChild(btn);
+			});
+			bar.querySelectorAll('.filter-btn').forEach(btn => {
+				btn.addEventListener('click', () => {
+					bar.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+					btn.classList.add('active');
+					onlineMarket.currentFilterRarity = btn.dataset.rarity;
+					renderPlatformGrid();
+				});
+			});
+		}
+
+		function buildCollectionFilter() {
+			const sel = document.getElementById('om-collection-filter');
+			if (!sel) return;
+			sel.innerHTML = '<option value="all">Все коллекции</option>';
+			Object.values(collectionsDatabase).forEach(c => {
+				const opt = document.createElement('option');
+				opt.value = c.id;
+				opt.textContent = c.name;
+				sel.appendChild(opt);
+			});
+			sel.addEventListener('change', () => {
+				onlineMarket.currentFilterCollection = sel.value;
+				renderPlatformGrid();
+			});
+		}
+
+		// Debounce helper for filter inputs
+		function omDebounce(fn, ms) { let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); }; }
+
+		document.getElementById('om-name-filter').addEventListener('input', omDebounce(e => {
+			onlineMarket.currentFilterName = e.target.value.toLowerCase();
+			renderPlatformGrid();
+		}, 250));
+
+		document.getElementById('om-sort-price-btn').addEventListener('click', function() {
+			onlineMarket.sortDescending = !onlineMarket.sortDescending;
+			this.textContent = onlineMarket.sortDescending ? 'По цене ↓' : 'По цене ↑';
+			renderPlatformGrid();
+		});
+
+		// Sub-tab switching
+		omContainer.querySelectorAll('.online-market-subtab').forEach(btn => {
+			btn.addEventListener('click', () => {
+				omContainer.querySelectorAll('.online-market-subtab').forEach(b => b.classList.remove('active'));
+				btn.classList.add('active');
+				const tab = btn.dataset.tab;
+				omContainer.querySelector('.om-platform-container').classList.toggle('active', tab === 'platform');
+				omContainer.querySelector('.om-requests-container').classList.toggle('active', tab === 'requests');
+				if (tab === 'platform') renderPlatformGrid();
+				if (tab === 'requests') renderMyRequests();
+			});
+		});
+
+		omContainer.querySelectorAll('.om-requests-subtab').forEach(btn => {
+			btn.addEventListener('click', () => {
+				omContainer.querySelectorAll('.om-requests-subtab').forEach(b => b.classList.remove('active'));
+				btn.classList.add('active');
+				const rtab = btn.dataset.rtab;
+				document.getElementById('om-buy-requests-panel').style.display = rtab === 'buy' ? 'block' : 'none';
+				document.getElementById('om-sell-requests-panel').style.display = rtab === 'sell' ? 'block' : 'none';
+				renderMyRequests();
+			});
+		});
+
+		document.getElementById('online-market-btn').addEventListener('click', function() {
+			if (currentMarket !== 'online') {
+				currentMarket = 'online';
+				document.querySelectorAll('.market-btn').forEach(b => b.classList.remove('active'));
+				this.classList.add('active');
+				document.querySelector('.sort-container').style.display = 'none';
+				document.getElementById('items-container').style.display = 'none';
+				document.getElementById('types-filter').style.display = 'none';
+				omContainer.style.display = 'flex';
+				buildRarityFilters();
+				buildCollectionFilter();
+				renderPlatformGrid();
+			}
+		});
+
+		['normal-market-btn', 'rental-market-btn'].forEach(id => {
+			document.getElementById(id)?.addEventListener('click', function() {
+				document.querySelector('.sort-container').style.display = '';
+				document.getElementById('items-container').style.display = '';
+				document.getElementById('types-filter').style.display = 'block';
+				omContainer.style.display = 'none';
+			}, true);
+		});
+
+		// ---- Platform Grid ----
+		function getFilteredItems() {
+			let items = itemsDatabase.filter(item =>
+				item.itemInStore && !item.isRental && !item.id.endsWith('_rental')
+			);
+			
+			const rar = onlineMarket.currentFilterRarity;
+			if (rar !== 'all') items = items.filter(i => i.rarity === rar);
+			
+			const col = onlineMarket.currentFilterCollection;
+			if (col !== 'all') items = items.filter(i => i.collection === col);
+			
+			const name = onlineMarket.currentFilterName;
+			if (name) items = items.filter(i => i.name.toLowerCase().includes(name));
+			
+			// ---- Type filter ----
+			const types = onlineMarket.currentFilterTypes || ['all'];
+			if (!types.includes('all')) {
+				items = items.filter(item => {
+					const itemType = getItemType(item);
+					return types.includes(itemType);
+				});
+			}
+			// -------------------
+			
+			// sort by lowest lot price
+			items.sort((a, b) => {
+				const pa = onlineMarket.listings[a.id]?.length ? Math.min(...onlineMarket.listings[a.id].map(l => l.price)) : Infinity;
+				const pb = onlineMarket.listings[b.id]?.length ? Math.min(...onlineMarket.listings[b.id].map(l => l.price)) : Infinity;
+				return onlineMarket.sortDescending ? pb - pa : pa - pb;
+			});
+			return items;
+		}
+
+		// Build a single card element for platform grid
+		function buildPlatformCard(item) {
+			const rarityInfo = rarities[item.rarity] || { color: 'none', name: item.rarity };
+			const collectionInfo = collectionsDatabase[item.collection] || { name: item.collection, image: '' };
+			const lots = onlineMarket.listings[item.id] || [];
+			const lotsCount = lots.length;
+			const lowestPrice = lotsCount > 0 ? Math.min(...lots.map(l => l.price)) : null;
+			const myReq = onlineMarket.buyRequests.find(r => r.itemId === item.id && r.remaining > 0);
+			const xCount = inventory.filter(i => i.id === item.id).length;
+			let countInInv = `${xCount}`;
+			if (xCount > 999) countInInv = `${Math.round(xCount/1000*10)/10}K`;
+			if (xCount > 999000) countInInv = `${Math.round(xCount/1000000*10)/10}M`;
+
+			const card = document.createElement('div');
+			card.className = 'item-card';
+			card.id = 'om-card-' + item.id;
+			card.dataset.rarity = item.rarity;
+			card.dataset.itemId = item.id;
+			card.innerHTML = `
+				<div class="item-img"><img src="${item.image}" alt="" width="150"></div>
+				<div class="item-rarity ${rarityInfo.color}"><div class="item-name">${item.name}</div></div>
+				<div class="item-collection" data-collection="${item.collection}">
+					${collectionInfo.image ? `<img src="${collectionInfo.image}" class="collection-icon" style="width:30px;height:auto;" alt="">` : ''}
+					${collectionInfo.name || item.collection}
+				</div>
+				<div class="item-price om-card-price" style="color:gold">${lowestPrice !== null ? lowestPrice.toFixed(2) + ' ₽' : '— ₽'}</div>
+				<div class="item-stock om-card-lots" style="font-size:12px">Лотов: ${lotsCount}${myReq ? ` <span class="om-active-request-badge">Заявка: ${myReq.price.toFixed(2)} ₽ ×${myReq.remaining}</span>` : ''}</div>
+				<span class="item-count-in-inv om-card-inv" style="${xCount > 0 ? '' : 'color:#ff3737'}">${countInInv} шт. в Инвентаре</span>
+				<button class="find-on-platform-btn" data-id="${item.id}">Найти на платформе</button>
+			`;
+			card.querySelector('.find-on-platform-btn').addEventListener('click', e => {
+				e.stopPropagation();
+				openPlatformModal(item);
+			});
+			setup3DViewer(card.querySelector('.item-img'), item, item);
+			return card;
+		}
+
+		// Update only the dynamic parts of a card without rebuilding it (no jump)
+		function updatePlatformCard(itemId) {
+			const card = document.getElementById('om-card-' + itemId);
+			if (!card) return; // card not visible (filtered out)
+			const item = itemsDatabase.find(i => i.id === itemId);
+			if (!item) return;
+			const lots = onlineMarket.listings[itemId] || [];
+			const lotsCount = lots.length;
+			const lowestPrice = lotsCount > 0 ? Math.min(...lots.map(l => l.price)) : null;
+			const myReq = onlineMarket.buyRequests.find(r => r.itemId === itemId && r.remaining > 0);
+			const xCount = inventory.filter(i => i.id === itemId).length;
+			let countInInv = `${xCount}`;
+			if (xCount > 999) countInInv = `${Math.round(xCount/1000*10)/10}K`;
+			if (xCount > 999000) countInInv = `${Math.round(xCount/1000000*10)/10}M`;
+
+			const priceEl = card.querySelector('.om-card-price');
+			if (priceEl) priceEl.textContent = lowestPrice !== null ? lowestPrice.toFixed(2) + ' ₽' : '— ₽';
+			const lotsEl = card.querySelector('.om-card-lots');
+			if (lotsEl) lotsEl.innerHTML = `Лотов: ${lotsCount}` + (myReq ? ` <span class="om-active-request-badge">Заявка: ${myReq.price.toFixed(2)} ₽ ×${myReq.remaining}</span>` : '');
+			const invEl = card.querySelector('.om-card-inv');
+			if (invEl) { invEl.textContent = countInInv + ' шт. в Инвентаре'; invEl.style.color = xCount > 0 ? '' : '#ff3737'; }
+
+			// Also sync normal-market card price
+			if (lowestPrice !== null) {
+				const nmCard = document.getElementById(itemId);
+				if (nmCard) { const pe = nmCard.querySelector('.item-price'); if (pe) pe.textContent = lowestPrice.toFixed(2) + ' ₽'; }
+				const dbItem = itemsDatabase.find(i => i.id === itemId);
+				if (dbItem) dbItem.price = lowestPrice;
+			}
+		}
+
+		function renderPlatformGrid() {
+			const grid = document.getElementById('om-platform-grid');
+			if (!grid) return;
+			grid.innerHTML = '';
+
+			const items = getFilteredItems();
+			if (!items.length) {
+				grid.innerHTML = '<div style="color:#aaa;padding:30px;text-align:center">Нет предметов</div>';
+				return;
+			}
+
+			// First 30 immediately, rest via sentinel
+			const INITIAL = 30, CHUNK = 20;
+			items.slice(0, INITIAL).forEach(item => {
+				ensureBotsForItem(item.id, item);
+				grid.appendChild(buildPlatformCard(item));
+			});
+			if (items.length > INITIAL) {
+				const sentinel = document.createElement('div');
+				sentinel.style.cssText = 'height:1px;width:100%;grid-column:1/-1;';
+				grid.appendChild(sentinel);
+				let nextIdx = INITIAL;
+				const obs = new IntersectionObserver((entries) => {
+					if (!entries[0].isIntersecting) return;
+					const end = Math.min(nextIdx + CHUNK, items.length);
+					for (let i = nextIdx; i < end; i++) {
+						ensureBotsForItem(items[i].id, items[i]);
+						grid.insertBefore(buildPlatformCard(items[i]), sentinel);
+					}
+					nextIdx = end;
+					if (nextIdx >= items.length) { obs.disconnect(); sentinel.remove(); }
+				}, { rootMargin: '400px' });
+				obs.observe(sentinel);
+			}
+		}
+
+		// ---- Platform Modal ----
+		function openPlatformModal(item) {
+			ensureBotsForItem(item.id, item);
+			const rarityInfo = rarities[item.rarity] || { color: 'none', name: item.rarity };
+			const collectionInfo = collectionsDatabase[item.collection] || { name: item.collection, image: '' };
+			const myReq = onlineMarket.buyRequests.find(r => r.itemId === item.id && r.remaining > 0);
+			const currentCollection = collectionsDatabase[item.collection];
+
+			const overlay = document.createElement('div');
+			overlay.className = 'om-modal-overlay active';
+			overlay.innerHTML = `
+				<div class="om-platform-modal global-ui">
+					<button class="om-modal-close" style="position:absolute;top:12px;right:15px;background:none;border:none;color:#aaa;font-size:26px;cursor:pointer;z-index:2;line-height:1">×</button>
+					<div class="om-modal-body">
+						<div class="om-item-panel">
+							<div class="om-item-img-wrap" style="cursor:pointer" title="Просмотр 3D">
+								<img src="${item.image}" alt="${item.name}" style="width:150px;border-radius:4px;display:block">
+							</div>
+							<div class="item-rarity ${rarityInfo.color} om-item-rarity-badge" style="transform:none;width:auto;margin-top:4px"><div class="om-item-name">${item.name}</div></div>
+							<div class="om-item-collection" style="margin-top:-3px">${currentCollection.image ? `<img src="${currentCollection.image}" class="collection-icon" style="width: 30px; height: auto;">` : ''} ${collectionInfo.name || item.collection}</div>
+							<button class="om-list-btn" style="margin-top:10px">Выставить</button>
+						</div>
+						<div class="om-lots-panel">
+							${myReq ? `
+							<div class="om-active-req-banner" id="om-active-req-banner-${myReq.id}">
+								<span>📋 Активная заявка: ${myReq.price.toFixed(2)} ₽ × ${myReq.remaining} шт.</span>
+								<button class="om-cancel-active-req-btn" data-req-id="${myReq.id}">Отменить</button>
+							</div>` : ''}
+							<div class="om-lots-header">
+								<div class="om-buy-request-area">
+									<span style="font-size:13px;color:#aaa;white-space:nowrap">Заявка на покупку:</span>
+									<input type="number" id="om-req-price" placeholder="Цена ₽" min="0" max="1000000" step="0.01" style="width:110px">
+									<input type="number" id="om-req-count" placeholder="Кол-во" min="1" value="1" style="width:65px">
+									<button class="om-buy-request-btn" id="om-place-req-btn">Разместить</button>
+								</div>
+								<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px">
+						<h3 style="margin:0;font-size:15px">Лоты (${(onlineMarket.listings[item.id] || []).length})</h3>
+						<label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#aaa;cursor:pointer;user-select:none">
+							<input type="checkbox" id="om-filter-mine-${item.id}" style="cursor:pointer"> Мои
+						</label>
+						<label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#aaa;cursor:pointer;user-select:none">
+							<input type="checkbox" id="om-filter-stickers-${item.id}" style="cursor:pointer"> С наклейками
+						</label>
+						<span id="om-filter-hint-${item.id}" style="font-size:11px;color:gold;display:none"></span>
+					</div>
+							</div>
+							<div class="om-lots-list" id="om-lots-list-${item.id}"></div>
+						</div>
+					</div>
+				</div>
+			`;
+			document.body.appendChild(overlay);
+
+			activeModals[item.id] = overlay;
+			// --- Логика авто-обновления количества в баннере ---
+			let updateInterval = null;
+			
+			function startBannerUpdate() {
+				if (myReq) {
+					myReq.bannerElement = overlay.querySelector(`#om-active-req-banner-${myReq.id}`);
+					
+					updateInterval = setInterval(() => {
+						const currentReq = onlineMarket.buyRequests.find(r => r.id === myReq.id);
+						if (!currentReq || currentReq.remaining <= 0) {
+							if (myReq.bannerElement && document.body.contains(myReq.bannerElement)) {
+								myReq.bannerElement.style.display = 'none';
+							}
+							if (!currentReq) {
+								clearInterval(updateInterval);
+								updateInterval = null;
+							}
+							return;
+						}
+						
+						if (currentReq.bannerElement && document.body.contains(currentReq.bannerElement)) {
+							const span = currentReq.bannerElement.querySelector('span');
+							if (span) {
+								span.textContent = `📋 Активная заявка: ${currentReq.price.toFixed(2)} ₽ × ${currentReq.remaining} шт.`;
+							}
+							if (currentReq.bannerElement.style.display === 'none') {
+								currentReq.bannerElement.style.display = '';
+							}
+						} else {
+							clearInterval(updateInterval);
+							updateInterval = null;
+						}
+					}, 1000);
+				}
+			}
+			
+			startBannerUpdate();
+
+			// Close
+			overlay.querySelector('.om-modal-close').addEventListener('click', () => {
+				if (updateInterval) clearInterval(updateInterval); delete activeModals[item.id]; // Очищаем при закрытии
+				overlay.remove();
+			});
+			
+			overlay.addEventListener('click', e => { 
+				if (e.target === overlay) {
+					if (updateInterval) clearInterval(updateInterval); delete activeModals[item.id];
+					overlay.remove(); 
+				}
+			});
+
+			// 3D viewer – attach to the image wrapper, NOT the list-btn
+			const imgWrap = overlay.querySelector('.om-item-img-wrap');
+			setup3DViewer(imgWrap, item, item);
+
+			// List button – stopPropagation so it doesn't bubble to imgWrap
+			overlay.querySelector('.om-list-btn').addEventListener('click', e => {
+				e.stopPropagation();
+				openInventorySelectModal(item, overlay);
+			});
+
+			// Cancel active request banner
+			const cancelReqBtn = overlay.querySelector('.om-cancel-active-req-btn');
+			if (cancelReqBtn) {
+				cancelReqBtn.addEventListener('click', e => {
+					e.stopPropagation();
+					const reqId = cancelReqBtn.dataset.reqId;
+					const req = onlineMarket.buyRequests.find(r => r.id === reqId);
+					if (req) {
+						if (updateInterval) clearInterval(updateInterval); // Останавливаем обновление
+						
+						//balance += req.price * req.remaining;
+						//balance = Math.round(balance * 100) / 100;
+						balanceAmount.textContent = balance.toLocaleString('ru-RU');
+						UpdateStatrackFrame && UpdateStatrackFrame(balance);
+						if (req.timerId) clearTimeout(req.timerId);
+						onlineMarket.buyRequests = onlineMarket.buyRequests.filter(r => r.id !== reqId);
+						showToast('Заявка отменена');
+						overlay.remove();
+						openPlatformModal(item);
+						updatePlatformCard(item.id);
+					}
+				});
+			}
+
+			// Place buy request
+			overlay.querySelector('#om-place-req-btn').addEventListener('click', () => {
+				const priceInput = overlay.querySelector('#om-req-price');
+				const countInput = overlay.querySelector('#om-req-count');
+				const price = Math.round((parseFloat(priceInput.value) || 0) * 100) / 100;
+				const count = Math.max(1, parseInt(countInput.value) || 1);
+
+				if (price < 0 || price > 1000000) { showToast('Цена от 0 до 1 000 000 ₽', true); return; }
+				if (balance < price * count) { showToast('Недостаточно средств', true); return; }
+
+				//balance -= price * count;
+				//balance = Math.round(balance * 100) / 100;
+				balanceAmount.textContent = balance.toLocaleString('ru-RU');
+
+				const reqId = 'req_buy_' + (++onlineMarket.reqCounter);
+				const req = { id: reqId, itemId: item.id, item, price, quantity: count, remaining: count, timestamp: Date.now(), timerId: null, expectedAt: null };
+				onlineMarket.buyRequests.push(req);
+
+				showToast(`Заявка: ${count}× ${item.name} по ${price.toFixed(2)} ₽`);
+				priceInput.value = '';
+				countInput.value = '1';
+
+				scheduleRequest(req, overlay, item);
+				renderLotsPanel(item.id, overlay);
+				updatePlatformCard(item.id);
+				
+				// После размещения новой заявки, обновляем модальное окно, чтобы появился баннер
+				if (updateInterval) clearInterval(updateInterval);
+				overlay.remove();
+				openPlatformModal(item);
+			});
+
+			renderLotsPanel(item.id, overlay);
+
+			// Wire checkbox filters
+			['mine','stickers'].forEach(type => {
+				const cb = overlay.querySelector(`#om-filter-${type}-${item.id}`);
+				if (cb) cb.addEventListener('change', () => renderLotsPanel(item.id, overlay));
+			});
+		}
+
+		function renderLotsPanel(itemId, overlay) {
+			const list = overlay.querySelector(`#om-lots-list-${itemId}`);
+			if (!list) return;
+			const header = overlay.querySelector('.om-lots-header h3');
+			let lots = onlineMarket.listings[itemId] || [];
+			lots = lots.filter(lot => {
+				const itemExists = itemsDatabase.find(i => i.id === itemId);
+				return itemExists !== undefined;
+			});
+			if (onlineMarket.listings[itemId]) {
+				onlineMarket.listings[itemId] = lots;
+				if (lots.length === 0) {
+					delete onlineMarket.listings[itemId];
+				}
+			}
+			if (header) header.textContent = `Лоты (${lots.length})`;
+			const headerContainer = overlay.querySelector('.om-lots-header');
+			if (headerContainer && !headerContainer.querySelector('#om-cancel-all-my-lots-btn')) {
+				const myLotsCount = lots.filter(l => l.isMine).length;
+				if (myLotsCount > 0) {
+					const cancelAllBtn = document.createElement('button');
+					cancelAllBtn.id = 'om-cancel-all-my-lots-btn';
+					cancelAllBtn.textContent = `× Все мои (${myLotsCount})`;
+					cancelAllBtn.style.cssText = 'margin-left:10px;padding:4px 10px;background:#f44336;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;';
+					cancelAllBtn.addEventListener('click', (e) => {
+						e.stopPropagation();
+						const myLots = lots.filter(l => l.isMine);
+						myLots.forEach(lot => {
+							if (lot.sellReqTimerId) clearTimeout(lot.sellReqTimerId);
+							if (lot.inventoryItem) inventory.push(lot.inventoryItem);
+							onlineMarket.sellRequests = onlineMarket.sellRequests.filter(r => r.lotId !== lot.id);
+						});
+						onlineMarket.listings[itemId] = lots.filter(l => !l.isMine);
+						if (onlineMarket.listings[itemId]?.length === 0) delete onlineMarket.listings[itemId];
+						
+						updateInventory();
+						saveGameState();
+						showToast(`Отменено лотов: ${myLotsCount}`);
+						updatePlatformCard(itemId);
+						updateNormalMarketCardPrice(itemId);
+						renderLotsPanel(itemId, overlay);
+						renderMyRequests();
+					});
+					header.appendChild(cancelAllBtn);
+				}
+			}
+			
+			// --- Checkbox filters (visual only) ---
+			const cbMine = overlay.querySelector(`#om-filter-mine-${itemId}`);
+			const cbStickers = overlay.querySelector(`#om-filter-stickers-${itemId}`);
+			const hintEl = overlay.querySelector(`#om-filter-hint-${itemId}`);
+			const filterMine = cbMine?.checked || false;
+			const filterStickers = cbStickers?.checked || false;
+
+			let displayLots = [...lots];
+			if (filterMine) displayLots = displayLots.filter(l => l.isMine);
+			if (filterStickers) {
+				const hasStk = l => (l.stickers?.length > 0) || (l.inventoryItem?.stickers?.length > 0);
+				displayLots = displayLots.filter(hasStk);
+			}
+
+			if (hintEl) {
+				if ((filterMine || filterStickers) && displayLots.length > 0) {
+					const sortedDisplay = [...lots].sort((a,b) => a.price - b.price);
+					hintEl.textContent = `Первый лот стоит: ${sortedDisplay[0].price.toFixed(2)} ₽`;
+					hintEl.style.display = '';
+				} else {
+					hintEl.style.display = 'none';
+				}
+			}
+
+			if (!lots.length) { 
+				list.innerHTML = '<div class="om-empty-lots">Нет активных лотов</div>'; 
+				return; 
+			}
+			if (!displayLots.length) {
+				list.innerHTML = '<div class="om-empty-lots">Нет лотов по фильтру</div>';
+				return;
+			}
+			list.innerHTML = '';
+			displayLots.sort((a, b) => {
+				if (a.price !== b.price) return a.price - b.price;
+				const aHas = a.stickers?.length > 0 ? 1 : 0, bHas = b.stickers?.length > 0 ? 1 : 0;
+				return aHas - bHas;
+			});
+			displayLots.forEach(lot => {
+				const sellReq = lot.isMine ? onlineMarket.sellRequests.find(r => r.lotId === lot.id) : null;
+				const waitStr = sellReq?.expectedSellAt ? formatDelay(sellReq.expectedSellAt - Date.now()) : '';
+
+				// Stickers display (only for weapons supporting stickers)
+				const lotItem = itemsDatabase.find(i => i.id === itemId);
+				const canHaveStickers = lotItem && !lotItem.isCase && !lotItem.isCharm && !lotItem.isSticker
+					&& !lotItem.isItemWithoutSlot
+					&& !lotItem.name.endsWith('Fragment')
+					&& !lotItem.name.startsWith('Graffiti')
+					&& !lotItem.name.startsWith('Medal');
+				const lotStickers = (canHaveStickers && lot.stickers && lot.stickers.length > 0) ? lot.stickers : null;
+				// For player's own lot, read stickers from inventoryItem too
+				const invStickers = (canHaveStickers && lot.inventoryItem?.stickers?.length) ? lot.inventoryItem.stickers : null;
+				const displayStickers = lotStickers || invStickers;
+				const stickersHTML = displayStickers
+					? `<div style="transform: translate(100px, 15px);display:flex;gap:2px;margin-top: -30px;flex-wrap:wrap">${displayStickers.map(s => `<img src="${s.image}" title="${s.name}" style="width:auto;height:30px;border-radius:2px;background:#1a1a1a;">`).join('')}</div>`
+					: '';
+
+				const div = document.createElement('div');
+				div.className = 'om-lot-item ' + (lot.isMine ? 'my-lot' : 'bot-lot');
+				div.innerHTML = `
+					<div>
+						<div class="om-lot-price">${lot.price.toFixed(2)} ₽ ${stickersHTML}</div>
+						<div class="om-lot-seller">${lot.isMine ? '👤 Мой лот' : '🤖 ' + lot.seller}</div>
+						${lot.isMine && waitStr ? `<div class="om-lot-timer">⏳ Ожид. продажи: ${waitStr}</div>` : ''}
+					</div>
+					${lot.isMine
+						? `<button class="om-lot-cancel-btn">Отменить</button>`
+						: `<button class="om-lot-buy-btn">Купить</button>`}
+				`;
+				if (lot.isMine) {
+					div.querySelector('.om-lot-cancel-btn').addEventListener('click', () => {
+						cancelMyListing(lot.id, itemId, lot);
+						// После отмены одного лота — обновляем кнопку "Все мои"
+						renderLotsPanel(itemId, overlay);
+					});
+				} else {
+					div.querySelector('.om-lot-buy-btn').addEventListener('click', () => {
+						buyLotDirectly(lot, itemId, overlay);
+					});
+				}
+				list.appendChild(div);
+			});
+		}
+
+		function buyLotDirectly(lot, itemId, overlay) {
+			if (balance < lot.price) { 
+				showToast('Недостаточно средств!', true); 
+				return; 
+			}
+			balance -= lot.price;
+			balance = Math.round(balance * 100) / 100;
+			balanceAmount.textContent = balance.toLocaleString('ru-RU');
+			UpdateStatrackFrame && UpdateStatrackFrame(balance);
+			if (lot.isMine) {
+				onlineMarket.sellRequests = onlineMarket.sellRequests.map(r =>
+					r.lotId === lot.id ? { ...r, status: 'sold' } : r
+				);
+				onlineMarket.sellRequests = onlineMarket.sellRequests.filter(r => r.status !== 'sold');
+			}
+
+			if (onlineMarket.listings[itemId]) {
+				onlineMarket.listings[itemId] = onlineMarket.listings[itemId].filter(l => l.id !== lot.id);
+				if (onlineMarket.listings[itemId].length === 0) {
+					delete onlineMarket.listings[itemId];
+				}
+			}
+
+			// Добавляем предмет в инвентарь
+			const item = itemsDatabase.find(i => i.id === itemId);
+			if (item) {
+				let invItem;
+				if (lot.inventoryItem) {
+					// Player's listed item — take it exactly as is (stickers preserved)
+					invItem = structuredClone(lot.inventoryItem);
+				} else {
+					// Bot lot — build item, use lot.stickers if present
+					invItem = {
+						id: item.id,
+						name: item.name,
+						rarity: item.rarity,
+						image: item.image
+					};
+					if (lot.stickers && lot.stickers.length > 0) {
+						invItem.stickers = lot.stickers;
+					}
+				}
+				inventory.push(invItem);
+				updateInventory(); 
+				saveGameState();
+				showItemToast('bought', item, lot.price);
+				setTimeout(() => { updatePlatformCard(itemId); updateNormalMarketCardPrice(itemId); }, 150);
+			}
+			renderMyRequests();
+			updatePlatformCard(itemId);
+			refreshOpenModal(itemId);
+		}
+
+		function cancelMyListing(lotId, itemId, lot) {
+			if (lot.sellReqTimerId) clearTimeout(lot.sellReqTimerId);
+			if (onlineMarket.listings[itemId]) {
+				onlineMarket.listings[itemId] = onlineMarket.listings[itemId].filter(l => l.id !== lotId);
+				if (onlineMarket.listings[itemId].length === 0) {
+					delete onlineMarket.listings[itemId];
+				}
+			}
+			onlineMarket.sellRequests = onlineMarket.sellRequests.filter(r => r.status !== 'sold');
+			if (lot.inventoryItem) {
+				inventory.push(lot.inventoryItem);
+				updateInventory(); 
+				saveGameState();
+			}
+			showToast('Лот отменён, предмет возвращён в инвентарь');
+			updatePlatformCard(itemId);
+			updateNormalMarketCardPrice(itemId);
+			refreshOpenModal(itemId);
+			renderMyRequests();
+			
+			// === ИНТЕГРАЦИЯ: проверяем авто-покупку после отмены лота ===
+			setTimeout(() => processBotAutoBuy(itemId), 50);
+		}
+
+		// ---- Inventory Select Modal (fixed: allows fragments, no 3D trigger) ----
+		function openInventorySelectModal(item, parentOverlay) {
+			const matchingItems = inventory
+				.map((inv, idx) => ({ ...inv, originalIndex: idx }))
+				.filter(invItem => invItem.id === item.id && !invItem.isRental);
+			
+			if (!matchingItems.length) {
+				showToast(`У вас нет предметов "${item.name}" для выставления`, true);
+				return;
+			}
+
+			const overlay2 = document.createElement('div');
+			overlay2.className = 'om-modal-overlay active';
+			overlay2.style.zIndex = '10001';
+			
+			// Добавляем кнопку "Выделить всё" в заголовок модального окна
+			overlay2.innerHTML = `
+				<div class="om-inv-select-modal global-ui">
+					<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+						<h3 style="margin:0;">Выберите предметы для выставления</h3>
+						<button id="om-inv-select-all" style="padding:6px 12px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Выделить всё</button>
+					</div>
+					<p style="color:#aaa;font-size:13px;margin-bottom:12px">Доступно: ${matchingItems.length} шт.</p>
+					<div class="om-inv-select-grid" id="om-inv-select-grid-inner"></div>
+					<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
+						<span id="om-sel-count" style="color:#aaa;font-size:13px">Выбрано: 0</span>
+						<div style="display:flex;gap:10px">
+							<button class="om-btn-cancel" id="om-inv-cancel">Отмена</button>
+							<button class="om-btn-confirm" id="om-inv-confirm" disabled>Далее</button>
+						</div>
+					</div>
+				</div>
+			`;
+			document.body.appendChild(overlay2);
+
+			const grid = overlay2.querySelector('#om-inv-select-grid-inner');
+			const selectedIndices = new Set();
+			const selectAllBtn = overlay2.querySelector('#om-inv-select-all');
+			const countSpan = overlay2.querySelector('#om-sel-count');
+			const confirmBtn = overlay2.querySelector('#om-inv-confirm');
+
+			// Функция обновления состояния кнопки "Выделить всё"
+			function updateSelectAllButton() {
+				const allSelected = selectedIndices.size === matchingItems.length;
+				selectAllBtn.textContent = allSelected ? 'Снять выделение' : 'Выделить всё';
+				selectAllBtn.style.background = allSelected ? '#f44336' : '#2196F3';
+			}
+
+			// Функция обновления счётчика и кнопки подтверждения
+			function updateSelectionUI() {
+				countSpan.textContent = `Выбрано: ${selectedIndices.size}`;
+				confirmBtn.disabled = !selectedIndices.size;
+				updateSelectAllButton();
+			}
+
+			// Рендер элементов инвентаря
+			matchingItems.forEach(({ originalIndex, ...inv }) => {
+				const div = document.createElement('div');
+				div.className = 'om-inv-item';
+				div.dataset.index = originalIndex;
+				
+				const rarityInfo = rarities[inv.rarity] || { color: 'none', colorHex: '#aaa', name: inv.rarity };
+
+				// Build sticker/charm slots HTML (same as inventory)
+				const stickersList = Array.isArray(inv.stickers) ? [...inv.stickers].reverse() : [];
+				const slotsHTMLSell = `<div class="item-slots" style="pointer-events:none">
+					${[4,3,2,1].map(i => {
+						const s = stickersList[i-1];
+						const sImg = s ? (s.image || 'images/none_item.png') : '';
+						return `<div class="slot sticker-slot">${sImg ? `<img src="${sImg}" width="18" style="opacity:0.9">` : ''}</div>`;
+					}).join('')}
+					<div class="slot charm-slot">
+						${inv.charm ? `<img src="${inv.charm.image || 'images/none_item.png'}" width="18" style="opacity:0.9">` : ''}
+					</div>
+				</div>`;
+
+				div.innerHTML = `
+					<div class="selected-badge">✓</div>
+					<img src="${inv.image || item.image}" alt="" style="width:70px;border-radius:3px;pointer-events:none">
+					${slotsHTMLSell}
+					<div class="inv-item-name">${inv.name}</div>
+					<div style="font-size:9px;color:${rarityInfo.colorHex};margin-top:2px">${rarityInfo.name}</div>
+				`;
+				
+				div.addEventListener('click', () => {
+					if (selectedIndices.has(originalIndex)) {
+						selectedIndices.delete(originalIndex);
+						div.classList.remove('selected');
+					} else {
+						selectedIndices.add(originalIndex);
+						div.classList.add('selected');
+					}
+					updateSelectionUI();
+				});
+				
+				grid.appendChild(div);
+			});
+
+			// Обработчик кнопки "Выделить всё / Снять выделение"
+			selectAllBtn.addEventListener('click', () => {
+				if (selectedIndices.size === matchingItems.length) {
+					// Снять выделение со всех
+					selectedIndices.clear();
+					grid.querySelectorAll('.om-inv-item').forEach(el => el.classList.remove('selected'));
+				} else {
+					// Выделить все
+					matchingItems.forEach(({ originalIndex }) => {
+						selectedIndices.add(originalIndex);
+						const el = grid.querySelector(`.om-inv-item[data-index="${originalIndex}"]`);
+						if (el) el.classList.add('selected');
+					});
+				}
+				updateSelectionUI();
+			});
+
+			overlay2.querySelector('#om-inv-cancel').addEventListener('click', () => overlay2.remove());
+			overlay2.addEventListener('click', e => { if (e.target === overlay2) overlay2.remove(); });
+			
+			overlay2.querySelector('#om-inv-confirm').addEventListener('click', () => {
+				if (!selectedIndices.size) return;
+				overlay2.remove();
+				openPriceSetModal(item, Array.from(selectedIndices), parentOverlay);
+			});
+		}
+
+		// ---- Price Set Modal ----
+		function openPriceSetModal(item, inventoryIndices, parentOverlay) {
+			const maxPrice = Math.min(1000000, item.price * 2);
+			const hardMaxPrice = 1000000;
+
+			// Average sticker value across selected items (for display)
+			const avgStickersBonus = (() => {
+				if (!inventoryIndices.length) return 0;
+				const total = inventoryIndices.reduce((sum, idx) => {
+					return sum + getStickerValueAdjustment(inventory[idx]?.stickers, 0.20);
+				}, 0);
+				return Math.round((total / inventoryIndices.length) * 100) / 100;
+			})();
+
+			const overlay3 = document.createElement('div');
+			overlay3.className = 'om-modal-overlay active';
+			overlay3.style.zIndex = '10002';
+			overlay3.innerHTML = `
+				<div class="om-price-modal">
+					<h3>Установить цену</h3>
+					<p>Предмет: <strong>${item.name}</strong></p>
+					<p>Количество: <strong>${inventoryIndices.length} шт.</strong></p>
+					<p>Рыночная цена: <span style="color:gold">${item.price.toFixed(2)} ₽</span></p>
+					<p>Рекоменд. макс.: <span style="color:gold">${maxPrice.toFixed(2)} ₽</span> (+100%)</p>
+					${avgStickersBonus > 0 ? `<p style="color:#4CAF50;font-size:12px">🏷️ К цене добавится стоимость наклеек ×20% (~<b>+${avgStickersBonus.toFixed(2)} ₽</b> в среднем). Итог ≤ 1 000 000 ₽</p>` : ''}
+					<input class="om-price-input" id="om-sell-price" type="number" min="0.01" max="${hardMaxPrice}" step="0.01" placeholder="Цена за 1 шт.">
+					<div class="om-price-error" id="om-price-err"></div>
+					<div id="om-sell-time-estimate" style="color:#aaa;font-size:12px;margin-top:6px"></div>
+					<div class="om-modal-actions">
+						<button class="om-btn-cancel" id="om-price-cancel">Отмена</button>
+						<button class="om-btn-confirm" id="om-price-confirm">Выставить</button>
+					</div>
+				</div>
+			`;
+			document.body.appendChild(overlay3);
+
+			const priceInput = overlay3.querySelector('#om-sell-price');
+			const errEl = overlay3.querySelector('#om-price-err');
+			const timeEl = overlay3.querySelector('#om-sell-time-estimate');
+
+			const validate = () => {
+				const v = parseFloat(priceInput.value);
+				if (!v || v <= 0) { 
+					errEl.textContent = 'Цена > 0'; 
+					timeEl.textContent = ''; 
+					return false; 
+				}
+				if (v > hardMaxPrice) { 
+					errEl.textContent = 'Не более 1 000 000 ₽'; 
+					timeEl.textContent = ''; 
+					return false; 
+				}
+				
+				// Разрешаем цены выше maxPrice, но с предупреждением
+				if (v > maxPrice) {
+					errEl.textContent = `⚠️ Цена выше рекомендованной (${maxPrice.toFixed(2)} ₽). Лот не будет куплен ботами и заявками.`;
+					errEl.style.color = '#ff9800';
+				} else {
+					errEl.textContent = '';
+					errEl.style.color = '#f44336';
+				}
+				
+				const delay = calcSellDelay(v, item);
+				if (v > maxPrice) {
+					timeEl.textContent = '⚠️ Лоты выше макс. цены не покупаются ботами и заявками — только игроками вручную';
+					timeEl.style.color = '#ff9800';
+				} else if (delay === Infinity) {
+					timeEl.textContent = '⛔ Эта цена не продастся — переставьте дешевле';
+					timeEl.style.color = '#f44336';
+				} else {
+					timeEl.textContent = `⏳ Ожидаемое время продажи: ${formatDelay(delay)}`;
+					timeEl.style.color = '#aaa';
+				}
+				return true;
+			};
+			
+			priceInput.addEventListener('input', validate);
+			priceInput.addEventListener('change', validate);
+
+			overlay3.querySelector('#om-price-cancel').addEventListener('click', () => overlay3.remove());
+			overlay3.addEventListener('click', e => { if (e.target === overlay3) overlay3.remove(); });
+
+			overlay3.querySelector('#om-price-confirm').addEventListener('click', () => {
+				if (!validate()) return;
+				const basePrice = Math.round(parseFloat(priceInput.value) * 100) / 100;
+				
+				overlay3.remove();
+
+				if (!onlineMarket.listings[item.id]) onlineMarket.listings[item.id] = [];
+				const sortedIndices = [...inventoryIndices].sort((a, b) => b - a);
+				const invItems = sortedIndices.map(idx => {
+					const copy = JSON.parse(JSON.stringify(inventory[idx]));
+					if (copy.charm) {
+						const charmDb = itemsDatabase.find(db => db.id === copy.charm.id);
+						if (charmDb) {
+							inventory.push({ id: charmDb.id, name: charmDb.name, rarity: charmDb.rarity, image: charmDb.image });
+						}
+						delete copy.charm;
+					}
+					return copy;
+				});
+				sortedIndices.forEach(idx => inventory.splice(idx, 1));
+
+				invItems.forEach(invItem => {
+					const lotId = 'lot_my_' + Date.now() + '_' + Math.random();
+					const sellReqId = 'req_sell_' + (++onlineMarket.reqCounter);
+					const stickerBonus = getStickerValueAdjustment(invItem.stickers, 0.20);
+					const PriceForDelay = Math.min(1000000, Math.round(basePrice * 100) / 100);
+					const finalPrice = Math.min(1000000, Math.round((basePrice + stickerBonus) * 100) / 100);
+					const delay = (PriceForDelay > maxPrice) ? Infinity : calcSellDelay(PriceForDelay, item);
+					const expectedAt = delay === Infinity ? null : Date.now() + delay;
+
+					let timerId = null;
+					if (delay !== Infinity) {
+						timerId = setTimeout(() => {
+							const stillListed = (onlineMarket.listings[item.id] || []).find(l => l.id === lotId);
+							if (!stillListed) return;
+							onlineMarket.listings[item.id] = onlineMarket.listings[item.id].filter(l => l.id !== lotId);
+							if (!onlineMarket.listings[item.id]?.length) delete onlineMarket.listings[item.id];
+							onlineMarket.sellRequests = onlineMarket.sellRequests.filter(r => r.lotId !== lotId);
+							balance += finalPrice;
+							balance = Math.round(balance * 100) / 100;
+							balanceAmount.textContent = balance.toLocaleString('ru-RU');
+							UpdateStatrackFrame && UpdateStatrackFrame(balance);
+							saveGameState();
+							showItemToast('sold', item, finalPrice);
+							botRelistAfterSale(item.id, item, finalPrice);
+							updatePlatformCard(item.id);
+							updateNormalMarketCardPrice(item.id);
+							renderMyRequests();
+						}, delay);
+					}
+
+					const lot = {
+						id: lotId,
+						price: finalPrice,
+						isMine: true,
+						seller: 'Вы',
+						inventoryItem: invItem,
+						sellReqTimerId: timerId,
+						aboveMaxPrice: finalPrice > maxPrice
+					};
+					onlineMarket.listings[item.id].push(lot);
+					onlineMarket.sellRequests.push({
+						id: sellReqId, lotId, itemId: item.id, item, price: finalPrice,
+						status: 'active', listedAt: Date.now(), expectedSellAt: expectedAt
+					});
+				});
+
+				onlineMarket.listings[item.id].sort((a, b) => a.price - b.price);
+				updateInventory(); saveGameState();
+				showItemToast('listed', item);
+
+				updatePlatformCard(item.id);
+				updateNormalMarketCardPrice(item.id);
+				refreshOpenModal(item.id);
+				processSellListings(item.id, parentOverlay);
+			});
+		}
+		
+		// ---- Helper: Dynamic Bot Price Adjustment ----
+		function adjustBotPrices(itemId, reqPrice) {
+			const lots = onlineMarket.listings[itemId];
+			if (!lots || lots.length === 0) return;
+			const botLots = lots.filter(l => !l.isMine);
+			if (botLots.length === 0) return;
+			
+			const CHANGE_PROBABILITY = 0.4; 
+			const GREEDY_THRESHOLD_MULT = 0.8; 
+			const MAX_PRICE_INCREASE = 0.125; 
+			const DUMPING_THRESHOLD_MULT = 1.25; 
+			const MAX_PRICE_DECREASE = 0.10; 
+			const NORMAL_NOISE_PERCENT = 0.04; 
+			
+			botLots.forEach(lot => {
+				if (Math.random() > CHANGE_PROBABILITY) return;
+				const currentPrice = lot.price;
+				let changePercent = 0;
+				
+				if (currentPrice < reqPrice * GREEDY_THRESHOLD_MULT) {
+					changePercent = Math.random() * MAX_PRICE_INCREASE;
+				} 
+				else if (currentPrice > reqPrice && currentPrice < reqPrice * DUMPING_THRESHOLD_MULT) {
+					changePercent = -(Math.random() * MAX_PRICE_DECREASE);
+				} 
+				else {
+					changePercent = (Math.random() * (NORMAL_NOISE_PERCENT * 2)) - NORMAL_NOISE_PERCENT;
+				}
+				
+				let newPrice = currentPrice * (1 + changePercent);
+				newPrice = Math.max(0.01, Math.min(1000000, newPrice));
+				lot.price = Math.round(newPrice * 100) / 100;
+			});
+			
+			lots.sort((a, b) => a.price - b.price);
+			
+			// === ИНТЕГРАЦИЯ: проверяем авто-покупку после изменения цен ===
+			processBotAutoBuy(itemId);
+			
+			refreshOpenModal(itemId);
+			balanceAmount.textContent = balance.toLocaleString('ru-RU');
+		}
+		
+		function isReqStillActive(req) {
+			return onlineMarket.buyRequests.find(r => r.id === req.id) !== undefined && req.remaining > 0;
+		}
+
+		// ---- Buy request processing ----
+		function scheduleRequest(req, overlay, item) {
+			if (!isReqStillActive(req)) {
+				if (req.timerId) clearTimeout(req.timerId);
+				return;
+			}
+
+			if (req.timerId) { clearTimeout(req.timerId); req.timerId = null; }
+
+			adjustBotPrices(req.itemId, req.price);
+
+			const lots = (onlineMarket.listings[req.itemId] || []).sort((a, b) => a.price - b.price);
+			const cheapest = lots[0];
+			if (cheapest && req.price >= cheapest.price) {
+				processBuyRequest(req, overlay, item);
+				return;
+			}
+
+			if (!lots.length) { ensureBotsForItem(req.itemId, item); }
+			let delay = 1000;
+			if (cheapest) {
+				const diff = (cheapest.price - req.price) / cheapest.price; // 0.0 ... 1.0+
+				if (diff <= 0.40) delay = 50 + Math.random() * 150;       // 0.05-0.2 сек
+				else if (diff <= 0.55) delay = 200 + Math.random() * 1500; // 0.2-1.7 сек
+				else if (diff <= 0.70) delay = 1700 + Math.random() * 3300; // 1.7-5 сек
+				else if (diff <= 0.80) delay = 5000 + Math.random() * 10000; // 5-15 сек
+				else if (diff <= 0.90) delay = 15000 + Math.random() * 45000; // 15-60 сек
+				else delay = 60000 + Math.random() * 300000;                // 60-360 сек (для >90% разницы)
+			}
+			req.expectedAt = Date.now() + delay;
+			req.timerId = setTimeout(() => {
+				processBuyRequest(req, overlay, item, true); // forceFakeBuy
+			}, delay);
+			renderMyRequests();
+			saveGameState();
+		}
+		
+		// Бот автоматически покупает первый пользовательский лот, если на рынке нет бот-лотов
+		function processBotAutoBuy(itemId) {
+			const item = itemsDatabase.find(i => i.id === itemId);
+			if (!item) return;
+			
+			const lots = onlineMarket.listings[itemId] || [];
+			if (lots.length === 0) return;
+			
+			const botLots = lots.filter(l => !l.isMine);
+			const userLots = lots.filter(l => l.isMine).sort((a, b) => a.price - b.price);
+			
+			// Действуем только если НЕТ бот-лотов, но ЕСТЬ пользовательские
+			if (botLots.length === 0 && userLots.length > 0) {
+				const targetLot = userLots[0]; // самый дешёвый пользовательский лот
+				const buyPrice = targetLot.price;
+				
+				// === НАЧИСЛЕНИЕ БАЛАНСА ИГРОКУ ===
+				balance += buyPrice;
+				balance = Math.round(balance * 100) / 100;
+				balanceAmount.textContent = balance.toLocaleString('ru-RU');
+				UpdateStatrackFrame && UpdateStatrackFrame(balance);
+				
+				// Обновляем заявку на продажу: помечаем как проданную
+				const sellReq = onlineMarket.sellRequests.find(r => r.lotId === targetLot.id);
+				if (sellReq) {
+					sellReq.status = 'sold';
+					if (sellReq.timerId) clearTimeout(sellReq.timerId);
+				}
+				onlineMarket.sellRequests.pop(r => r.lotId == targetLot.id);
+				
+				// Удаляем лот из списка активных
+				onlineMarket.listings[itemId] = lots.filter(l => l.id !== targetLot.id);
+				if (onlineMarket.listings[itemId]?.length === 0) {
+					delete onlineMarket.listings[itemId];
+				}
+				
+				// Отменяем таймер авто-продажи, если он был
+				if (targetLot.sellReqTimerId) clearTimeout(targetLot.sellReqTimerId);
+				
+				// Сохраняем состояние и показываем уведомление
+				saveGameState();
+				showItemToast('sold', item, buyPrice);
+				
+				// === БОТ ВЫСТАВЛЯЕТ ЛОТ ПО ТОЙ ЖЕ ЦЕНЕ ===
+				if (!onlineMarket.listings[itemId]) onlineMarket.listings[itemId] = [];
+				onlineMarket.listings[itemId].push({
+					id: 'bot_auto_' + Date.now() + '_' + Math.random(),
+					price: buyPrice, // та же цена, за которую купил
+					isMine: false,
+					seller: 'Bot #' + (Math.floor(Math.random() * 9000) + 1000)
+				});
+				onlineMarket.listings[itemId].sort((a, b) => a.price - b.price);
+				
+				// Обновляем UI
+				updateInventory();
+				updatePlatformCard(itemId);
+				updateNormalMarketCardPrice(itemId);
+				refreshOpenModal(itemId);
+				renderMyRequests();
+			}
+		}
+
+		function processBuyRequest(req, overlay, item, forceRequestBuy = false) {
+			if (!isReqStillActive(req)) {
+				if (req.timerId) clearTimeout(req.timerId);
+				return;
+			}
+
+			adjustBotPrices(req.itemId, req.price);
+
+			const lots = (onlineMarket.listings[req.itemId] || []).sort((a, b) => a.price - b.price);
+			
+			// === ФИЛЬТР: исключаем лоты дороже рекомендованного максимума ===
+			const itemDb = itemsDatabase.find(i => i.id === req.itemId);
+			const itemMaxPrice = itemDb ? Math.min(1000000, itemDb.price * 2) : 1000000;
+			
+			const buyableLots = lots.filter(lot => {
+				// Пропускаем лоты, которые дороже макс. цены (их покупают только игроки вручную)
+				if (lot.aboveMaxPrice || lot.price > itemMaxPrice) return false;
+				return true;
+			});
+			
+			const cheapest = buyableLots[0];
+
+			// === СЦЕНАРИЙ 1: Покупаем реальный лот (ботовский или игрока) ===
+			if (!forceRequestBuy && cheapest && req.price >= cheapest.price) {
+				if (req.timerId) { clearTimeout(req.timerId); req.timerId = null; }
+				
+				const paidPrice = cheapest.price;
+				
+				// === ИСПРАВЛЕНИЕ ЛОГИКИ КОПИРОВАНИЯ ПРЕДМЕТА ===
+				let purchasedItem;
+				
+				if (cheapest.inventoryItem) {
+					purchasedItem = structuredClone(cheapest.inventoryItem);
+				} else {
+					purchasedItem = {
+						id: item.id,
+						name: item.name,
+						rarity: item.rarity,
+						image: item.image,
+						collection: item.collection || '',
+						float: item.float || 0
+					};
+					if (cheapest.stickers && cheapest.stickers.length > 0) {
+						purchasedItem.stickers = structuredClone(cheapest.stickers);
+					}
+				}
+					
+				if (onlineMarket.listings[req.itemId]) {
+					onlineMarket.listings[req.itemId] = onlineMarket.listings[req.itemId].filter(l => l.id !== cheapest.id);
+					if (onlineMarket.listings[req.itemId].length === 0) delete onlineMarket.listings[req.itemId];
+				}
+				onlineMarket.sellRequests = onlineMarket.sellRequests.filter(r => r.lotId !== cheapest.id);
+				if (isReqStillActive(req) && balance >= paidPrice) {
+					inventory.push(purchasedItem);
+					balance -= paidPrice;
+					balance = Math.round(balance * 100) / 100;
+					req.remaining--;
+					showItemToast('bought', purchasedItem, paidPrice);
+				} else {
+					req.remaining = 0;
+					showToast('Заявка отменена или недостаточно средств', true);
+				}
+				balanceAmount.textContent = balance.toLocaleString('ru-RU');
+				UpdateStatrackFrame && UpdateStatrackFrame(balance);
+				debouncedUpdateInventory();
+				updatePlatformCard(req.itemId);
+				updateNormalMarketCardPrice(req.itemId);
+				renderMyRequests();
+				refreshOpenModal(req.itemId);
+				saveGameState();
+				
+				if (isReqStillActive(req) && req.remaining > 0) {
+					setTimeout(() => scheduleRequest(req, overlay, item), 10);
+				} else {
+					onlineMarket.buyRequests = onlineMarket.buyRequests.filter(r => r.id !== req.id);
+				}
+				return;
+			}
+
+			// === СЦЕНАРИЙ 2: Покупаем "по запросу" ===
+			if ((forceRequestBuy || !cheapest || req.price < cheapest.price) && req.price <= itemMaxPrice) {
+				if (req.timerId) { clearTimeout(req.timerId); req.timerId = null; }
+				if (!isReqStillActive(req)) return;
+
+				const pricePerItem = req.price;
+				let finalPrice = pricePerItem;
+				if (Math.random() < 0.09 || alwaysUpgradeSuccess) finalPrice = 0.03; // ШАНС(9%) на 0.03
+
+				if (balance >= finalPrice) {
+					const newItem = { id: item.id, name: item.name, rarity: item.rarity, image: item.image, collection: item.collection || '', float: item.float || 0 };
+					const canHaveStickersReq = !item.isCase && !item.isCharm && !item.isSticker && !item.isItemWithoutSlot
+						&& !item.name.endsWith('Fragment')
+						&& !item.name.startsWith('Graffiti')
+						&& !item.name.startsWith('Medal');
+					if (canHaveStickersReq && Math.random() < 0.40) { // Шанс 40% как у ботов
+						const allStickersReq = itemsDatabase.filter(s => s.isSticker);
+						if (allStickersReq.length > 0) {
+							const stickerCountReq = Math.min(4, Math.max(1, Math.floor(Math.random() * 4) + 1));
+							newItem.stickers = [];
+							for (let j = 0; j < stickerCountReq; j++) {
+								const sel = allStickersReq[Math.floor(Math.random() * allStickersReq.length)];
+								if (sel) newItem.stickers.push({ id: sel.id, name: sel.name, image: sel.image });
+							}
+						}
+					}
+					inventory.push(newItem);
+					balance -= finalPrice;
+					balance = Math.round(balance * 100) / 100;
+					req.remaining--;
+					showItemToast('bought', newItem, finalPrice);
+				} else {
+					req.remaining = 0;
+					showToast('Недостаточно средств', true);
+				}
+
+				balanceAmount.textContent = balance.toLocaleString('ru-RU');
+				UpdateStatrackFrame && UpdateStatrackFrame(balance);
+				updateInventory();
+				updatePlatformCard(req.itemId);
+				updateNormalMarketCardPrice(req.itemId);
+				renderMyRequests();
+				refreshOpenModal(req.itemId);
+				saveGameState();
+				if (isReqStillActive(req) && req.remaining > 0) {
+					setTimeout(() => scheduleRequest(req, overlay, item), 10);
+				} else {
+					onlineMarket.buyRequests = onlineMarket.buyRequests.filter(r => r.id !== req.id);
+				}
+			}
+		}
+
+		function processSellListings(itemId, overlay) {
+			onlineMarket.buyRequests.filter(r => r.itemId === itemId && r.remaining > 0).forEach(req => {
+				processBuyRequest(req, overlay, req.item);
+			});
+		}
+
+		// ---- My Requests ----
+		function renderMyRequests() { renderBuyRequests(); renderSellRequests(); }
+
+		function renderBuyRequests() {
+			const container = document.getElementById('om-buy-requests-list');
+			if (!container) return;
+			
+			const active = onlineMarket.buyRequests.filter(r => r.remaining > 0);
+			
+			// Добавляем заголовок с кнопкой "Отменить все"
+			if (active.length) {
+				const headerRow = document.createElement('div');
+				headerRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding:0 4px;';
+				headerRow.innerHTML = `
+					<span style="color:#aaa;font-size:13px">Активных заявок: ${active.length}</span>
+					<button id="om-cancel-all-buy-reqs" style="padding:6px 14px;background:#f44336;color:white;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Отменить все</button>
+				`;
+				container.innerHTML = '';
+				container.appendChild(headerRow);
+				
+				// Обработчик массовой отмены
+				headerRow.querySelector('#om-cancel-all-buy-reqs').addEventListener('click', () => {
+					let refunded = 0;
+					active.forEach(req => {
+						if (req.timerId) clearTimeout(req.timerId);
+						refunded += req.price * req.remaining;
+						if (req.requestElement && req.requestElement.parentNode) {
+							req.requestElement.parentNode.removeChild(req.requestElement);
+						}
+					});
+					
+					onlineMarket.buyRequests = onlineMarket.buyRequests.filter(r => !active.includes(r));
+					balanceAmount.textContent = balance.toLocaleString('ru-RU');
+					UpdateStatrackFrame && UpdateStatrackFrame(balance);
+					saveGameState();
+					showToast(`Отменено заявок: ${active.length}`);
+					renderMyRequests();
+					// Обновляем карточки предметов, где были заявки
+					[...new Set(active.map(r => r.itemId))].forEach(itemId => {
+						updatePlatformCard(itemId);
+						refreshOpenModal(itemId);
+					});
+				});
+			} else {
+				container.innerHTML = '<div style="color:#aaa;padding:20px;text-align:center">Нет активных заявок на покупку</div>';
+				return;
+			}
+			
+			if (container.querySelector('div[style*="color:#aaa"]') && !container.querySelector('#om-cancel-all-buy-reqs')) {
+				container.innerHTML = '';
+			}
+
+			active.forEach(req => {
+				const lots = (onlineMarket.listings[req.itemId] || []).sort((a, b) => a.price - b.price);
+				const cheapest = lots[0];
+				let statusText = '';
+				
+				if (cheapest) {
+					if (req.price >= cheapest.price) {
+						statusText = '⚡ Покупка...';
+					} else {
+						const diff = (cheapest.price - req.price) / cheapest.price;
+						const pct = Math.round(diff * 100);
+						const waitStr = req.expectedAt ? formatDelay(req.expectedAt - Date.now()) : '?';
+						statusText = `⏳ ${waitStr} (−${pct}% от ${cheapest.price.toFixed(2)} ₽)`;
+					}
+				} else {
+					statusText = '⏳ Ожидание лотов...';
+				}
+
+				if (req.requestElement && document.body.contains(req.requestElement)) {
+					const statusEl = req.requestElement.querySelector('.request-status');
+					const priceEl = req.requestElement.querySelector('.request-price');
+					if (statusEl) statusEl.textContent = statusText;
+					if (priceEl) priceEl.textContent = `Цена: ${req.price.toFixed(2)} ₽ × ${req.remaining} шт.`;
+					return;
+				}
+
+				const div = document.createElement('div');
+				div.className = 'om-request-card';
+				div.innerHTML = `
+					<div class="request-info">
+						<img src="${req.item.image}" alt="" style="width:50px;border-radius:4px">
+						<div class="request-details">
+							<div class="request-name">${req.item.name}</div>
+							<div class="request-price">Цена: ${req.price.toFixed(2)} ₽ × ${req.remaining} шт.</div>
+							<div class="request-status">${statusText}</div>
+						</div>
+					</div>
+					<button class="om-request-cancel-btn">Отменить</button>
+				`;
+				
+				div.querySelector('.om-request-cancel-btn').addEventListener('click', () => {
+					balanceAmount.textContent = balance.toLocaleString('ru-RU');
+					UpdateStatrackFrame && UpdateStatrackFrame(balance);
+					if (req.timerId) clearTimeout(req.timerId);
+					onlineMarket.buyRequests = onlineMarket.buyRequests.filter(r => r.id !== req.id);
+					showToast(`Заявка отменена`);
+					if (req.requestElement && req.requestElement.parentNode) {
+						req.requestElement.parentNode.removeChild(req.requestElement);
+					}
+					req.requestElement = null;
+					renderMyRequests();
+					updatePlatformCard(req.itemId);
+					refreshOpenModal(req.itemId);
+				});
+				
+				req.requestElement = div;
+				container.appendChild(div);
+			});
+
+			container.querySelectorAll('.om-request-card').forEach(el => {
+				const cardReq = active.find(r => r.requestElement === el);
+				if (!cardReq && el.parentNode === container) {
+					container.removeChild(el);
+				}
+			});
+
+			setTimeout(renderBuyRequests, 1000);
+		}
+
+		function renderSellRequests() {
+			const container = document.getElementById('om-sell-requests-list');
+			if (!container) return;
+			container.innerHTML = '';
+
+			const active = onlineMarket.sellRequests.filter(r => r.status === 'active');
+			const sold = onlineMarket.sellRequests.filter(r => r.status === 'sold');
+
+			if (!active.length && !sold.length) {
+				container.innerHTML = '<div style="color:#aaa;padding:20px;text-align:center">Нет заявок на продажу</div>';
+				return;
+			}
+
+			if (active.length) {
+				const h = document.createElement('h4');
+				h.style.cssText = 'color:gold;margin:0 0 12px;display:flex;justify-content:space-between;align-items:center;';
+				h.innerHTML = `
+					<span>Активные</span>
+					<button id="om-cancel-all-sell-reqs" style="padding:4px 10px;background:#f44336;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;">Отменить все</button>
+				`;
+				container.appendChild(h);
+				
+				// Обработчик массовой отмены продаж
+				h.querySelector('#om-cancel-all-sell-reqs').addEventListener('click', () => {
+					let canceledCount = 0;
+					active.forEach(req => {
+						const lot = (onlineMarket.listings[req.itemId] || []).find(l => l.id === req.lotId);
+						if (lot) {
+							if (lot.sellReqTimerId) clearTimeout(lot.sellReqTimerId);
+							if (lot.inventoryItem) {
+								inventory.push(lot.inventoryItem);
+								canceledCount++;
+							}
+							onlineMarket.listings[req.itemId] = (onlineMarket.listings[req.itemId] || []).filter(l => l.id !== req.lotId);
+							if (onlineMarket.listings[req.itemId]?.length === 0) {
+								delete onlineMarket.listings[req.itemId];
+							}
+						}
+					});
+					
+					onlineMarket.sellRequests = onlineMarket.sellRequests.filter(r => !active.includes(r));
+					updateInventory();
+					saveGameState();
+					showToast(`Отменено лотов: ${canceledCount}, предметы возвращены`);
+					[...new Set(active.map(r => r.itemId))].forEach(itemId => {
+						updatePlatformCard(itemId);
+						updateNormalMarketCardPrice(itemId);
+						refreshOpenModal(itemId);
+					});
+					renderMyRequests();
+				});
+				
+				const tileGrid = document.createElement('div');
+				tileGrid.style.cssText = 'display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px';
+				active.forEach(req => {
+					const waitStr = req.expectedSellAt ? formatDelay(req.expectedSellAt - Date.now()) : '?';
+					const tile = document.createElement('div');
+					tile.style.cssText = 'background:#2a2a2a;border-radius:8px;padding:12px;width:140px;text-align:center;position:relative';
+					tile.innerHTML = `
+						<img src="${req.item.image}" alt="" style="width:80px;border-radius:4px;margin-bottom:6px">
+						<div style="font-size:11px;font-weight:bold;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${req.item.name}</div>
+						<div style="color:gold;font-size:13px;margin:4px 0">${req.price.toFixed(2)} ₽</div>
+						<div style="color:#aaa;font-size:10px;margin-bottom:6px">⏳ ${waitStr}</div>
+						<button class="om-request-cancel-btn" style="width:100%;font-size:11px;padding:4px 0">Отменить</button>
+					`;
+					tile.querySelector('.om-request-cancel-btn').addEventListener('click', () => {
+						const lot = (onlineMarket.listings[req.itemId] || []).find(l => l.id === req.lotId);
+						if (lot) {
+							if (lot.sellReqTimerId) clearTimeout(lot.sellReqTimerId);
+							if (lot.inventoryItem) { inventory.push(lot.inventoryItem); updateInventory(); saveGameState(); }
+							onlineMarket.listings[req.itemId] = onlineMarket.listings[req.itemId].filter(l => l.id !== req.lotId);
+							if (onlineMarket.listings[req.itemId]?.length === 0) delete onlineMarket.listings[req.itemId];
+						}
+						onlineMarket.sellRequests = onlineMarket.sellRequests.filter(r => r.id !== req.id);
+						showToast('Лот отменён');
+						renderMyRequests(); 
+						updatePlatformCard(req.itemId); 
+						updateNormalMarketCardPrice(req.itemId);
+						refreshOpenModal(req.itemId);
+					});
+					tileGrid.appendChild(tile);
+				});
+				container.appendChild(tileGrid);
+			}
+
+			if (sold.length) {
+				const h = document.createElement('h4');
+				h.style.cssText = 'color:#4CAF50;margin:0 0 12px';
+				h.textContent = 'Проданные';
+				container.appendChild(h);
+				const tileGrid = document.createElement('div');
+				tileGrid.style.cssText = 'display:flex;flex-wrap:wrap;gap:12px';
+				sold.slice(-20).reverse().forEach(req => {
+					const tile = document.createElement('div');
+					tile.style.cssText = 'background:#2a2a2a;border-radius:8px;padding:12px;width:140px;text-align:center;border:1px solid #4CAF5055';
+					tile.innerHTML = `
+						<img src="${req.item.image}" alt="" style="width:80px;border-radius:4px;margin-bottom:6px">
+						<div style="font-size:11px;font-weight:bold;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${req.item.name}</div>
+						<div style="color:gold;font-size:13px;margin:4px 0">${req.price.toFixed(2)} ₽</div>
+						<div style="color:#4CAF50;font-size:11px">✓ Продано</div>
+					`;
+					tileGrid.appendChild(tile);
+				});
+				container.appendChild(tileGrid);
+			}
+
+			setTimeout(renderSellRequests, 1000);
+		}
+
+		// Resume buy/sell requests that were persisted across page reloads
+		document.addEventListener('om:resumeBuyReq', function(e) {
+			const req = e.detail;
+			const item = itemsDatabase.find(i => i.id === req.itemId);
+			if (!item || req.remaining <= 0) return;
+			req.item = item;
+			// Make sure bots exist for this item
+			ensureBotsForItem(req.itemId, item);
+			processBuyRequest(req, null, item);
+		});
+
+		document.addEventListener('om:resumeSellReq', function(e) {
+			const { req, item } = e.detail;
+			const stillListed = (onlineMarket.listings[req.itemId] || []).find(l => l.id === req.lotId);
+			if (!stillListed) return;
+			// Execute the sale
+			onlineMarket.listings[req.itemId] = onlineMarket.listings[req.itemId].filter(l => l.id !== req.lotId);
+			onlineMarket.sellRequests = onlineMarket.sellRequests.map(r =>
+				r.lotId === req.lotId ? { ...r, status: 'sold' } : r
+			);
+			onlineMarket.sellRequests = onlineMarket.sellRequests.filter(r => r.status !== 'sold');
+			balance += req.price;
+			balance = Math.round(balance * 100) / 100;
+			balanceAmount.textContent = balance.toLocaleString('ru-RU');
+			if (typeof UpdateStatrackFrame === 'function') UpdateStatrackFrame(balance);
+			saveGameState();
+			showItemToast('sold', item, req.price);
+			botRelistAfterSale(req.itemId, item, req.price);
+			updatePlatformCard(req.itemId);
+			updateNormalMarketCardPrice(req.itemId);
+			refreshOpenModal(req.itemId);
+			renderMyRequests();
+		});
+
+		// Initial bot population
+		setTimeout(() => {
+			itemsDatabase.filter(i => i.itemInStore && !i.isRental && !i.id.endsWith('_rental')).forEach(item => {
+				ensureBotsForItem(item.id, item);
+			});
+		}, 500);
+		
+		setInterval(() => {
+			Object.keys(onlineMarket.listings).forEach(itemId => {
+				processBotAutoBuy(itemId);
+			});
+		}, 5000);
+
+	}// end initOnlineMarket
+	initOnlineMarket();
 });
