@@ -56,6 +56,35 @@ document.addEventListener('DOMContentLoaded', function() {
 	`;
 	document.querySelector('.sort-container').insertAdjacentElement('beforebegin', marketToggle);
 	
+	// Вкладки Платформа / Мои запросы (только для рынка)
+	const platformRequestsToggle = document.createElement('div');
+	platformRequestsToggle.className = 'platform-requests-toggle';
+	platformRequestsToggle.innerHTML = `
+	  <button id="platform-tab-btn" class="platform-tab-btn active">Платформа</button>
+	  <button id="my-requests-tab-btn" class="platform-tab-btn">Мои запросы</button>
+	`;
+	document.querySelector('.sort-container').insertAdjacentElement('beforebegin', platformRequestsToggle);
+	
+	let currentPlatformTab = 'platform'; // 'platform' или 'my-requests'
+	
+	document.getElementById('platform-tab-btn').addEventListener('click', function() {
+		if (currentMarket === 'normal' && currentPlatformTab !== 'platform') {
+			currentPlatformTab = 'platform';
+			this.classList.add('active');
+			document.getElementById('my-requests-tab-btn').classList.remove('active');
+			initShop();
+		}
+	});
+	
+	document.getElementById('my-requests-tab-btn').addEventListener('click', function() {
+		if (currentMarket === 'normal' && currentPlatformTab !== 'my-requests') {
+			currentPlatformTab = 'my-requests';
+			this.classList.add('active');
+			document.getElementById('platform-tab-btn').classList.remove('active');
+			initShop();
+		}
+	});
+	
 	document.getElementById('generate-promo-btn').addEventListener('click', generateRandomPromocode);
 
 	let currentMarket = 'normal'; // 'normal' или 'rental'

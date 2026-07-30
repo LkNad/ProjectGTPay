@@ -16,6 +16,7 @@
         
         <!-- Фильтры по редкости -->
 		<div class="sort-container">
+			<!-- Вкладки Платформа / Мои запросы (будут добавлены через JS для рынка) -->
 			<div class="filters">
 				<button class="filter-btn active" data-rarity="all">Все</button>
 				<button class="filter-btn" data-rarity="nameless" style="background-color: #ffd700; color: #000;">Nameless</button>
@@ -392,19 +393,8 @@
 		
 			
 
-        <!-- Корзина -->
-        <div class="cart-container">
-            <div class="cart-title">Корзина</div>
-            <div class="cart-items" id="cart-items"></div>
-            <div class="cart-total">
-                Итого: <a style="color:gold"><span id="cart-total">0</span> ₽</a>
-            </div>
-            <div class="cart-actions">
-                <button class="checkout-btn" id="checkout-btn">Оформить заказ</button>
-                <button class="clear-cart-btn" id="clear-cart-btn" disabled>Очистить корзину</button>
-            </div>
-        </div>
-        
+        <!-- Корзина удалена - теперь используется система рынка с кнопкой "Найти на платформе" -->
+
 		<div class="container" style='position: fixed; bottom: 240px; right: -100px; background-color: rgb(30 30 30 / 85%); padding: 15px; border-radius: 6px; width: 250px;'><button class="open-btn" id="open-clan-btn"><a>Клан</a></button></div>
 		<div class="container" style='position: fixed; bottom: 180px; right: -100px; background-color: rgb(30 30 30 / 85%); padding: 15px; border-radius: 6px; width: 250px;'><button class="open-btn" id="profile-btn"><a>Профиль</a></button></div>
 		<div class="container" style='position: fixed; bottom: 120px; right: -100px; background-color: rgb(30 30 30 / 85%); padding: 15px; border-radius: 6px; width: 250px;'><button class="open-btn" id="promo-items-btn"><a>Акции</a></button></div>
