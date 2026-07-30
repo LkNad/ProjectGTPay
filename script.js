@@ -7468,13 +7468,13 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 				<div style="flex:1;min-width:250px;">
 					<!-- Уменьшенная карточка товара -->
 					<div style="background:#2a2a2a;padding:15px;border-radius:8px;text-align:center;margin-bottom:15px;">
-						<img src="${item.image}" alt="${item.name}" style="width:150px;height:auto;margin-bottom:10px;">
+						<img src="${item.image}" alt="${item.name}" style="width:150px;height:auto;margin-bottom:10px;cursor:pointer;" title="Нажмите для осмотра">
 						<div class="item-rarity ${rarityInfo.color}" style="margin-bottom:5px;">
 							<div class="item-name" style="font-size:14px;">${item.name}</div>
 						</div>
-						<div class="item-collection" style="font-size:12px;color:#aaa;">
-							${collectionInfo.image ? `<img src="${collectionInfo.image}" class="collection-icon" alt="${collectionInfo.name}" style="width:20px;height:auto;vertical-align:middle;">` : ''}
-							${collectionInfo.name || item.collection}
+						<div class="item-collection" style="font-size:12px;color:#aaa;display:flex;align-items:center;justify-content:center;gap:5px;">
+							${collectionInfo.image ? `<img src="${collectionInfo.image}" class="collection-icon" alt="${collectionInfo.name}" style="width:20px;height:auto;">` : ''}
+							<span style="margin-left:5px;">${collectionInfo.name || item.collection}</span>
 						</div>
 						<div style="font-size:16px;color:${currencyColor};margin-top:10px;">${item.price.toFixed(2)} ₽</div>
 						<div style="font-size:12px;color:#888;margin-top:5px;">
@@ -7484,18 +7484,28 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 						</div>
 					</div>
 					
-					<!-- Кнопка Осмотреть -->
-					<button id="inspect-btn" style="width:100%;padding:12px;background:#2196F3;color:white;border:none;border-radius:5px;cursor:pointer;font-size:14px;margin-bottom:10px;">Осмотреть</button>
-					
 					<!-- Кнопка Продать -->
 					<button id="sell-btn" style="width:100%;padding:12px;background:#4CAF50;color:white;border:none;border-radius:5px;cursor:pointer;font-size:14px;">Продать</button>
 				</div>
 				
-				<!-- Правая панель: список лотов на платформе -->
+				<!-- Правая панель: список лотов на платформе и форма создания запроса -->
 				<div style="flex:2;min-width:400px;">
 					<h3 style="color:#fff;margin-bottom:15px;">Лоты на платформе</h3>
-					<div id="platform-listings" style="max-height:400px;overflow-y:auto;background:#2a2a2a;padding:15px;border-radius:8px;">
+					<div id="platform-listings" style="max-height:300px;overflow-y:auto;background:#2a2a2a;padding:15px;border-radius:8px;margin-bottom:15px;">
 						${renderPlatformListings(item.id)}
+					</div>
+					
+					<h4 style="color:#fff;margin-bottom:10px;">Создать запрос на покупку</h4>
+					<div style="background:#2a2a2a;padding:15px;border-radius:8px;">
+						<div style="margin-bottom:10px;">
+							<label style="color:#aaa;font-size:12px;">Количество:</label>
+							<input type="number" id="request-quantity" min="1" max="100" value="1" style="width:100%;padding:8px;background:#333;border:1px solid #444;color:#fff;border-radius:4px;">
+						</div>
+						<div style="margin-bottom:10px;">
+							<label style="color:#aaa;font-size:12px;">Цена за штуку (₽):</label>
+							<input type="number" id="request-price" min="0.01" step="0.01" value="${item.price.toFixed(2)}" style="width:100%;padding:8px;background:#333;border:1px solid #444;color:#fff;border-radius:4px;">
+						</div>
+						<button id="create-request-btn" style="width:100%;padding:10px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">Создать запрос</button>
 					</div>
 				</div>
 			</div>
@@ -7504,17 +7514,67 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 		document.body.appendChild(modal);
 		addEscapeClose(modal);
 		
-		// Закрытие по кнопке
-		modal.querySelector('.close-platform-modal').addEventListener('click', () => modal.remove());
+		// Закрытие по кнопке - НЕ закрываем модальное окно
+		modal.querySelector('.close-platform-modal').addEventListener('click', () => {
+			// Не закрываем, просто ничего не делаем или можно добавить подтверждение
+			showToast('Чтобы закрыть окно, нажмите ESC или кликните вне окна', false);
+		});
 		
-		// Кнопка Осмотреть - открывает viewer
-		modal.querySelector('#inspect-btn').addEventListener('click', () => {
+		// Осмотр по клику на изображение
+		modal.querySelector('.item-img img').addEventListener('click', () => {
 			openItemViewer(item, modal);
 		});
 		
 		// Кнопка Продать - открывает меню продажи
 		modal.querySelector('#sell-btn').addEventListener('click', () => {
 			openSellMenu(item, modal, stickersPrice, recommendedPrice);
+		});
+		
+		// Создание запроса на покупку
+		modal.querySelector('#create-request-btn').addEventListener('click', () => {
+			const quantity = parseInt(modal.querySelector('#request-quantity').value);
+			const price = parseFloat(modal.querySelector('#request-price').value);
+			
+			if (isNaN(quantity) || quantity < 1 || quantity > 100) {
+				showToast('Введите корректное количество (1-100)', true);
+				return;
+			}
+			
+			if (isNaN(price) || price < 0.01) {
+				showToast('Введите корректную цену (от 0.01)', true);
+				return;
+			}
+			
+			const totalCost = quantity * price;
+			if (balance < totalCost) {
+				showToast(`Недостаточно средств! Нужно ${totalCost.toFixed(2)} ₽`, true);
+				return;
+			}
+			
+			// Блокируем средства
+			balance -= totalCost;
+			balance = Math.round(balance * 100) / 100;
+			if (balanceAmount) balanceAmount.textContent = balance.toLocaleString('ru-RU');
+			
+			// Создаем запрос
+			const newRequest = {
+				id: Date.now(),
+				itemId: item.id,
+				type: 'buy',
+				quantity: quantity,
+				price: price,
+				totalCost: totalCost,
+				createdAt: Date.now()
+			};
+			
+			myRequests.push(newRequest);
+			
+			showToast(`Запрос создан: ${quantity} шт. по ${price.toFixed(2)} ₽`);
+			
+			// Проверяем, есть ли подходящие лоты
+			checkBuyRequestAgainstListings(newRequest, item, modal);
+			
+			if (typeof saveGameState === 'function') saveGameState();
 		});
 	}
 	
@@ -12551,10 +12611,10 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 		const itemElement = document.getElementById(shopItem.id);
 		if (itemElement) {
 		  const marketLotsEl = itemElement.querySelector('.market-lots');
-		  const currentStock = marketLotsEl ? parseInt(marketLotsEl.textContent) : shopItem.stock;
+		  const currentStock = marketLotsEl && marketLotsEl.textContent ? parseInt(marketLotsEl.textContent) : shopItem.stock;
                   const btn = itemElement.querySelector('.find-on-platform-btn') || itemElement.querySelector('.rent-item-btn');
                   const max = btn ? parseInt(btn.getAttribute('data-max')) : 0;
-		  updateStock(itemElement, currentStock + 1, max);
+		  if (marketLotsEl) updateStock(itemElement, currentStock + 1, max);
 		} else {
 			shopItem.stock += 1;
 		}
@@ -12612,10 +12672,10 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 				const shopItem = document.getElementById(originalItem.id);
 				if (shopItem) {
 					const stockEl = shopItem.querySelector('.market-lots');
-					const currentStock = stockEl ? parseInt(stockEl.textContent) : originalItem.stock;
+					const currentStock = stockEl && stockEl.textContent ? parseInt(stockEl.textContent) : originalItem.stock;
                                         const btn = shopItem.querySelector('.find-on-platform-btn') || shopItem.querySelector('.rent-item-btn');
                                         const max = btn ? parseInt(btn.getAttribute('data-max')) : 0;
-					updateStock(shopItem, currentStock + 1, max);
+					if (stockEl) updateStock(shopItem, currentStock + 1, max);
 				} else {
 					originalItem.stock += 1;
 				}
@@ -13708,10 +13768,56 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 		return items[randomIndex];
 	}
 	
+	// Инициализация ботов с лотами согласно stock
+	function initializeBotsWithLots() {
+		const botNames = ['Bot_Alpha', 'Bot_Beta', 'Bot_Gamma', 'Bot_Delta', 'Bot_Epsilon', 'Bot_Zeta', 'Bot_Eta', 'Bot_Theta'];
+		let botIndex = 0;
+		
+		itemsDatabase.forEach(item => {
+			if (!item.itemInStore || item.isRental) return;
+			
+			const stock = item.stock || 0;
+			if (stock <= 0) return;
+			
+			// Создаем бот-лоты для каждого предмета согласно stock
+			for (let i = 0; i < stock; i++) {
+				const botName = botNames[botIndex % botNames.length];
+				botIndex++;
+				
+				// Базовая цена с небольшим разбросом
+				const basePrice = item.price;
+				const priceVariation = (Math.random() * 0.2 - 0.1) * basePrice; // ±10%
+				const botPrice = Math.round((basePrice + priceVariation) * 100) / 100;
+				
+				const botListing = {
+					id: Date.now() + Math.random(),
+					itemId: item.id,
+					sellerName: botName,
+					sellerBot: true,
+					price: botPrice,
+					stickers: [],
+					createdAt: Date.now()
+				};
+				
+				marketListings.push(botListing);
+				
+				// Добавляем бота в список если его еще нет
+				if (!bots.find(b => b.name === botName)) {
+					bots.push({
+						name: botName,
+						listings: [],
+						strategy: 'normal'
+					});
+				}
+			}
+		});
+	}
+	
 	loadItemsData().then(() => {
 		addAllItems(addNewCollection, addNewItem, addNewPromocode, addNewRarity, itemsDatabase, addNewBattlePass, addNewPromoItem);
 		addFrames(addNewFrame);
 		addRanks(addNewRang);
+		initializeBotsWithLots();
 		initShop();
 		loadSavedGameState();
 	});
