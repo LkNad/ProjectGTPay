@@ -7073,6 +7073,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
 	function initShop() {
 		itemsContainer.textContent = '';
+		
+		// Если выбрана вкладка "Мои запросы", отображаем их вместо предметов магазина
+		if (currentMarket === 'normal' && currentPlatformTab === 'my-requests') {
+			renderMyRequests();
+			return;
+		}
+		
 		const activeBtn = document.querySelector('.filter-btn.active');
 		const selectedRarity = activeBtn ? activeBtn.dataset.rarity : 'all';
 	
@@ -7138,6 +7145,81 @@ document.addEventListener('DOMContentLoaded', function() {
 		
 		applyTypeFilters();
 		sortItemsByPrice();
+	}
+	
+	// Рендеринг вкладки "Мои запросы"
+	function renderMyRequests() {
+		itemsContainer.textContent = '';
+		
+		if (myRequests.length === 0) {
+			itemsContainer.innerHTML = '<div style="color:#888;text-align:center;padding:40px;font-size:18px;">У вас пока нет активных запросов</div>';
+			return;
+		}
+		
+		myRequests.forEach(request => {
+			const item = itemsDatabase.find(i => i.id === request.itemId);
+			if (!item) return;
+			
+			const rarityInfo = rarities[item.rarity] || { color: 'none', ColorHex: '#adadad' };
+			const collectionInfo = collectionsDatabase[item.collection] || { name: item.collection, image: '' };
+			
+			const requestCard = document.createElement('div');
+			requestCard.className = 'item-card';
+			requestCard.style.borderColor = request.type === 'sell' ? '#4CAF50' : '#2196F3';
+			
+			requestCard.innerHTML = `
+				<div class="item-img"><img src='${item.image}' alt="" class="logo lazy" width=150></div>
+				<div class="item-rarity ${rarityInfo.color}"><div class="item-name">${item.name}</div></div>
+				<div class="item-collection" data-collection="${item.collection}">
+					${collectionInfo.image ? `<img src="${collectionInfo.image}" class="collection-icon" alt="${collectionInfo.name}" style="width: 30px; height: auto;">` : ''}
+					${collectionInfo.name || item.collection}
+				</div>
+				<div class="item-stock-info">
+					<div>Тип запроса: <span style="color:${request.type === 'sell' ? '#4CAF50' : '#2196F3'}">${request.type === 'sell' ? 'Продажа' : 'Покупка'}</span></div>
+					<div>Цена: <span style="color:${currencyColor}">${request.price.toFixed(2)} ₽</span></div>
+				</div>
+				<div class="item-buttons">
+					<button class="cancel-request-btn" data-request-id="${request.id}" style="padding:10px 20px;background:#f44336;color:white;border:none;border-radius:4px;cursor:pointer;">Отменить запрос</button>
+				</div>
+			`;
+			
+			itemsContainer.appendChild(requestCard);
+			
+			// Обработчик отмены запроса
+			requestCard.querySelector('.cancel-request-btn').addEventListener('click', function() {
+				const requestId = parseInt(this.dataset.requestId);
+				cancelRequest(requestId);
+			});
+		});
+	}
+	
+	// Отмена запроса
+	function cancelRequest(requestId) {
+		const requestIndex = myRequests.findIndex(r => r.id === requestId);
+		if (requestIndex === -1) {
+			showToast('Запрос не найден!', true);
+			return;
+		}
+		
+		const request = myRequests[requestIndex];
+		
+		// Если это запрос на продажу, удаляем соответствующий лот с рынка
+		if (request.type === 'sell') {
+			const listingIndex = marketListings.findIndex(l => l.id === requestId);
+			if (listingIndex !== -1) {
+				marketListings.splice(listingIndex, 1);
+			}
+		}
+		
+		// Удаляем запрос
+		myRequests.splice(requestIndex, 1);
+		
+		showToast('Запрос отменен');
+		
+		if (typeof saveGameState === 'function') saveGameState();
+		
+		// Перерисовываем
+		renderMyRequests();
 	}
 
 	document.querySelectorAll('.filter-btn').forEach(btn => {
@@ -7282,50 +7364,51 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 		  setup3DViewer(imgContainer, item, item); // item — и есть originalItem для магазина
 	  }
 
-	  if (addBtn) {
-		addBtn.addEventListener('click', function(e) {
-		  e.stopPropagation(); 
-		  
-		  const id = this.getAttribute('data-id');
-		  const name = this.getAttribute('data-name');
-		  const price = parseFloat(this.getAttribute('data-price'));
-		  const max = parseInt(this.getAttribute('data-max'));
-		  const isRental = this.hasAttribute('data-rental');
+          // Обработчик кнопки "Найти на платформе" или "Арендовать"
+          const actionBtn = itemCard.querySelector('.find-on-platform-btn');
+          if (actionBtn) {
+            actionBtn.addEventListener('click', function(e) {
+              e.stopPropagation(); 
+              
+              const id = this.getAttribute('data-id');
+              const name = this.getAttribute('data-name');
+              const price = parseFloat(this.getAttribute('data-price'));
+              const max = parseInt(this.getAttribute('data-max'));
+              const isRental = this.hasAttribute('data-rental');
 
-		  if (currentMarket === 'rental') {
-			if (balance < price) {
-			  showToast('Недостаточно средств для аренды!', true);
-			  return;
-			}
+              if (currentMarket === 'rental') {
+                if (balance < price) {
+                  showToast('Недостаточно средств для аренды!', true);
+                  return;
+                }
 
-			const rentalItem = {
-			  id: id,
-			  name: name,
-			  image: item.image,
-			  rarity: item.rarity,
-			  isRental: true,
-			  rentalExpires: Date.now() + 3 * 60 * 1000
-			};
+                const rentalItem = {
+                  id: id,
+                  name: name,
+                  image: item.image,
+                  rarity: item.rarity,
+                  isRental: true,
+                  rentalExpires: Date.now() + 3 * 60 * 1000
+                };
 
-			balance -= price;
-			balance = Math.round(balance * 100) / 100;
-			if(balanceAmount) balanceAmount.textContent = balance.toLocaleString('ru-RU');
-			if(typeof updateDuelRang === 'function') updateDuelRang(Math.round(price));
-			if(typeof UpdateStatrackFrame === 'function') UpdateStatrackFrame(balance);
-			if(typeof addExp === 'function') addExp(Math.round(price));
+                balance -= price;
+                balance = Math.round(balance * 100) / 100;
+                if(balanceAmount) balanceAmount.textContent = balance.toLocaleString('ru-RU');
+                if(typeof updateDuelRang === 'function') updateDuelRang(Math.round(price));
+                if(typeof UpdateStatrackFrame === 'function') UpdateStatrackFrame(balance);
+                if(typeof addExp === 'function') addExp(Math.round(price));
 
-			inventory.push(rentalItem);
-			showToast(`Предмет "${name}" арендован на 3 минуты!`);
-			if(typeof updateInventory === 'function') updateInventory();
-			if(typeof saveGameState === 'function') saveGameState();
-                  } else {
-                        // Корзина удалена, кнопка "Найти на платформе" открывает модальное окно
-                        // Этот блок больше не используется для добавления в корзину
-                  }
-                });
+                inventory.push(rentalItem);
+                showToast(`Предмет "${name}" арендован на 3 минуты!`);
+                if(typeof updateInventory === 'function') updateInventory();
+                if(typeof saveGameState === 'function') saveGameState();
+              } else {
+                // Открываем модальное окно платформы для предмета
+                openPlatformModal(item);
+              }
+            });
           }
 
-          // Кнопка "Купить все" удалена вместе с корзиной
 	  itemsContainer.appendChild(itemCard);
 
 	  const img = itemCard.querySelector('.item-img img');
@@ -7346,6 +7429,389 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 		lazyObserver.observe(img);
 	  }
 	}
+	
+	// Функция открытия модального окна платформы для предмета
+	function openPlatformModal(item) {
+		const modal = document.createElement('div');
+		modal.className = 'modal';
+		modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:10000;display:flex;justify-content:center;align-items:center;';
+		
+		const rarityInfo = rarities[item.rarity] || { color: 'none', ColorHex: '#adadad' };
+		const collectionInfo = collectionsDatabase[item.collection] || { name: item.collection, image: '' };
+		
+		// Получаем информацию о лотах
+		const marketLotsCount = marketListings.filter(l => l.itemId === item.id).length;
+		const myLotsCount = myRequests.filter(r => r.itemId === item.id && r.type === 'sell').length;
+		const inventoryCount = inventory.filter(i => i.id === item.id).length;
+		
+		// Расчет цены наклеек
+		let stickersPrice = 0;
+		if (item.stickers && item.stickers.length > 0) {
+			item.stickers.forEach(sticker => {
+				const stickerItem = itemsDatabase.find(s => s.id === sticker.id);
+				if (stickerItem && stickerItem.itemInStore !== false) {
+					stickersPrice += Math.round((stickerItem.price * 0.1) * 100) / 100;
+				}
+			});
+		}
+		
+		// Рекомендуемая цена продажи
+		const recommendedPrice = item.price + stickersPrice * 0.4;
+		
+		modal.innerHTML = `
+			<div class="platform-modal-content" style="background:#1a1a1a;padding:30px;border-radius:10px;max-width:900px;width:90%;display:flex;gap:30px;position:relative;">
+				<button class="close-platform-modal" style="position:absolute;top:10px;right:15px;background:none;border:none;color:#fff;font-size:28px;cursor:pointer;">&times;</button>
+				
+				<!-- Левая панель: карточка товара и кнопки -->
+				<div style="flex:1;min-width:250px;">
+					<!-- Уменьшенная карточка товара -->
+					<div style="background:#2a2a2a;padding:15px;border-radius:8px;text-align:center;margin-bottom:15px;">
+						<img src="${item.image}" alt="${item.name}" style="width:150px;height:auto;margin-bottom:10px;">
+						<div class="item-rarity ${rarityInfo.color}" style="margin-bottom:5px;">
+							<div class="item-name" style="font-size:14px;">${item.name}</div>
+						</div>
+						<div class="item-collection" style="font-size:12px;color:#aaa;">
+							${collectionInfo.image ? `<img src="${collectionInfo.image}" class="collection-icon" alt="${collectionInfo.name}" style="width:20px;height:auto;vertical-align:middle;">` : ''}
+							${collectionInfo.name || item.collection}
+						</div>
+						<div style="font-size:16px;color:${currencyColor};margin-top:10px;">${item.price.toFixed(2)} ₽</div>
+						<div style="font-size:12px;color:#888;margin-top:5px;">
+							<div>Лотов на рынке: ${marketLotsCount}</div>
+							<div>Моих лотов: ${myLotsCount}</div>
+							<div>В инвентаре: ${inventoryCount}</div>
+						</div>
+					</div>
+					
+					<!-- Кнопка Осмотреть -->
+					<button id="inspect-btn" style="width:100%;padding:12px;background:#2196F3;color:white;border:none;border-radius:5px;cursor:pointer;font-size:14px;margin-bottom:10px;">Осмотреть</button>
+					
+					<!-- Кнопка Продать -->
+					<button id="sell-btn" style="width:100%;padding:12px;background:#4CAF50;color:white;border:none;border-radius:5px;cursor:pointer;font-size:14px;">Продать</button>
+				</div>
+				
+				<!-- Правая панель: список лотов на платформе -->
+				<div style="flex:2;min-width:400px;">
+					<h3 style="color:#fff;margin-bottom:15px;">Лоты на платформе</h3>
+					<div id="platform-listings" style="max-height:400px;overflow-y:auto;background:#2a2a2a;padding:15px;border-radius:8px;">
+						${renderPlatformListings(item.id)}
+					</div>
+				</div>
+			</div>
+		`;
+		
+		document.body.appendChild(modal);
+		addEscapeClose(modal);
+		
+		// Закрытие по кнопке
+		modal.querySelector('.close-platform-modal').addEventListener('click', () => modal.remove());
+		
+		// Кнопка Осмотреть - открывает viewer
+		modal.querySelector('#inspect-btn').addEventListener('click', () => {
+			openItemViewer(item, modal);
+		});
+		
+		// Кнопка Продать - открывает меню продажи
+		modal.querySelector('#sell-btn').addEventListener('click', () => {
+			openSellMenu(item, modal, stickersPrice, recommendedPrice);
+		});
+	}
+	
+	// Рендеринг списка лотов на платформе
+	function renderPlatformListings(itemId) {
+		const listings = marketListings.filter(l => l.itemId === itemId);
+		
+		if (listings.length === 0) {
+			return '<div style="color:#888;text-align:center;padding:20px;">Нет лотов на платформе</div>';
+		}
+		
+		return listings.map(listing => {
+			const sellerName = listing.sellerBot ? `Бот ${listing.sellerName}` : (listing.sellerName || 'Игрок');
+			const hasStickers = listing.stickers && listing.stickers.length > 0;
+			let stickersHtml = '';
+			if (hasStickers) {
+				stickersHtml = `<div style="font-size:11px;color:#aaa;margin-top:5px;">Наклеек: ${listing.stickers.length}</div>`;
+			}
+			
+			return `
+				<div class="platform-listing" style="background:#333;padding:12px;margin-bottom:10px;border-radius:5px;display:flex;justify-content:space-between;align-items:center;">
+					<div>
+						<div style="color:#fff;font-weight:bold;">${listing.price.toFixed(2)} ₽</div>
+						<div style="font-size:12px;color:#888;">Продавец: ${sellerName}</div>
+						${stickersHtml}
+					</div>
+					<button class="buy-listing-btn" data-listing-id="${listing.id}" style="padding:8px 15px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer;">Купить</button>
+				</div>
+			`;
+		}).join('');
+	}
+	
+	// Открытие viewer для осмотра предмета
+	function openItemViewer(item, parentModal) {
+		// Используем существующую функцию setup3DViewer если предмет поддерживает 3D
+		const canShow3D = fxCan3D(item);
+		
+		if (!canShow3D) {
+			showToast('Осмотр недоступен для этого предмета', true);
+			return;
+		}
+		
+		// Создаем модальное окно viewer
+		const viewerModal = document.createElement('div');
+		viewerModal.className = 'modal';
+		viewerModal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:10001;display:flex;justify-content:center;align-items:center;';
+		
+		viewerModal.innerHTML = `
+			<div style="background:#1a1a1a;padding:20px;border-radius:10px;max-width:800px;width:90%;text-align:center;position:relative;">
+				<button class="close-viewer-btn" style="position:absolute;top:10px;right:15px;background:none;border:none;color:#fff;font-size:28px;cursor:pointer;">&times;</button>
+				<h3 style="color:#fff;margin-bottom:15px;">${item.name}</h3>
+				<div id="viewer-container" style="width:100%;height:400px;background:#2a2a2a;border-radius:8px;display:flex;justify-content:center;align-items:center;">
+					<img src="${item.image}" alt="${item.name}" style="max-width:100%;max-height:100%;">
+				</div>
+				<div style="margin-top:15px;">
+					<button id="rotate-left-btn" style="padding:10px 20px;background:#555;color:white;border:none;border-radius:4px;cursor:pointer;margin-right:10px;">↺ Влево</button>
+					<button id="rotate-right-btn" style="padding:10px 20px;background:#555;color:white;border:none;border-radius:4px;cursor:pointer;">Вправо ↻</button>
+				</div>
+			</div>
+		`;
+		
+		document.body.appendChild(viewerModal);
+		addEscapeClose(viewerModal);
+		
+		viewerModal.querySelector('.close-viewer-btn').addEventListener('click', () => viewerModal.remove());
+		
+		// Инициализация 3D viewer если возможно
+		const imgContainer = viewerModal.querySelector('#viewer-container');
+		setup3DViewer(imgContainer, item, item);
+	}
+	
+	// Открытие меню продажи предмета
+	function openSellMenu(item, parentModal, stickersPrice, recommendedPrice) {
+		// Находим предметы в инвентаре с таким же ID
+		const inventoryItems = inventory.filter((invItem, index) => 
+			invItem.id === item.id && !invItem.isRental
+		).map((invItem, index) => ({
+			...invItem,
+			inventoryIndex: inventory.indexOf(invItem)
+		}));
+		
+		if (inventoryItems.length === 0) {
+			showToast('У вас нет этого предмета в инвентаре!', true);
+			return;
+		}
+		
+		const sellModal = document.createElement('div');
+		sellModal.className = 'modal';
+		sellModal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:10002;display:flex;justify-content:center;align-items:center;';
+		
+		sellModal.innerHTML = `
+			<div style="background:#1a1a1a;padding:30px;border-radius:10px;max-width:600px;width:90%;position:relative;">
+				<button class="close-sell-btn" style="position:absolute;top:10px;right:15px;background:none;border:none;color:#fff;font-size:28px;cursor:pointer;">&times;</button>
+				<h3 style="color:#fff;margin-bottom:20px;">Выберите предмет для продажи</h3>
+				
+				<div id="sell-items-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:15px;margin-bottom:20px;max-height:300px;overflow-y:auto;">
+					${inventoryItems.map((invItem, idx) => {
+						const hasStickers = invItem.stickers && invItem.stickers.length > 0;
+						const hasCharm = invItem.charm;
+						let previewHtml = '';
+						if (hasStickers || hasCharm) {
+							previewHtml = `<div style="font-size:11px;color:#aaa;margin-top:5px;">`;
+							if (hasStickers) previewHtml += `<span>🏷️ ${invItem.stickers.length}</span>`;
+							if (hasCharm) previewHtml += `<span> 🎯 Брелок</span>`;
+							previewHtml += `</div>`;
+						}
+						return `
+							<div class="sell-item-card" data-inventory-index="${invItem.inventoryIndex}" style="background:#2a2a2a;padding:15px;border-radius:8px;text-align:center;cursor:pointer;border:2px solid transparent;transition:border 0.2s;">
+								<img src="${invItem.image}" alt="${invItem.name}" style="width:100px;height:auto;">
+								<div style="color:#fff;font-size:13px;margin-top:8px;">${invItem.name}</div>
+								${previewHtml}
+							</div>
+						`;
+					}).join('')}
+				</div>
+				
+				<div id="sell-price-section" style="display:none;">
+					<h4 style="color:#fff;margin-bottom:15px;">Установите цену продажи</h4>
+					<div style="color:#aaa;font-size:13px;margin-bottom:15px;">
+						Рекомендуемая цена: <strong style="color:${currencyColor};">${recommendedPrice.toFixed(2)} ₽</strong><br>
+						<small>(1 лот + цена наклеек × 0.4)</small><br>
+						<small style="color:#888;">При цене ≤ рекомендованной - покупка моментальная<br>Выше - потребуется подождать</small>
+					</div>
+					
+					<input type="number" id="sell-price-input" min="0" max="1000000" step="0.01" value="${recommendedPrice.toFixed(2)}" 
+						style="width:100%;padding:12px;background:#2a2a2a;border:1px solid #444;color:#fff;border-radius:5px;font-size:16px;">
+					
+					<div style="margin-top:20px;display:flex;gap:10px;">
+						<button id="confirm-sell-btn" style="flex:1;padding:12px;background:#4CAF50;color:white;border:none;border-radius:5px;cursor:pointer;font-size:14px;">Выставить на продажу</button>
+						<button id="cancel-sell-select-btn" style="flex:1;padding:12px;background:#555;color:white;border:none;border-radius:5px;cursor:pointer;font-size:14px;">Отмена</button>
+					</div>
+				</div>
+			</div>
+		`;
+		
+		document.body.appendChild(sellModal);
+		addEscapeClose(sellModal);
+		
+		sellModal.querySelector('.close-sell-btn').addEventListener('click', () => sellModal.remove());
+		
+		let selectedInventoryIndex = null;
+		
+		// Выбор предмета для продажи
+		sellModal.querySelectorAll('.sell-item-card').forEach(card => {
+			card.addEventListener('click', function() {
+				sellModal.querySelectorAll('.sell-item-card').forEach(c => c.style.borderColor = 'transparent');
+				this.style.borderColor = currencyColor;
+				selectedInventoryIndex = parseInt(this.dataset.inventoryIndex);
+				
+				// Показываем секцию установки цены
+				sellModal.querySelector('#sell-price-section').style.display = 'block';
+				
+				// Снимаем брелок если есть
+				const selectedItem = inventory[selectedInventoryIndex];
+				if (selectedItem && selectedItem.charm) {
+					const charmItem = itemsDatabase.find(c => c.id === selectedItem.charm.id);
+					if (charmItem) {
+						inventory.push({
+							id: charmItem.id,
+							name: charmItem.name,
+							rarity: charmItem.rarity,
+							image: charmItem.image
+						});
+						showToast(`Брелок "${charmItem.name}" снят и возвращен в инвентарь`);
+						delete selectedItem.charm;
+					}
+				}
+			});
+		});
+		
+		// Отмена выбора
+		sellModal.querySelector('#cancel-sell-select-btn').addEventListener('click', () => {
+			sellModal.querySelector('#sell-price-section').style.display = 'none';
+			sellModal.querySelectorAll('.sell-item-card').forEach(c => c.style.borderColor = 'transparent');
+			selectedInventoryIndex = null;
+		});
+		
+		// Подтверждение продажи
+		sellModal.querySelector('#confirm-sell-btn').addEventListener('click', () => {
+			if (selectedInventoryIndex === null) {
+				showToast('Выберите предмет для продажи!', true);
+				return;
+			}
+			
+			const price = parseFloat(sellModal.querySelector('#sell-price-input').value);
+			
+			if (isNaN(price) || price < 0 || price > 1000000) {
+				showToast('Введите корректную цену от 0 до 1000000!', true);
+				return;
+			}
+			
+			const selectedItem = inventory[selectedInventoryIndex];
+			
+			// Удаляем предмет из инвентаря
+			inventory.splice(selectedInventoryIndex, 1);
+			
+			// Создаем лот на рынке
+			const newListing = {
+				id: Date.now(),
+				itemId: item.id,
+				sellerName: 'Вы',
+				sellerBot: false,
+				price: price,
+				stickers: selectedItem.stickers || [],
+				createdAt: Date.now()
+			};
+			
+			marketListings.push(newListing);
+			
+			// Добавляем в мои запросы
+			myRequests.push({
+				id: newListing.id,
+				itemId: item.id,
+				type: 'sell',
+				price: price,
+				createdAt: Date.now()
+			});
+			
+			showToast(`Предмет выставлен на продажу за ${price.toFixed(2)} ₽`);
+			
+			// Обновляем отображение
+			if (typeof updateInventory === 'function') updateInventory();
+			if (typeof saveGameState === 'function') saveGameState();
+			
+			// Закрываем модальные окна
+			sellModal.remove();
+			parentModal.remove();
+			
+			// Перерисовываем платформу
+			initShop();
+		});
+	}
+	
+	// Обработка покупки лота с платформы
+	function handleBuyListing(listingId, item, parentModal) {
+		const listing = marketListings.find(l => l.id === listingId);
+		if (!listing) {
+			showToast('Лот не найден!', true);
+			return;
+		}
+		
+		if (balance < listing.price) {
+			showToast('Недостаточно средств!', true);
+			return;
+		}
+		
+		// Списываем баланс
+		balance -= listing.price;
+		balance = Math.round(balance * 100) / 100;
+		if (balanceAmount) balanceAmount.textContent = balance.toLocaleString('ru-RU');
+		
+		// Добавляем предмет в инвентарь
+		const newItem = {
+			id: item.id,
+			name: item.name,
+			rarity: item.rarity,
+			image: item.image,
+			stickers: listing.stickers || []
+		};
+		
+		inventory.push(newItem);
+		
+		// Удаляем лот с рынка
+		const listingIndex = marketListings.findIndex(l => l.id === listingId);
+		if (listingIndex !== -1) {
+			marketListings.splice(listingIndex, 1);
+		}
+		
+		// Удаляем из моих запросов если это был наш лот
+		const requestIndex = myRequests.findIndex(r => r.id === listingId);
+		if (requestIndex !== -1) {
+			myRequests.splice(requestIndex, 1);
+		}
+		
+		showToast(`Предмет куплен за ${listing.price.toFixed(2)} ₽`);
+		
+		if (typeof updateInventory === 'function') updateInventory();
+		if (typeof saveGameState === 'function') saveGameState();
+		
+		// Обновляем отображение платформы
+		parentModal.querySelector('#platform-listings').innerHTML = renderPlatformListings(item.id);
+	}
+	
+	// Инициализация обработчиков для кнопок покупки лотов
+	function initPlatformListeners() {
+		document.addEventListener('click', function(e) {
+			if (e.target.classList.contains('buy-listing-btn')) {
+				const listingId = parseInt(e.target.dataset.listingId);
+				const modal = e.target.closest('.modal');
+				if (modal) {
+					// Находим текущий предмет из контекста модального окна
+					// Это упрощенная реализация, в полной версии нужно передавать item
+					showToast('Функция покупки в разработке', true);
+				}
+			}
+		});
+	}
+	
+	initPlatformListeners();
 	
 	const nameFilterInput = document.getElementById('name-filter-input');
 	const applyNameFilterBtn = document.getElementById('apply-name-filter');
