@@ -4534,13 +4534,14 @@ document.addEventListener('DOMContentLoaded', function() {
 	
 	function sortItemsByPrice() {
 		const container = document.getElementById('items-container');
+		if (!container) return;
 		const items = Array.from(container.querySelectorAll('.item-card'));
 		
 		items.sort((a, b) => {
 			const btnA = a.querySelector('.find-on-platform') || a.querySelector('.add-to-cart');
 			const btnB = b.querySelector('.find-on-platform') || b.querySelector('.add-to-cart');
-			const priceA = btnA ? parseFloat(btnA.getAttribute('data-price')) : 0;
-			const priceB = btnB ? parseFloat(btnB.getAttribute('data-price')) : 0;
+			const priceA = btnA && btnA.getAttribute ? parseFloat(btnA.getAttribute('data-price')) : 0;
+			const priceB = btnB && btnB.getAttribute ? parseFloat(btnB.getAttribute('data-price')) : 0;
 			return sortDescending ? priceB - priceA : priceA - priceB;
 		});
 		
@@ -7256,22 +7257,8 @@ document.addEventListener('DOMContentLoaded', function() {
 			${currentMarket === 'rental' ? 'data-rental="true"' : ''}>
 			${currentMarket === 'rental' ? 'Арендовать' : 'Найти на платформе'}
 		  </button>
-		  ${currentMarket === 'rental' ? '' : 
-			`<button class="buy-all-btn" data-id='${item.id}' data-name='${item.name}' data-price='${price}' 
-			  data-max='${item.stock}' data-rarity='${item.rarity}'>Купить все</button>`
-		  }
 		</div>
-		${currentMarket === 'rental' ? '' : '<div class="stock-warning">Лоты закончились</div>'}
-	  `;
-	  
-	  const warning = itemCard.querySelector('.stock-warning');
-	  const findBtn = itemCard.querySelector('.find-on-platform-btn');
-	  const buyAllBtn = itemCard.querySelector('.buy-all-btn');
-	  if (warning) {
-		warning.style.display = item.stock <= 0 ? 'block' : 'none';
-		findBtn.disabled = item.stock <= 0;
-		buyAllBtn.disabled = item.stock <= 0;
-	  }
+          `;
 
 	  const canShow3D = fxCan3D(item);
 
@@ -7279,10 +7266,8 @@ document.addEventListener('DOMContentLoaded', function() {
 		  const imgContainer = itemCard.querySelector('.item-img');
 		  setup3DViewer(imgContainer, item, item); // item — и есть originalItem для магазина
 	  }
-
-	  if (findBtn) {
-		findBtn.addEventListener('click', function(e) {
-		  e.stopPropagation(); 
+          if (findBtn) {
+                findBtn.addEventListener('click', function(e) {
 		  
 		  const id = this.getAttribute('data-id');
 		  const name = this.getAttribute('data-name');
@@ -13170,8 +13155,6 @@ document.addEventListener('DOMContentLoaded', function() {
 		}
 	}
 
-	checkRentalItems();
-	initRentalSystem();
 	
 	initBattlePasses();
 	startClanBalanceGrowth();
