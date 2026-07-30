@@ -2230,3 +2230,204 @@ border-radius: 3px;
 .editor-content::-webkit-scrollbar-thumb:hover {
 background: #777;
 }
+/* Стили для новых вкладок рынка */
+.market-tabs {
+    display: flex;
+    margin-bottom: 15px;
+    border-bottom: 2px solid #333;
+}
+
+.market-tab-btn {
+    padding: 10px 20px;
+    background: none;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    font-size: 14px;
+    position: relative;
+    transition: color 0.3s;
+}
+
+.market-tab-btn:hover {
+    color: #fff;
+}
+
+.market-tab-btn.active {
+    color: gold;
+}
+
+.market-tab-btn.active::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: gold;
+}
+
+/* Стили для модального окна предмета на рынке */
+.market-item-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8);
+    z-index: 2000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.market-item-content {
+    background-color: rgb(30, 30, 30, 0.95);
+    padding: 25px;
+    border-radius: 10px;
+    width: 900px;
+    max-width: 95%;
+    max-height: 90vh;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: 250px 1fr;
+    gap: 25px;
+}
+
+.market-item-left {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.market-item-preview {
+    width: 200px;
+    text-align: center;
+    margin-bottom: 15px;
+}
+
+.market-item-preview img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 5px;
+}
+
+.market-item-preview .item-name {
+    font-size: 14px;
+    margin-top: 10px;
+}
+
+.sell-btn {
+    background: linear-gradient(to right, #4CAF50, #45a049);
+    color: white;
+    border: none;
+    padding: 12px 25px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    width: 100%;
+    margin-bottom: 15px;
+    transition: transform 0.2s;
+}
+
+.sell-btn:hover {
+    transform: scale(1.02);
+}
+
+.buy-request-form {
+    background-color: rgba(42, 42, 42, 0.5);
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.buy-request-form h4 {
+    margin: 0 0 15px 0;
+    color: gold;
+}
+
+.buy-request-form input {
+    width: 100%;
+    padding: 8px;
+    margin-bottom: 10px;
+    background-color: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: white;
+}
+
+.buy-request-form button {
+    background-color: #2196F3;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 100%;
+}
+
+.market-lots-container {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.market-lot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    background-color: rgba(42, 42, 42, 0.3);
+    border-radius: 6px;
+    margin-bottom: 10px;
+}
+
+.market-lot-info {
+    flex: 1;
+}
+
+.market-lot-price {
+    color: gold;
+    font-weight: bold;
+}
+
+.market-lot-seller {
+    font-size: 12px;
+    color: #888;
+}
+
+.market-lot-stickers {
+    display: flex;
+    gap: 5px;
+    margin-top: 5px;
+}
+
+.market-lot-stickers img {
+    width: 30px;
+    height: 30px;
+    border-radius: 3px;
+}
+
+.close-market-modal {
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    font-size: 28px;
+    color: #888;
+    cursor: pointer;
+    background: none;
+    border: none;
+}
+
+.close-market-modal:hover {
+    color: white;
+}
+
+/* Удаление стилей корзины */
+.cart-container,
+.cart-title,
+.cart-items,
+.cart-total,
+.cart-actions,
+.checkout-btn,
+.clear-cart-btn {
+    display: none !important;
+}
