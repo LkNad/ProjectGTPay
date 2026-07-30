@@ -7038,44 +7038,54 @@ document.addEventListener('DOMContentLoaded', function() {
 	});
 
 	function initShop() {
-		itemsContainer.innerHTML = '';
-		const selectedRarity = (() => {
-			const activeBtn = document.querySelector('.filter-btn.active');
-			return activeBtn ? activeBtn.dataset.rarity : 'all';
-		})();
-
-		const selectedCollection = document.getElementById('collection-filter')?.value || 'all';
+		itemsContainer.textContent = '';
+		const activeBtn = document.querySelector('.filter-btn.active');
+		const selectedRarity = activeBtn ? activeBtn.dataset.rarity : 'all';
+	
+		const collectionFilter = document.getElementById('collection-filter');
+		const selectedCollection = collectionFilter ? collectionFilter.value : 'all';
 
 		const typeCheckboxes = document.querySelectorAll('#type-checkboxes input[type="checkbox"][data-type]:not([data-type="all"])');
-		const selectedTypes = Array.from(typeCheckboxes)
-			.filter(cb => cb.checked)
-			.map(cb => cb.dataset.type);
+		const selectedTypes = [];
+		for (let i = 0; i < typeCheckboxes.length; i++) {
+			if (typeCheckboxes[i].checked) {
+				selectedTypes.push(typeCheckboxes[i].dataset.type);
+			}
+		}
 
 		const allTypesSelected = selectedTypes.length === typeCheckboxes.length;
 
-		let itemsToShow = itemsDatabase.filter(item => {
-			if (currentMarket === 'rental') {
-				return item.isRental === true;
-			} else {
-				return item.isRental !== true;
-			}
-		});
+		// Оптимизация: один проход фильтрации вместо нескольких filter()
+		const itemsToShow = [];
+		const isRentalMarket = currentMarket === 'rental';
+		for (let i = 0; i < itemsDatabase.length; i++) {
+			const item = itemsDatabase[i];
+			
+			// Фильтр по рынку
+			if (isRentalMarket ? !item.isRental : item.isRental) continue;
+			
+			// Фильтр по наличию в магазине
+			if (!item.itemInStore) continue;
 
-		itemsToShow = itemsToShow.filter(item => {
-			if (!item.itemInStore) return false;
-
-			const itemType = getItemType(item);
+			// Фильтр по редкости
+			if (selectedRarity !== 'all' && item.rarity !== selectedRarity) continue;
+			
+			// Фильтр по коллекции
 			const itemCollection = item.collection || '';
-
-			const matchesRarity = selectedRarity === 'all' || item.rarity === selectedRarity;
-			const matchesCollection = selectedCollection === 'all' || itemCollection === selectedCollection;
-			const matchesType = allTypesSelected || selectedTypes.includes(itemType);
-
-			return matchesRarity && matchesCollection && matchesType;
-		});
+			if (selectedCollection !== 'all' && itemCollection !== selectedCollection) continue;
+			
+			// Фильтр по типу
+			if (!allTypesSelected) {
+				const itemType = getItemType(item);
+				if (!selectedTypes.includes(itemType)) continue;
+			}
+			
+			itemsToShow.push(item);
+		}
 		
 		const cardObserver = new IntersectionObserver((entries) => {
-			entries.forEach(entry => {
+			for (let i = 0; i < entries.length; i++) {
+				const entry = entries[i];
 				if (entry.isIntersecting) {
 					const img = entry.target.querySelector('.item-img img');
 					if (img && img.hasAttribute('data-src')) {
@@ -7084,13 +7094,13 @@ document.addEventListener('DOMContentLoaded', function() {
 					}
 					cardObserver.unobserve(entry.target);
 				}
-			});
+			}
 		}, { threshold: 0.1 });
 		
-		itemsToShow.forEach(item => {
-			const card = addItemToShop(item); // Предполагается, что addItemToShop возвращает DOM-элемент карточки
+		for (let i = 0; i < itemsToShow.length; i++) {
+			const card = addItemToShop(itemsToShow[i]);
 			if (card) cardObserver.observe(card);
-		});
+		}
 		
 		applyTypeFilters();
 		sortItemsByPrice();
@@ -7136,33 +7146,37 @@ document.addEventListener('DOMContentLoaded', function() {
 	
 	function calculateInventoryTotal() {
 	  let total = 0;
-	  inventory.forEach(item => {
-		if (item.isRental) return;
+	  // Оптимизация: используем for loop вместо forEach и кэшируем поиск в Map
+	  const invLength = inventory.length;
+	  for (let i = 0; i < invLength; i++) {
+		const item = inventory[i];
+		if (item.isRental) continue;
 		
-		const originalItem = itemsDatabase.find(dbItem => dbItem.id === item.id);
+		const originalItem = itemsDbMap.get(item.id);
 		
-		if (!originalItem || originalItem.itemInStore === false) return;
+		if (!originalItem || originalItem.itemInStore === false) continue;
 		
-		if (originalItem.isCase) return;
+		if (originalItem.isCase) continue;
 		
 		total += Math.round((originalItem.price * 0.8) * 100) / 100;
 		
-		if (item.stickers) {
-		  item.stickers.forEach(sticker => {
-			const stickerItem = itemsDatabase.find(dbItem => dbItem.id === sticker.id);
+		if (item.stickers && item.stickers.length > 0) {
+		  for (let j = 0; j < item.stickers.length; j++) {
+			const sticker = item.stickers[j];
+			const stickerItem = itemsDbMap.get(sticker.id);
 			if (stickerItem && stickerItem.itemInStore !== false) {
 			  total += Math.round((stickerItem.price * 0.1) * 100) / 100;
 			}
-		  });
+		  }
 		}
 		
 		if (item.charm) {
-		  const charmItem = itemsDatabase.find(dbItem => dbItem.id === item.charm.id);
+		  const charmItem = itemsDbMap.get(item.charm.id);
 		  if (charmItem && charmItem.itemInStore !== false) {
 			total += Math.round((charmItem.price * 0.8) * 100) / 100;
 		  }
 		}
-	  });
+	  }
 	  
 	  return total.toLocaleString('ru-RU', {
 		minimumFractionDigits: 2,
@@ -7823,6 +7837,8 @@ document.addEventListener('DOMContentLoaded', function() {
 	}
 	
 	function sortInventoryByRarity() {
+		const typeOrder = { 'case': 0, 'withSlots': 1, 'withoutSlots': 2, 'charm': 3, 'sticker': 4, 'rental': 5 };
+		
 		inventory.sort((a, b) => {
 			const rarityA = rarities[a.rarity]?.order || 0;
 			const rarityB = rarities[b.rarity]?.order || 0;
@@ -7842,7 +7858,6 @@ document.addEventListener('DOMContentLoaded', function() {
 				return 'withSlots';
 			};
 			
-			const typeOrder = { 'case': 0, 'withSlots': 1, 'withoutSlots': 2, 'charm': 3, 'sticker': 4, 'rental': 5 };
 			const typeA = getType(a, originalItemA);
 			const typeB = getType(b, originalItemB);
 			
@@ -7859,8 +7874,11 @@ document.addEventListener('DOMContentLoaded', function() {
 	
 	function groupFragmentsInInventory() {
 	  const fragmentGroups = {};
+	  const invLength = inventory.length;
 	  
-	  inventory.forEach((item, index) => {
+	  // Оптимизация: используем for loop вместо forEach
+	  for (let i = 0; i < invLength; i++) {
+		const item = inventory[i];
 		if (item.name.endsWith('Fragment') && !item.isRental) {
 		  if (!fragmentGroups[item.id]) {
 			fragmentGroups[item.id] = {
@@ -7869,10 +7887,10 @@ document.addEventListener('DOMContentLoaded', function() {
 			  count: 0
 			};
 		  }
-		  fragmentGroups[item.id].indices.push(index);
+		  fragmentGroups[item.id].indices.push(i);
 		  fragmentGroups[item.id].count++;
 		}
-	  });
+	  }
 	  
 	  return fragmentGroups;
 	}
@@ -10587,49 +10605,62 @@ document.addEventListener('DOMContentLoaded', function() {
 	
 	function updateInventory() {
 		mergeRentalStacks();
-		scheduleNextRentalCheck(); // Пересчитать таймеры после объединения
+		scheduleNextRentalCheck();
 		sortInventoryByRarity();
 		const fragmentGroups = groupFragmentsInInventory();
 		const groupedData = {};
 		
-		Object.keys(rarities).forEach(rarity => {
+		// Оптимизация: кэшируем keys раритетов
+		const rarityKeys = Object.keys(rarities);
+		for (let i = 0; i < rarityKeys.length; i++) {
+			const rarity = rarityKeys[i];
 			groupedData[rarity] = {
 				withoutSlots: [], charms: [], withSlots: [], stickers: [], cases: [], rentals: [], fragments: []
 			};
-		});
+		}
 
-		inventory.forEach((item, index) => {
+		// Оптимизация: используем for loop вместо forEach для лучшей производительности
+		const invLength = inventory.length;
+		for (let idx = 0; idx < invLength; idx++) {
+			const item = inventory[idx];
 			const originalItem = itemsDbMap.get(item.id);
 			const rarity = item.rarity;
 			
-			if (!groupedData[rarity]) return;
+			if (!groupedData[rarity]) continue;
 
 			if (item.name.endsWith('Fragment') && !item.isRental && fragmentGroups[item.id]) {
 				const fg = fragmentGroups[item.id];
-				if (index === fg.indices[0]) {
-					groupedData[rarity].fragments.push({ item, index, count: fg.count });
+				if (idx === fg.indices[0]) {
+					groupedData[rarity].fragments.push({ item, index: idx, count: fg.count });
 				}
 			} 
 			else if (item.isRental) {
-				groupedData[rarity].rentals.push({ item, index });
+				groupedData[rarity].rentals.push({ item, index: idx });
 			} 
 			else if (originalItem || item) {
-				if (originalItem?.isCase) groupedData[rarity].cases.push({ item, index });
-				else if (originalItem?.isCharm) groupedData[rarity].charms.push({ item, index });
-				else if (originalItem?.isSticker) groupedData[rarity].stickers.push({ item, index });
-				else if (originalItem?.isItemWithoutSlot) groupedData[rarity].withoutSlots.push({ item, index });
-				else groupedData[rarity].withSlots.push({ item, index });
+				if (originalItem?.isCase) groupedData[rarity].cases.push({ item, index: idx });
+				else if (originalItem?.isCharm) groupedData[rarity].charms.push({ item, index: idx });
+				else if (originalItem?.isSticker) groupedData[rarity].stickers.push({ item, index: idx });
+				else if (originalItem?.isItemWithoutSlot) groupedData[rarity].withoutSlots.push({ item, index: idx });
+				else groupedData[rarity].withSlots.push({ item, index: idx });
 			}
-		});
+		}
 
-		Object.values(groupedData).forEach(groups => {
-			Object.values(groups).forEach(list => list.sort((a, b) => a.item.name.localeCompare(b.item.name)));
-		});
+		// Оптимизация: более эффективная сортировка
+		for (const rarity in groupedData) {
+			const groups = groupedData[rarity];
+			for (const key in groups) {
+				const list = groups[key];
+				if (list.length > 1) {
+					list.sort((a, b) => a.item.name.localeCompare(b.item.name));
+				}
+			}
+		}
 
-		const sortedRarities = Object.keys(rarities).sort((a, b) => (rarities[b]?.order || 0) - (rarities[a]?.order || 0));
+		const sortedRarities = rarityKeys.sort((a, b) => (rarities[b]?.order || 0) - (rarities[a]?.order || 0));
 		
 		const fragment = document.createDocumentFragment();
-		inventoryItemsElement.innerHTML = ''; // Очистка
+		inventoryItemsElement.textContent = ''; // textContent быстрее чем innerHTML
 
 		if (inventory.length === 0) {
 			inventoryItemsElement.innerHTML = '<p>Ваш инвентарь пуст</p>';
