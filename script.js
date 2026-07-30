@@ -7243,29 +7243,29 @@ document.addEventListener('DOMContentLoaded', function() {
 		</div>
 		${currentMarket === 'rental' ? 
 		  '<div class="item-stock">Аренда на 3 минуты</div>' : 
-		  `<div class="item-stock">Количество доступных покупок: <span class="available-stock">${item.stock}</span></div>`
+		  `<div class="item-stock">Лотов на рынке: <span class="market-lots">${item.stock}</span></div>`
 		}
 		<div class="item-price" style="color: ${currencyColor}">${price.toFixed(2)} ₽</div>
 		<div class="item-buttons">
-		  <button class="add-to-cart" data-id='${item.id}' data-name='${item.name}' data-price='${price}' 
+		  <button class="find-on-platform-btn" data-id='${item.id}' data-name='${item.name}' data-price='${price}' 
 			data-max='${item.stock}' data-rarity='${item.rarity}' 
 			${currentMarket === 'rental' ? 'data-rental="true"' : ''}>
-			${currentMarket === 'rental' ? 'Арендовать' : 'Добавить в корзину'}
+			${currentMarket === 'rental' ? 'Арендовать' : 'Найти на платформе'}
 		  </button>
 		  ${currentMarket === 'rental' ? '' : 
 			`<button class="buy-all-btn" data-id='${item.id}' data-name='${item.name}' data-price='${price}' 
 			  data-max='${item.stock}' data-rarity='${item.rarity}'>Купить все</button>`
 		  }
 		</div>
-		${currentMarket === 'rental' ? '' : '<div class="stock-warning">Достигнуто максимальное количество покупок</div>'}
+		${currentMarket === 'rental' ? '' : '<div class="stock-warning">Лоты закончились</div>'}
 	  `;
 	  
 	  const warning = itemCard.querySelector('.stock-warning');
-	  const addBtn = itemCard.querySelector('.add-to-cart');
+	  const findBtn = itemCard.querySelector('.find-on-platform-btn');
 	  const buyAllBtn = itemCard.querySelector('.buy-all-btn');
 	  if (warning) {
 		warning.style.display = item.stock <= 0 ? 'block' : 'none';
-		addBtn.disabled = item.stock <= 0;
+		findBtn.disabled = item.stock <= 0;
 		buyAllBtn.disabled = item.stock <= 0;
 	  }
 
@@ -7276,8 +7276,8 @@ document.addEventListener('DOMContentLoaded', function() {
 		  setup3DViewer(imgContainer, item, item); // item — и есть originalItem для магазина
 	  }
 
-	  if (addBtn) {
-		addBtn.addEventListener('click', function(e) {
+	  if (findBtn) {
+		findBtn.addEventListener('click', function(e) {
 		  e.stopPropagation(); 
 		  
 		  const id = this.getAttribute('data-id');
@@ -7313,38 +7313,8 @@ document.addEventListener('DOMContentLoaded', function() {
 			if(typeof updateInventory === 'function') updateInventory();
 			if(typeof saveGameState === 'function') saveGameState();
 		  } else {
-			const stockSpan = itemCard.querySelector('.available-stock');
-			if (!stockSpan) return;
-			
-			const currentStock = parseFloat(stockSpan.textContent);
-			if (currentStock <= 0) {
-			  showToast('Товар закончился!', true);
-			  return;
-			}
-
-			let quantityToAdd = 1;
-			if (e.shiftKey) {
-			  quantityToAdd = Math.min(10, currentStock);
-			}
-
-			for (let i = 0; i < quantityToAdd; i++) {
-			  if(typeof addToCart === 'function') addToCart(id, name, price, false);
-			}
-
-			if(typeof updateStock === 'function') {
-				updateStock(itemCard, currentStock - quantityToAdd, max);
-			} else {
-				stockSpan.textContent = currentStock - quantityToAdd;
-				if (warning) warning.style.display = (currentStock - quantityToAdd) <= 0 ? 'block' : 'none';
-				if (addBtn) addBtn.disabled = (currentStock - quantityToAdd) <= 0;
-				if (buyAllBtn) buyAllBtn.disabled = (currentStock - quantityToAdd) <= 0;
-			}
-
-			const message = quantityToAdd === 1
-			  ? 'Добавлено в корзину!'
-			  : `Добавлено ${quantityToAdd} шт. в корзину!`;
-
-			showToast(message);
+			// Открыть модальное окно предмета
+			openItemModal(item);
 		  }
 		});
 	  }
