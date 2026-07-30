@@ -12550,8 +12550,8 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 	  if (shopItem && !shopItem.name.endsWith('Fragment')) {
 		const itemElement = document.getElementById(shopItem.id);
 		if (itemElement) {
-		  const stockEl = itemElement.querySelector('.available-stock');
-		  const currentStock = stockEl ? parseInt(stockEl.textContent) : shopItem.stock;
+		  const marketLotsEl = itemElement.querySelector('.market-lots');
+		  const currentStock = marketLotsEl ? parseInt(marketLotsEl.textContent) : shopItem.stock;
                   const btn = itemElement.querySelector('.find-on-platform-btn') || itemElement.querySelector('.rent-item-btn');
                   const max = btn ? parseInt(btn.getAttribute('data-max')) : 0;
 		  updateStock(itemElement, currentStock + 1, max);
@@ -12611,7 +12611,7 @@ const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : 
 				
 				const shopItem = document.getElementById(originalItem.id);
 				if (shopItem) {
-					const stockEl = shopItem.querySelector('.available-stock');
+					const stockEl = shopItem.querySelector('.market-lots');
 					const currentStock = stockEl ? parseInt(stockEl.textContent) : originalItem.stock;
                                         const btn = shopItem.querySelector('.find-on-platform-btn') || shopItem.querySelector('.rent-item-btn');
                                         const max = btn ? parseInt(btn.getAttribute('data-max')) : 0;
