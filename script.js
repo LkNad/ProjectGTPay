@@ -53,18 +53,38 @@ document.addEventListener('DOMContentLoaded', function() {
 	marketToggle.innerHTML = `
 	  <button id="normal-market-btn" class="market-btn active"><a style="font-size: 120%">Рынок</a></button>
 	  <button id="rental-market-btn" class="market-btn"><a style="font-size: 120%">Аренда</a></button>
+	  <button id="online-market-btn" class="market-btn"><a style="font-size: 120%">Онлайн-рынок</a></button>
 	`;
 	document.querySelector('.sort-container').insertAdjacentElement('beforebegin', marketToggle);
 	
 	document.getElementById('generate-promo-btn').addEventListener('click', generateRandomPromocode);
-
-	let currentMarket = 'normal'; // 'normal' или 'rental'
+	
+	// === ONLINE MARKET DATA STRUCTURE ===
+	const onlineMarket = {
+		listings: {},      // itemId -> [{id, price, isMine, inventoryItem, seller, stickers}]
+		buyRequests: [],   // {id,itemId,item,price,quantity,remaining,timestamp,timerId,expectedAt,requestElement}
+		sellRequests: [],  // {id,lotId,itemId,item,price,status,listedAt,expectedSellAt,requestElement}
+		reqCounter: 0,
+		currentFilterRarity: 'all',
+		currentFilterCollection: 'all',
+		currentFilterName: '',
+		currentFilterTypes: ['all'],
+		sortDescending: false
+	};
+	
+	let currentMarket = 'normal'; // 'normal', 'rental' или 'online'
 	
 	document.getElementById('normal-market-btn').addEventListener('click', function() {
 		if (currentMarket !== 'normal') {
 			currentMarket = 'normal';
 			this.classList.add('active');
 			document.getElementById('rental-market-btn').classList.remove('active');
+			document.getElementById('online-market-btn').classList.remove('active');
+			// Show shop UI
+			document.querySelector('.sort-container').style.display = '';
+			document.getElementById('items-container').style.display = '';
+			const omSection = document.getElementById('online-market-section');
+			if (omSection) omSection.style.display = 'none';
 			initShop(); // Перезагружаем магазин
 		}
 	});
@@ -74,7 +94,32 @@ document.addEventListener('DOMContentLoaded', function() {
 			currentMarket = 'rental';
 			this.classList.add('active');
 			document.getElementById('normal-market-btn').classList.remove('active');
+			document.getElementById('online-market-btn').classList.remove('active');
+			// Show shop UI
+			document.querySelector('.sort-container').style.display = '';
+			document.getElementById('items-container').style.display = '';
+			const omSection = document.getElementById('online-market-section');
+			if (omSection) omSection.style.display = 'none';
 			initShop(); // Перезагружаем магазин
+		}
+	});
+	
+	// Online market button handler - placeholder, will be implemented later
+	document.getElementById('online-market-btn').addEventListener('click', function() {
+		if (currentMarket !== 'online') {
+			currentMarket = 'online';
+			this.classList.add('active');
+			document.getElementById('normal-market-btn').classList.remove('active');
+			document.getElementById('rental-market-btn').classList.remove('active');
+			// Hide shop UI, show online market section
+			document.querySelector('.sort-container').style.display = 'none';
+			document.getElementById('items-container').style.display = 'none';
+			const omSection = document.getElementById('online-market-section');
+			if (omSection) {
+				omSection.style.display = 'flex';
+			} else {
+				console.log('Online market section not found - needs initialization');
+			}
 		}
 	});
 	
@@ -16179,4 +16224,1975 @@ document.addEventListener('DOMContentLoaded', function() {
 	addQuickOpenButtonToInventory();
 
 	console.log('Element Editor loaded. Press Alt+A to open editor.');
-});
+
+	// ==================== ONLINE MARKET FUNCTIONS ====================
+	function initOnlineMarket() {
+		onlineMarket.currentFilterTypes = ['all'];
+
+		// Registry of currently open platform modals: itemId -> overlay element
+		const activeModals = {};
+		
+		function getStickerValueAdjustment(stickers, multiplier) {
+			if (!stickers || !stickers.length) return 0;
+			let total = 0;
+			stickers.forEach(s => {
+				const stickerItem = itemsDatabase.find(i => i.id === s.id);
+				if (stickerItem && stickerItem.price) {
+					total += stickerItem.price * multiplier;
+				}
+			});
+			return total;
+		}
+
+		// Refresh lots panel in any open modal for a given itemId
+		function refreshOpenModal(itemId) {
+			const overlay = activeModals[itemId];
+			if (overlay && document.body.contains(overlay)) {
+				renderLotsPanel(itemId, overlay);
+				
+				// Обновляем баннер активной заявки
+				const myReq = onlineMarket.buyRequests.find(r => r.itemId === itemId && r.remaining > 0);
+				const banner = overlay.querySelector('.om-active-req-banner');
+				if (myReq && !banner) {
+					const lotsPanel = overlay.querySelector('.om-lots-panel');
+					if (lotsPanel) {
+						const b = document.createElement('div');
+						b.className = 'om-active-req-banner';
+						b.id = 'om-active-req-banner-' + myReq.id;
+						b.innerHTML = `<span>📋 Активная заявка: ${myReq.price.toFixed(2)} ₽ × ${myReq.remaining} шт.</span><button class="om-cancel-active-req-btn" data-req-id="${myReq.id}">Отменить</button>`;
+						lotsPanel.insertBefore(b, lotsPanel.firstChild);
+					}
+				} else if (!myReq && banner) {
+					banner.remove();
+				} else if (myReq && banner) {
+					banner.querySelector('span').textContent = `📋 Активная заявка: ${myReq.price.toFixed(2)} ₽ × ${myReq.remaining} шт.`;
+				}
+				
+				// === ОБНОВЛЯЕМ КНОПКУ "ОТМЕНИТЬ ВСЕ МОИ ЛОТЫ" ===
+				const header = overlay.querySelector('.om-lots-header h3');
+				const headerContainer = overlay.querySelector('.om-lots-header');
+				if (headerContainer && header) {
+					const existingBtn = headerContainer.querySelector('#om-cancel-all-my-lots-btn');
+					if (existingBtn) existingBtn.remove();
+					
+					const lots = onlineMarket.listings[itemId] || [];
+					const myLotsCount = lots.filter(l => l.isMine).length;
+					if (myLotsCount > 0) {
+						const cancelAllBtn = document.createElement('button');
+						cancelAllBtn.id = 'om-cancel-all-my-lots-btn';
+						cancelAllBtn.textContent = `× Снять мои лоты (${myLotsCount})`;
+						cancelAllBtn.style.cssText = 'margin-left:10px;padding:4px 10px;background:#f44336;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;';
+						cancelAllBtn.addEventListener('click', (e) => {
+							e.stopPropagation();
+							
+							const myLots = lots.filter(l => l.isMine);
+							myLots.forEach(lot => {
+								if (lot.sellReqTimerId) clearTimeout(lot.sellReqTimerId);
+								if (lot.inventoryItem) inventory.push(lot.inventoryItem);
+								onlineMarket.sellRequests = onlineMarket.sellRequests.filter(r => r.lotId !== lot.id);
+							});
+							onlineMarket.listings[itemId] = lots.filter(l => !l.isMine);
+							if (onlineMarket.listings[itemId]?.length === 0) delete onlineMarket.listings[itemId];
+							
+							updateInventory();
+							saveGameState();
+							showToast(`Отменено лотов: ${myLotsCount}`);
+							updatePlatformCard(itemId);
+							updateNormalMarketCardPrice(itemId);
+							renderLotsPanel(itemId, overlay);
+							renderMyRequests();
+						});
+						header.appendChild(cancelAllBtn);
+					}
+				}
+				
+			} else if (overlay && !document.body.contains(overlay)) {
+				delete activeModals[itemId];
+			}
+		}
+		
+		// === Очистка "осиротевших" лотов при старте ===
+		Object.keys(onlineMarket.listings).forEach(itemId => {
+			const itemExists = itemsDatabase.find(i => i.id === itemId);
+			if (!itemExists) {
+				delete onlineMarket.listings[itemId];
+			} else {
+				// Также фильтруем внутри массива
+				onlineMarket.listings[itemId] = onlineMarket.listings[itemId].filter(lot => {
+					return itemsDatabase.find(i => i.id === itemId) !== undefined;
+				});
+				if (onlineMarket.listings[itemId].length === 0) {
+					delete onlineMarket.listings[itemId];
+				}
+			}
+		});
+
+		// ---- Bot price logic ----
+		function getOnlinePrice(itemId) {
+			const lots = onlineMarket.listings[itemId];
+			if (lots && lots.length > 0) {
+				return Math.min(...lots.map(l => l.price));
+			}
+			return null;
+		}
+
+		function getBotPrice(item, currentLotCount, botStickers = null) {
+			const allCurrentLots = onlineMarket.listings[item.id] 
+				? onlineMarket.listings[item.id].filter(l => !l.isMine) 
+				: [];
+			
+			const cleanLots = allCurrentLots.filter(l => !l.stickers || l.stickers.length === 0);
+			
+			let basePrice;
+			if (cleanLots.length > 0) {
+				const sum = cleanLots.reduce((acc, lot) => acc + lot.price, 0);
+				basePrice = sum / cleanLots.length;
+			} 
+			else if (allCurrentLots.length > 0) {
+				const minLotPrice = Math.min(...allCurrentLots.map(l => l.price));
+				basePrice = minLotPrice; 
+			} 
+			else {
+				basePrice = item.initialPrice || item.price || 1000000;
+			}
+			
+			if (botStickers && botStickers.length > 0) {
+				const stickerBonus = getStickerValueAdjustment(botStickers, 0.05);
+				basePrice += stickerBonus;
+			}
+			
+			const totalLots = currentLotCount !== undefined ? currentLotCount : allCurrentLots.length;
+			const initialStock = Math.max(1, item.stock || 5);
+			const scarcity = Math.max(0, 1 - totalLots / initialStock);
+			const floorMult = 0.95 + (scarcity * 0.05);
+			const ceilMult = 1.05 + (scarcity * 0.10);
+			
+			const floor = basePrice * floorMult;
+			const ceil = basePrice * ceilMult;
+			
+			let finalPrice = floor + Math.random() * (ceil - floor);
+			finalPrice = Math.max(0.01, Math.min(1000000, Math.round(finalPrice * 100) / 100));
+			return finalPrice;
+		}
+
+		const omInitialized = new Set();
+
+		function ensureBotsForItem(itemId, item) {
+			if (!onlineMarket.listings[itemId]) onlineMarket.listings[itemId] = [];
+			
+			const target = Math.min(10000, Math.max(3, item.stock || 5));
+			const needed = target - onlineMarket.listings[itemId].filter(l => !l.isMine).length;
+			if (needed <= 0) return;
+
+			function generateBotStickers() {
+				if (item.isCase || item.isCharm || item.isSticker || item.isItemWithoutSlot) return undefined;
+				if (item.name.endsWith('Fragment') || item.name.startsWith('Graffiti') || item.name.startsWith('Medal')) return undefined;
+				
+				if (Math.random() < 0.40) {
+					const allStickers = itemsDatabase.filter(s => s.isSticker);
+					if (!allStickers.length) return undefined;
+					const stickerCount = Math.min(4, Math.max(1, Math.floor(Math.random() * 4) + 1));
+					const stickers = [];
+					for (let j = 0; j < stickerCount; j++) {
+						const sel = allStickers[Math.floor(Math.random() * allStickers.length)];
+						if (sel) stickers.push({ id: sel.id, name: sel.name, image: sel.image });
+					}
+					return stickers.length ? stickers : undefined;
+				}
+				return undefined;
+			}
+
+			const batchSize = 500;
+			let generated = 0;
+			function addBatch() {
+				const n = Math.min(batchSize, needed - generated);
+				for (let i = 0; i < n; i++) {
+					const lotsSoFar = onlineMarket.listings[itemId].filter(l => !l.isMine).length;
+					const isFirstBotLot = (lotsSoFar === 0);
+					const botStickers = isFirstBotLot ? undefined : generateBotStickers();
+					
+					const lot = {
+						id: 'bot_' + itemId + '_' + Date.now() + '_' + Math.random(),
+						price: getBotPrice(item, lotsSoFar, botStickers),
+						isMine: false,
+						seller: 'Bot #' + (Math.floor(Math.random() * 9000) + 1000)
+					};
+					if (botStickers) lot.stickers = botStickers;
+					onlineMarket.listings[itemId].push(lot);
+				}
+				generated += n;
+				if (generated < needed) {
+					setTimeout(addBatch, 0);
+				} else {
+					onlineMarket.listings[itemId].sort((a, b) => a.price - b.price);
+					updateNormalMarketCardPrice(itemId);
+				}
+			}
+			addBatch();
+		}
+
+		function botRelistAfterSale(itemId, item, soldPrice) {
+			const currentLots = onlineMarket.listings[itemId] || [];
+			const botLots = currentLots.filter(l => !l.isMine);
+			
+			const isFirstBotLot = (botLots.length === 0);
+			
+			function generateBotStickers() {
+				if (item.isCase || item.isCharm || item.isSticker || item.isItemWithoutSlot) return undefined;
+				if (item.name.endsWith('Fragment') || item.name.startsWith('Graffiti') || item.name.startsWith('Medal')) return undefined;
+				if (Math.random() < 0.40) {
+					const allStickers = itemsDatabase.filter(s => s.isSticker);
+					if (!allStickers.length) return undefined;
+					const stickerCount = Math.min(4, Math.max(1, Math.floor(Math.random() * 4) + 1));
+					const stickers = [];
+					for (let j = 0; j < stickerCount; j++) {
+						const sel = allStickers[Math.floor(Math.random() * allStickers.length)];
+						if (sel) stickers.push({ id: sel.id, name: sel.name, image: sel.image });
+					}
+					return stickers.length ? stickers : undefined;
+				}
+				return undefined;
+			}
+			const botStickers = isFirstBotLot ? undefined : generateBotStickers();
+			let finalPrice;
+			if (botLots.length === 0) {
+				finalPrice = soldPrice; 
+			} else {
+				const calculatedPrice = getBotPrice(item, botLots.length, botStickers);
+				
+				const avgBotPrice = botLots.reduce((acc, l) => acc + l.price, 0) / botLots.length;
+				if (soldPrice > avgBotPrice * 1.1) {
+					finalPrice = Math.min(soldPrice, calculatedPrice * 1.05); 
+				} else {
+					finalPrice = calculatedPrice;
+				}
+			}
+
+			finalPrice = Math.max(0.01, Math.min(1000000, finalPrice));
+			finalPrice = Math.round(finalPrice * 100) / 100;
+			
+			if (!onlineMarket.listings[itemId]) onlineMarket.listings[itemId] = [];
+			
+			const newLot = {
+				id: 'bot_relist_' + Date.now() + '_' + Math.random(),
+				price: finalPrice,
+				isMine: false,
+				seller: 'Bot #' + (Math.floor(Math.random() * 9000) + 1000)
+			};
+			if (botStickers) {
+				newLot.stickers = botStickers;
+			}
+			onlineMarket.listings[itemId].push(newLot);
+			onlineMarket.listings[itemId].sort((a, b) => a.price - b.price);
+			updatePlatformCard(itemId);
+			updateNormalMarketCardPrice(itemId);
+			refreshOpenModal(itemId);
+		}
+
+		function updateNormalMarketCardPrice(itemId) {
+			const onlinePrice = getOnlinePrice(itemId);
+			if (onlinePrice === null) return;
+			
+			const card = document.getElementById(itemId);
+			if (card) {
+				const priceEl = card.querySelector('.item-price');
+				if (priceEl) priceEl.textContent = onlinePrice.toFixed(2) + ' ₽';
+				card.querySelectorAll('.add-to-cart, .buy-all-btn').forEach(btn => {
+					btn.setAttribute('data-price', onlinePrice.toFixed(2));
+				});
+			}
+			
+			const dbItem = itemsDatabase.find(i => i.id === itemId);
+			if (dbItem) dbItem.price = onlinePrice;
+			
+			const rentalId = itemId + '_rental';
+			const rentalCard = document.getElementById(rentalId);
+			const rentalDbItem = itemsDatabase.find(i => i.id === rentalId);
+			if (rentalDbItem) {
+				const newRentalPrice = Math.max(0.01, Math.round(onlinePrice * 0.01 * 100) / 100);
+				rentalDbItem.price = newRentalPrice;
+				if (rentalCard) {
+					const rPriceEl = rentalCard.querySelector('.item-price');
+					if (rPriceEl) rPriceEl.textContent = newRentalPrice.toFixed(2) + ' ₽';
+					rentalCard.querySelectorAll('.add-to-cart').forEach(btn => {
+						btn.setAttribute('data-price', newRentalPrice.toFixed(2));
+					});
+				}
+			}
+		}
+
+		function calcBuyDelay(reqPrice, lotPrice) {
+			if (reqPrice >= lotPrice) return 0;
+			const diff = (lotPrice - reqPrice) / lotPrice;
+			if (diff <= 0.50) return 200 + Math.random() * 800;
+			if (diff <= 0.70) return 3000 + diff * 60000;
+			if (diff <= 0.90) return 10000 + diff * 100000;
+			if (diff <= 1.00) return 20000 + diff * 80000;
+			return Math.min(60000, 40000 + diff * 40000);
+		}
+
+		function calcSellDelay(listPrice, item) {
+			const lots = onlineMarket.listings[item.id] || [];
+			const prices = lots.filter(l => !l.isMine).map(l => l.price);
+			if (!prices.length) prices.push(item.price);
+			const minBot = Math.min(...prices);
+			const avgBot = prices.reduce((a, b) => a + b, 0) / prices.length;
+			const maxAllowed = Math.min(1000000, item.price * 2);
+			if (listPrice > maxAllowed) return Infinity;
+			const diff = (listPrice - minBot) / Math.max(1, avgBot);
+			if (diff <= 0.50) return 100 + Math.random() * 400;
+			if (diff <= 0.70) return 1000 + diff * 20000;
+			if (diff <= 0.90) return 5000 + diff * 30000;
+			if (diff <= 1.00) return 15000 + diff * 40000;
+			return 40000 + diff * 20000;
+		}
+
+		function formatDelay(ms) {
+			if (ms <= 0) return 'скоро';
+			if (ms < 1000) return 'менее секунды';
+			const s = Math.round(ms / 1000);
+			if (s < 60) return `~${s} сек.`;
+			const m = Math.floor(s / 60), sec = s % 60;
+			return `~${m} мин. ${sec > 0 ? sec + ' сек.' : ''}`;
+
+                // ---- Container ----
+                const omContainer = document.createElement('div');
+                omContainer.id = 'online-market-section';
+                omContainer.className = 'online-market-container';
+                omContainer.innerHTML = `
+                        <div class="online-market-subtabs">
+                                <button class="online-market-subtab active" data-tab="platform">Платформа</button>
+                                <button class="online-market-subtab" data-tab="requests">Мои заявки</button>
+                        </div>
+                        <div class="om-platform-container active" id="om-platform-container">
+                                <!-- Filters bar -->
+                                <div class="om-filters-bar">
+                                        <div class="filters" id="om-rarity-filters">
+                                                <button class="filter-btn active" data-rarity="all">Все</button>
+                                        </div>
+                                        <div class="om-filters-row2">
+                                                <input type="text" id="om-name-filter" class="name-filter-input" placeholder="Поиск по названию" style="padding:6px 10px;border-radius:4px;border:none;background:#434343;color:#fff">
+                                                <select id="om-collection-filter" class="collection-filter">
+                                                        <option value="all">Все коллекции</option>
+                                                </select>
+                                                <button class="sort-btn" id="om-sort-price-btn">По цене ↑</button>
+                                        </div>
+                                </div>
+                                <div class="om-platform-grid" id="om-platform-grid"></div>
+                        </div>
+                        <div class="om-requests-container" id="om-requests-container">
+                                <div class="om-requests-subtabs">
+                                        <button class="om-requests-subtab active" data-rtab="buy">Заявки на покупку</button>
+                                        <button class="om-requests-subtab" data-rtab="sell">Заявки на продажу</button>
+                                </div>
+                                <div id="om-buy-requests-panel"><div id="om-buy-requests-list"></div></div>
+                                <div id="om-sell-requests-panel" style="display:none"><div id="om-sell-requests-list"></div></div>
+                        </div>
+                `;
+
+                const itemsContainerEl = document.getElementById('items-container');
+                itemsContainerEl.parentNode.insertBefore(omContainer, itemsContainerEl.nextSibling);
+
+                // ---- Type Filter Button for OnlineMarket ----
+                const omTypeFilterBtn = document.createElement('button');
+                omTypeFilterBtn.textContent = 'Фильтр типов';
+                omTypeFilterBtn.id = 'om-types-filter';
+                omTypeFilterBtn.style.cssText = `
+                        padding: 8px 12px;
+                        background-color: rgb(65, 65, 65);
+                        color: rgb(177, 177, 177);
+                        border-width: medium;
+                        border-style: none;
+                        border-color: currentcolor;
+                        border-image: initial;
+                        border-radius: 4px; cursor: pointer;
+                        margin-bottom: 15px;
+                        font-size: 14px; display: block;
+                `;
+
+                // Вставляем кнопку в строку фильтров
+                const filtersRow2 = document.querySelector('.om-filters-row2');
+                if (filtersRow2) {
+                        filtersRow2.insertBefore(omTypeFilterBtn, filtersRow2.firstChild);
+                }
+
+                // ---- Type Filter Modal for OnlineMarket ----
+                const omTypeFilterModal = document.createElement('div');
+                omTypeFilterModal.id = 'om-type-filter-modal';
+                omTypeFilterModal.style.cssText = `
+                        display: none;
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background-color: rgba(0, 0, 0, 0.6);
+                        z-index: 1000;
+                        justify-content: center;
+                        align-items: flex-start;
+                        padding-top: 60px;
+                `;
+
+                omTypeFilterModal.innerHTML = `
+                        <div style="
+                                transform: translateY(175px);
+                                background: #222;
+                                color: #b1b1b1;
+                                padding: 20px;
+                                border-radius: 8px;
+                                max-width: 320px;
+                                width: 90%;
+                                max-height: 70vh;
+                                overflow-y: auto;
+                                box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+                                font-size: 14px;
+                        ">
+                                <style>
+                                        .om-type-checkbox {
+                                                appearance: none;
+                                                width: 18px;
+                                                height: 18px;
+                                                border: 2px solid #555;
+                                                border-radius: 4px;
+                                                background: #2a2a2a;
+                                                position: relative;
+                                                cursor: pointer;
+                                                transition: all 0.2s;
+                                        }
+                                        .om-type-checkbox:checked {
+                                                background: #4CAF50;
+                                                border-color: #4CAF50;
+                                        }
+                                        .om-type-checkbox:checked::after {
+                                                content: "✓";
+                                                color: white;
+                                                font-size: 14px;
+                                                position: absolute;
+                                                top: -1px;
+                                                left: 3px;
+                                                font-weight: bold;
+                                        }
+                                </style>
+                                <h3 style="margin-top: 0; margin-bottom: 14px; font-size: 18px;">Тип предмета</h3>
+                                <label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+                                        <input type="checkbox" class="om-type-checkbox" data-type="all" checked /> Все
+                                </label>
+                                <label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+                                        <input type="checkbox" class="om-type-checkbox" data-type="weapons" checked /> Weapons (со слотами)
+                                </label>
+                                <label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+                                        <input type="checkbox" class="om-type-checkbox" data-type="st_weapons" checked /> StatTrack Weapons
+                                </label>
+                                <label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+                                        <input type="checkbox" class="om-type-checkbox" data-type="items" checked /> Items (без слотов)
+                                </label>
+                                <label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+                                        <input type="checkbox" class="om-type-checkbox" data-type="stickers" checked /> Stickers (наклейки)
+                                </label>
+                                <label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+                                        <input type="checkbox" class="om-type-checkbox" data-type="charms" checked /> Charms (брелки)
+                                </label>
+                                <label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+                                        <input type="checkbox" class="om-type-checkbox" data-type="medals" checked /> Medals (медали)
+                                </label>
+                                <label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+                                        <input type="checkbox" class="om-type-checkbox" data-type="graffiti" checked /> Graffiti (граффити)
+                                </label>
+                                <label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+                                        <input type="checkbox" class="om-type-checkbox" data-type="fragments" checked /> Fragments (Фрагменты)
+                                </label>
+                                <label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+                                        <input type="checkbox" class="om-type-checkbox" data-type="cases" checked /> Cases (кейсы и боксы)
+                                </label>
+                                <div style="display:flex;gap:10px;margin-top:20px;">
+                                        <button id="om-type-filter-apply" style="flex:1;padding:8px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer;">Применить</button>
+                                        <button id="om-type-filter-reset" style="flex:1;padding:8px;background:#f44336;color:white;border:none;border-radius:4px;cursor:pointer;">Сбросить</button>
+                                </div>
+                        </div>
+                `;
+                document.body.appendChild(omTypeFilterModal);
+
+                // ---- Type Filter Event Handlers ----
+                omTypeFilterBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        omTypeFilterModal.style.display = 'flex';
+                });
+
+                omTypeFilterModal.addEventListener('click', (e) => {
+                        if (e.target === omTypeFilterModal) {
+                                omTypeFilterModal.style.display = 'none';
+                        }
+                });
+
+                // "Все" чекбокс управляет остальными
+                const allCheckbox = omTypeFilterModal.querySelector('[data-type="all"]');
+                const otherCheckboxes = omTypeFilterModal.querySelectorAll('.om-type-checkbox:not([data-type="all"])');
+
+                allCheckbox.addEventListener('change', function() {
+                        const checked = this.checked;
+                        otherCheckboxes.forEach(cb => cb.checked = checked);
+                });
+
+                // Если изменён любой другой чекбокс — обновляем "Все"
+                otherCheckboxes.forEach(cb => {
+                        cb.addEventListener('change', () => {
+                                const checkedCount = Array.from(otherCheckboxes).filter(c => c.checked).length;
+                                allCheckbox.checked = checkedCount === otherCheckboxes.length;
+                                allCheckbox.indeterminate = checkedCount > 0 && checkedCount < otherCheckboxes.length;
+                        });
+                });
+
+                // Применить фильтр
+                document.getElementById('om-type-filter-apply').addEventListener('click', () => {
+                        const selectedTypes = Array.from(otherCheckboxes)
+                                .filter(cb => cb.checked)
+                                .map(cb => cb.dataset.type);
+
+                        onlineMarket.currentFilterTypes = selectedTypes.length === otherCheckboxes.length ? ['all'] : selectedTypes;
+                        omTypeFilterModal.style.display = 'none';
+                        renderPlatformGrid();
+                });
+
+                // Сбросить фильтр
+                document.getElementById('om-type-filter-reset').addEventListener('click', () => {
+                        otherCheckboxes.forEach(cb => cb.checked = true);
+                        allCheckbox.checked = true;
+                        allCheckbox.indeterminate = false;
+                        onlineMarket.currentFilterTypes = ['all'];
+                        omTypeFilterModal.style.display = 'none';
+                        renderPlatformGrid();
+                });
+
+                // ---- Rarity Filters ----
+                function buildRarityFilters() {
+                        const bar = document.getElementById('om-rarity-filters');
+                        if (!bar) return;
+                        bar.innerHTML = '<button class="filter-btn active" data-rarity="all">Все</button>';
+                        Object.keys(rarities).forEach(r => {
+                                const info = rarities[r];
+                                const btn = document.createElement('button');
+                                btn.className = 'filter-btn';
+                                btn.dataset.rarity = r;
+                                btn.textContent = info.name;
+                                btn.style.backgroundColor = info.colorHex || '';
+                                bar.appendChild(btn);
+                        });
+                        bar.querySelectorAll('.filter-btn').forEach(btn => {
+                                btn.addEventListener('click', () => {
+                                        bar.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                                        btn.classList.add('active');
+                                        onlineMarket.currentFilterRarity = btn.dataset.rarity;
+                                        renderPlatformGrid();
+                                });
+                        });
+                }
+
+                // ---- Collection Filter ----
+                function buildCollectionFilter() {
+                        const sel = document.getElementById('om-collection-filter');
+                        if (!sel) return;
+                        sel.innerHTML = '<option value="all">Все коллекции</option>';
+                        Object.values(collectionsDatabase).forEach(c => {
+                                const opt = document.createElement('option');
+                                opt.value = c.id;
+                                opt.textContent = c.name;
+                                sel.appendChild(opt);
+                        });
+                        sel.addEventListener('change', () => {
+                                onlineMarket.currentFilterCollection = sel.value;
+                                renderPlatformGrid();
+                        });
+                }
+
+                // Debounce helper
+                function omDebounce(fn, ms) { let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); }; }
+
+                document.getElementById('om-name-filter').addEventListener('input', omDebounce(e => {
+                        onlineMarket.currentFilterName = e.target.value.toLowerCase();
+                        renderPlatformGrid();
+                }, 250));
+
+                document.getElementById('om-sort-price-btn').addEventListener('click', function() {
+                        onlineMarket.sortDescending = !onlineMarket.sortDescending;
+                        this.textContent = onlineMarket.sortDescending ? 'По цене ↓' : 'По цене ↑';
+                        renderPlatformGrid();
+                });
+
+                // Sub-tab switching
+                omContainer.querySelectorAll('.online-market-subtab').forEach(btn => {
+                        btn.addEventListener('click', () => {
+                                omContainer.querySelectorAll('.online-market-subtab').forEach(b => b.classList.remove('active'));
+                                btn.classList.add('active');
+                                const tab = btn.dataset.tab;
+                                omContainer.querySelector('.om-platform-container').classList.toggle('active', tab === 'platform');
+                                omContainer.querySelector('.om-requests-container').classList.toggle('active', tab === 'requests');
+                                if (tab === 'platform') renderPlatformGrid();
+                                if (tab === 'requests') renderMyRequests();
+                        });
+                });
+
+                omContainer.querySelectorAll('.om-requests-subtab').forEach(btn => {
+                        btn.addEventListener('click', () => {
+                                omContainer.querySelectorAll('.om-requests-subtab').forEach(b => b.classList.remove('active'));
+                                btn.classList.add('active');
+                                const rtab = btn.dataset.rtab;
+                                document.getElementById('om-buy-requests-panel').style.display = rtab === 'buy' ? 'block' : 'none';
+                                document.getElementById('om-sell-requests-panel').style.display = rtab === 'sell' ? 'block' : 'none';
+                                renderMyRequests();
+                        });
+                });
+
+                document.getElementById('online-market-btn').addEventListener('click', function() {
+                        if (currentMarket !== 'online') {
+                                currentMarket = 'online';
+                                document.querySelectorAll('.market-btn').forEach(b => b.classList.remove('active'));
+                                this.classList.add('active');
+                                document.querySelector('.sort-container').style.display = 'none';
+                                document.getElementById('items-container').style.display = 'none';
+                                document.getElementById('types-filter').style.display = 'none';
+                                omContainer.style.display = 'flex';
+                                buildRarityFilters();
+                                buildCollectionFilter();
+                                renderPlatformGrid();
+                        }
+                });
+
+                ['normal-market-btn', 'rental-market-btn'].forEach(id => {
+                        document.getElementById(id)?.addEventListener('click', function() {
+                                document.querySelector('.sort-container').style.display = '';
+                                document.getElementById('items-container').style.display = '';
+                                document.getElementById('types-filter').style.display = 'block';
+                                omContainer.style.display = 'none';
+                        }, true);
+                });
+
+                // ---- Get Filtered Items ----
+                function getFilteredItems() {
+                        let items = itemsDatabase.filter(item =>
+                                item.itemInStore && !item.isRental && !item.id.endsWith('_rental')
+                        );
+                        
+                        const rar = onlineMarket.currentFilterRarity;
+                        if (rar !== 'all') items = items.filter(i => i.rarity === rar);
+                        
+                        const col = onlineMarket.currentFilterCollection;
+                        if (col !== 'all') items = items.filter(i => i.collection === col);
+                        
+                        const name = onlineMarket.currentFilterName;
+                        if (name) items = items.filter(i => i.name.toLowerCase().includes(name));
+                        
+                        // Type filter
+                        const types = onlineMarket.currentFilterTypes || ['all'];
+                        if (!types.includes('all')) {
+                                items = items.filter(item => {
+                                        const itemType = getItemType(item);
+                                        return types.includes(itemType);
+                                });
+                        }
+                        
+                        // Sort by lowest lot price
+                        items.sort((a, b) => {
+                                const pa = onlineMarket.listings[a.id]?.length ? Math.min(...onlineMarket.listings[a.id].map(l => l.price)) : Infinity;
+                                const pb = onlineMarket.listings[b.id]?.length ? Math.min(...onlineMarket.listings[b.id].map(l => l.price)) : Infinity;
+                                return onlineMarket.sortDescending ? pb - pa : pa - pb;
+                        });
+                        return items;
+                }
+
+                // ---- Build Platform Card ----
+                function buildPlatformCard(item) {
+                        const rarityInfo = rarities[item.rarity] || { color: 'none', name: item.rarity };
+                        const collectionInfo = collectionsDatabase[item.collection] || { name: item.collection, image: '' };
+                        const lots = onlineMarket.listings[item.id] || [];
+                        const lotsCount = lots.length;
+                        const lowestPrice = lotsCount > 0 ? Math.min(...lots.map(l => l.price)) : null;
+                        const myReq = onlineMarket.buyRequests.find(r => r.itemId === item.id && r.remaining > 0);
+                        const xCount = inventory.filter(i => i.id === item.id).length;
+                        let countInInv = `${xCount}`;
+                        if (xCount > 999) countInInv = `${Math.round(xCount/1000*10)/10}K`;
+                        if (xCount > 999000) countInInv = `${Math.round(xCount/1000000*10)/10}M`;
+
+                        const card = document.createElement('div');
+                        card.className = 'item-card';
+                        card.id = 'om-card-' + item.id;
+                        card.dataset.rarity = item.rarity;
+                        card.dataset.itemId = item.id;
+                        card.innerHTML = `
+                                <div class="item-img"><img src="${item.image}" alt="" width="150"></div>
+                                <div class="item-rarity ${rarityInfo.color}"><div class="item-name">${item.name}</div></div>
+                                <div class="item-collection" data-collection="${item.collection}">
+                                        ${collectionInfo.image ? `<img src="${collectionInfo.image}" class="collection-icon" style="width:30px;height:auto;" alt="">` : ''}
+                                        ${collectionInfo.name || item.collection}
+                                </div>
+                                <div class="item-price om-card-price" style="color:gold">${lowestPrice !== null ? lowestPrice.toFixed(2) + ' ₽' : '— ₽'}</div>
+                                <div class="item-stock om-card-lots" style="font-size:12px">Лотов: ${lotsCount}${myReq ? ` <span class="om-active-request-badge">Заявка: ${myReq.price.toFixed(2)} ₽ ×${myReq.remaining}</span>` : ''}</div>
+                                <span class="item-count-in-inv om-card-inv" style="${xCount > 0 ? '' : 'color:#ff3737'}">${countInInv} шт. в Инвентаре</span>
+                                <button class="find-on-platform-btn" data-id="${item.id}">Найти на платформе</button>
+                        `;
+                        card.querySelector('.find-on-platform-btn').addEventListener('click', e => {
+                                e.stopPropagation();
+                                openPlatformModal(item);
+                        });
+                        setup3DViewer(card.querySelector('.item-img'), item, item);
+                        return card;
+                }
+
+                // ---- Update Platform Card ----
+                function updatePlatformCard(itemId) {
+                        const card = document.getElementById('om-card-' + itemId);
+                        if (!card) return;
+                        const item = itemsDatabase.find(i => i.id === itemId);
+                        if (!item) return;
+                        const lots = onlineMarket.listings[itemId] || [];
+                        const lotsCount = lots.length;
+                        const lowestPrice = lotsCount > 0 ? Math.min(...lots.map(l => l.price)) : null;
+                        const myReq = onlineMarket.buyRequests.find(r => r.itemId === itemId && r.remaining > 0);
+                        const xCount = inventory.filter(i => i.id === itemId).length;
+                        let countInInv = `${xCount}`;
+                        if (xCount > 999) countInInv = `${Math.round(xCount/1000*10)/10}K`;
+                        if (xCount > 999000) countInInv = `${Math.round(xCount/1000000*10)/10}M`;
+
+                        const priceEl = card.querySelector('.om-card-price');
+                        if (priceEl) priceEl.textContent = lowestPrice !== null ? lowestPrice.toFixed(2) + ' ₽' : '— ₽';
+                        const lotsEl = card.querySelector('.om-card-lots');
+                        if (lotsEl) lotsEl.innerHTML = `Лотов: ${lotsCount}` + (myReq ? ` <span class="om-active-request-badge">Заявка: ${myReq.price.toFixed(2)} ₽ ×${myReq.remaining}</span>` : '');
+                        const invEl = card.querySelector('.om-card-inv');
+                        if (invEl) { invEl.textContent = countInInv + ' шт. в Инвентаре'; invEl.style.color = xCount > 0 ? '' : '#ff3737'; }
+
+                        if (lowestPrice !== null) {
+                                const nmCard = document.getElementById(itemId);
+                                if (nmCard) { const pe = nmCard.querySelector('.item-price'); if (pe) pe.textContent = lowestPrice.toFixed(2) + ' ₽'; }
+                                const dbItem = itemsDatabase.find(i => i.id === itemId);
+                                if (dbItem) dbItem.price = lowestPrice;
+                        }
+                }
+
+                // ---- Render Platform Grid ----
+                function renderPlatformGrid() {
+                        const grid = document.getElementById('om-platform-grid');
+                        if (!grid) return;
+                        grid.innerHTML = '';
+
+                        const items = getFilteredItems();
+                        if (!items.length) {
+                                grid.innerHTML = '<div style="color:#aaa;padding:30px;text-align:center">Нет предметов</div>';
+                                return;
+                        }
+
+                        const INITIAL = 30, CHUNK = 20;
+                        items.slice(0, INITIAL).forEach(item => {
+                                ensureBotsForItem(item.id, item);
+                                grid.appendChild(buildPlatformCard(item));
+                        });
+                        if (items.length > INITIAL) {
+                                const sentinel = document.createElement('div');
+                                sentinel.style.cssText = 'height:1px;width:100%;grid-column:1/-1;';
+                                grid.appendChild(sentinel);
+                                let nextIdx = INITIAL;
+                                const obs = new IntersectionObserver((entries) => {
+                                        if (!entries[0].isIntersecting) return;
+                                        const end = Math.min(nextIdx + CHUNK, items.length);
+                                        for (let i = nextIdx; i < end; i++) {
+                                                ensureBotsForItem(items[i].id, items[i]);
+                                                grid.insertBefore(buildPlatformCard(items[i]), sentinel);
+                                        }
+                                        nextIdx = end;
+                                        if (nextIdx >= items.length) { obs.disconnect(); sentinel.remove(); }
+                                }, { rootMargin: '400px' });
+                                obs.observe(sentinel);
+                        }
+                }
+
+                // ---- Open Platform Modal ----
+                function openPlatformModal(item) {
+                        ensureBotsForItem(item.id, item);
+                        const rarityInfo = rarities[item.rarity] || { color: 'none', name: item.rarity };
+                        const collectionInfo = collectionsDatabase[item.collection] || { name: item.collection, image: '' };
+                        const myReq = onlineMarket.buyRequests.find(r => r.itemId === item.id && r.remaining > 0);
+                        const currentCollection = collectionsDatabase[item.collection];
+
+                        const overlay = document.createElement('div');
+                        overlay.className = 'om-modal-overlay active';
+                        overlay.innerHTML = `
+                                <div class="om-platform-modal global-ui">
+                                        <button class="om-modal-close" style="position:absolute;top:12px;right:15px;background:none;border:none;color:#aaa;font-size:26px;cursor:pointer;z-index:2;line-height:1">×</button>
+                                        <div class="om-modal-body">
+                                                <div class="om-item-panel">
+                                                        <div class="om-item-img-wrap" style="cursor:pointer" title="Просмотр 3D">
+                                                                <img src="${item.image}" alt="${item.name}" style="width:150px;border-radius:4px;display:block">
+                                                        </div>
+                                                        <div class="item-rarity ${rarityInfo.color} om-item-rarity-badge" style="transform:none;width:auto;margin-top:4px"><div class="om-item-name">${item.name}</div></div>
+                                                        <div class="om-item-collection" style="margin-top:-3px">${currentCollection.image ? `<img src="${currentCollection.image}" class="collection-icon" style="width: 30px; height: auto;">` : ''} ${collectionInfo.name || item.collection}</div>
+                                                        <button class="om-list-btn" style="margin-top:10px">Выставить</button>
+                                                </div>
+                                                <div class="om-lots-panel">
+                                                        ${myReq ? `
+                                                        <div class="om-active-req-banner" id="om-active-req-banner-${myReq.id}">
+                                                                <span>📋 Активная заявка: ${myReq.price.toFixed(2)} ₽ × ${myReq.remaining} шт.</span>
+                                                                <button class="om-cancel-active-req-btn" data-req-id="${myReq.id}">Отменить</button>
+                                                        </div>` : ''}
+                                                        <div class="om-lots-header">
+                                                                <div class="om-buy-request-area">
+                                                                        <span style="font-size:13px;color:#aaa;white-space:nowrap">Заявка на покупку:</span>
+                                                                        <input type="number" id="om-req-price" placeholder="Цена ₽" min="0" max="1000000" step="0.01" style="width:110px">
+                                                                        <input type="number" id="om-req-count" placeholder="Кол-во" min="1" value="1" style="width:65px">
+                                                                        <button class="om-buy-request-btn" id="om-place-req-btn">Разместить</button>
+                                                                </div>
+                                                                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px">
+                                                        <h3 style="margin:0;font-size:15px">Лоты (${(onlineMarket.listings[item.id] || []).length})</h3>
+                                                        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#aaa;cursor:pointer;user-select:none">
+                                                                <input type="checkbox" id="om-filter-mine-${item.id}" style="cursor:pointer"> Мои
+                                                        </label>
+                                                        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#aaa;cursor:pointer;user-select:none">
+                                                                <input type="checkbox" id="om-filter-stickers-${item.id}" style="cursor:pointer"> С наклейками
+                                                        </label>
+                                                        <span id="om-filter-hint-${item.id}" style="font-size:11px;color:gold;display:none"></span>
+                                                </div>
+                                                                </div>
+                                                                <div class="om-lots-list" id="om-lots-list-${item.id}"></div>
+                                                        </div>
+                                                </div>
+                                        </div>
+                                </div>
+                        `;
+                        document.body.appendChild(overlay);
+
+                        activeModals[item.id] = overlay;
+                        let updateInterval = null;
+                        
+                        function startBannerUpdate() {
+                                if (myReq) {
+                                        myReq.bannerElement = overlay.querySelector(`#om-active-req-banner-${myReq.id}`);
+                                        
+                                        updateInterval = setInterval(() => {
+                                                const currentReq = onlineMarket.buyRequests.find(r => r.id === myReq.id);
+                                                if (!currentReq || currentReq.remaining <= 0) {
+                                                        if (myReq.bannerElement && document.body.contains(myReq.bannerElement)) {
+                                                                myReq.bannerElement.style.display = 'none';
+                                                        }
+                                                        if (!currentReq) {
+                                                                clearInterval(updateInterval);
+                                                                updateInterval = null;
+                                                        }
+                                                        return;
+                                                }
+                                                
+                                                if (currentReq.bannerElement && document.body.contains(currentReq.bannerElement)) {
+                                                        const span = currentReq.bannerElement.querySelector('span');
+                                                        if (span) {
+                                                                span.textContent = `📋 Активная заявка: ${currentReq.price.toFixed(2)} ₽ × ${currentReq.remaining} шт.`;
+                                                        }
+                                                        if (currentReq.bannerElement.style.display === 'none') {
+                                                                currentReq.bannerElement.style.display = '';
+                                                        }
+                                                } else {
+                                                        clearInterval(updateInterval);
+                                                        updateInterval = null;
+                                                }
+                                        }, 1000);
+                                }
+                        }
+                        
+                        startBannerUpdate();
+
+                        // Close handlers
+                        overlay.querySelector('.om-modal-close').addEventListener('click', () => {
+                                if (updateInterval) clearInterval(updateInterval); 
+                                delete activeModals[item.id];
+                                overlay.remove();
+                        });
+                        
+                        overlay.addEventListener('click', e => { 
+                                if (e.target === overlay) {
+                                        if (updateInterval) clearInterval(updateInterval); 
+                                        delete activeModals[item.id];
+                                        overlay.remove(); 
+                                }
+                        });
+
+                        // 3D viewer
+                        const imgWrap = overlay.querySelector('.om-item-img-wrap');
+                        setup3DViewer(imgWrap, item, item);
+
+                        // List button
+                        overlay.querySelector('.om-list-btn').addEventListener('click', e => {
+                                e.stopPropagation();
+                                openInventorySelectModal(item, overlay);
+                        });
+
+                        // Cancel active request banner
+                        const cancelReqBtn = overlay.querySelector('.om-cancel-active-req-btn');
+                        if (cancelReqBtn) {
+                                cancelReqBtn.addEventListener('click', e => {
+                                        e.stopPropagation();
+                                        const reqId = cancelReqBtn.dataset.reqId;
+                                        const req = onlineMarket.buyRequests.find(r => r.id === reqId);
+                                        if (req) {
+                                                if (updateInterval) clearInterval(updateInterval);
+                                                balanceAmount.textContent = balance.toLocaleString('ru-RU');
+                                                UpdateStatrackFrame && UpdateStatrackFrame(balance);
+                                                if (req.timerId) clearTimeout(req.timerId);
+                                                onlineMarket.buyRequests = onlineMarket.buyRequests.filter(r => r.id !== reqId);
+                                                showToast('Заявка отменена');
+                                                overlay.remove();
+                                                openPlatformModal(item);
+                                                updatePlatformCard(item.id);
+                                        }
+                                });
+                        }
+
+                        // Place buy request
+                        overlay.querySelector('#om-place-req-btn').addEventListener('click', () => {
+                                const priceInput = overlay.querySelector('#om-req-price');
+                                const countInput = overlay.querySelector('#om-req-count');
+                                const price = Math.round((parseFloat(priceInput.value) || 0) * 100) / 100;
+                                const count = Math.max(1, parseInt(countInput.value) || 1);
+
+                                if (price < 0 || price > 1000000) { showToast('Цена от 0 до 1 000 000 ₽', true); return; }
+                                if (balance < price * count) { showToast('Недостаточно средств', true); return; }
+
+                                balanceAmount.textContent = balance.toLocaleString('ru-RU');
+
+                                const reqId = 'req_buy_' + (++onlineMarket.reqCounter);
+                                const req = { id: reqId, itemId: item.id, item, price, quantity: count, remaining: count, timestamp: Date.now(), timerId: null, expectedAt: null };
+                                onlineMarket.buyRequests.push(req);
+
+                                showToast(`Заявка: ${count}× ${item.name} по ${price.toFixed(2)} ₽`);
+                                priceInput.value = '';
+                                countInput.value = '1';
+
+                                scheduleRequest(req, overlay, item);
+                                renderLotsPanel(item.id, overlay);
+                                updatePlatformCard(item.id);
+                                
+                                if (updateInterval) clearInterval(updateInterval);
+                                overlay.remove();
+                                openPlatformModal(item);
+                        });
+
+                        renderLotsPanel(item.id, overlay);
+
+                        // Checkbox filters
+                        ['mine','stickers'].forEach(type => {
+                                const cb = overlay.querySelector(`#om-filter-${type}-${item.id}`);
+                                if (cb) cb.addEventListener('change', () => renderLotsPanel(item.id, overlay));
+                        });
+                }
+
+                // ---- Render Lots Panel ----
+                function renderLotsPanel(itemId, overlay) {
+                        const list = overlay.querySelector(`#om-lots-list-${itemId}`);
+                        if (!list) return;
+                        const header = overlay.querySelector('.om-lots-header h3');
+                        let lots = onlineMarket.listings[itemId] || [];
+                        lots = lots.filter(lot => {
+                                const itemExists = itemsDatabase.find(i => i.id === itemId);
+                                return itemExists !== undefined;
+                        });
+                        if (onlineMarket.listings[itemId]) {
+                                onlineMarket.listings[itemId] = lots;
+                                if (lots.length === 0) {
+                                        delete onlineMarket.listings[itemId];
+                                }
+                        }
+                        if (header) header.textContent = `Лоты (${lots.length})`;
+                        const headerContainer = overlay.querySelector('.om-lots-header');
+                        if (headerContainer && !headerContainer.querySelector('#om-cancel-all-my-lots-btn')) {
+                                const myLotsCount = lots.filter(l => l.isMine).length;
+                                if (myLotsCount > 0) {
+                                        const cancelAllBtn = document.createElement('button');
+                                        cancelAllBtn.id = 'om-cancel-all-my-lots-btn';
+                                        cancelAllBtn.textContent = `× Все мои (${myLotsCount})`;
+                                        cancelAllBtn.style.cssText = 'margin-left:10px;padding:4px 10px;background:#f44336;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;';
+                                        cancelAllBtn.addEventListener('click', (e) => {
+                                                e.stopPropagation();
+                                                const myLots = lots.filter(l => l.isMine);
+                                                myLots.forEach(lot => {
+                                                        if (lot.sellReqTimerId) clearTimeout(lot.sellReqTimerId);
+                                                        if (lot.inventoryItem) inventory.push(lot.inventoryItem);
+                                                        onlineMarket.sellRequests = onlineMarket.sellRequests.filter(r => r.lotId !== lot.id);
+                                                });
+                                                onlineMarket.listings[itemId] = lots.filter(l => !l.isMine);
+                                                if (onlineMarket.listings[itemId]?.length === 0) delete onlineMarket.listings[itemId];
+                                                
+                                                updateInventory();
+                                                saveGameState();
+                                                showToast(`Отменено лотов: ${myLotsCount}`);
+                                                updatePlatformCard(itemId);
+                                                updateNormalMarketCardPrice(itemId);
+                                                renderLotsPanel(itemId, overlay);
+                                                renderMyRequests();
+                                        });
+                                        header.appendChild(cancelAllBtn);
+                                }
+                        }
+                        
+                        const cbMine = overlay.querySelector(`#om-filter-mine-${itemId}`);
+                        const cbStickers = overlay.querySelector(`#om-filter-stickers-${itemId}`);
+                        const hintEl = overlay.querySelector(`#om-filter-hint-${itemId}`);
+                        const filterMine = cbMine?.checked || false;
+                        const filterStickers = cbStickers?.checked || false;
+
+                        let displayLots = [...lots];
+                        if (filterMine) displayLots = displayLots.filter(l => l.isMine);
+                        if (filterStickers) {
+                                const hasStk = l => (l.stickers?.length > 0) || (l.inventoryItem?.stickers?.length > 0);
+                                displayLots = displayLots.filter(hasStk);
+                        }
+
+                        if (hintEl) {
+                                if ((filterMine || filterStickers) && displayLots.length > 0) {
+                                        const sortedDisplay = [...lots].sort((a,b) => a.price - b.price);
+                                        hintEl.textContent = `Первый лот стоит: ${sortedDisplay[0].price.toFixed(2)} ₽`;
+                                        hintEl.style.display = '';
+                                } else {
+                                        hintEl.style.display = 'none';
+                                }
+                        }
+
+                        if (!lots.length) { 
+                                list.innerHTML = '<div class="om-empty-lots">Нет активных лотов</div>'; 
+                                return; 
+                        }
+                        if (!displayLots.length) {
+                                list.innerHTML = '<div class="om-empty-lots">Нет лотов по фильтру</div>';
+                                return;
+                        }
+                        list.innerHTML = '';
+                        displayLots.sort((a, b) => {
+                                if (a.price !== b.price) return a.price - b.price;
+                                const aHas = a.stickers?.length > 0 ? 1 : 0, bHas = b.stickers?.length > 0 ? 1 : 0;
+                                return aHas - bHas;
+                        });
+                        displayLots.forEach(lot => {
+                                const sellReq = lot.isMine ? onlineMarket.sellRequests.find(r => r.lotId === lot.id) : null;
+                                const waitStr = sellReq?.expectedSellAt ? formatDelay(sellReq.expectedSellAt - Date.now()) : '';
+
+                                const lotItem = itemsDatabase.find(i => i.id === itemId);
+                                const canHaveStickers = lotItem && !lotItem.isCase && !lotItem.isCharm && !lotItem.isSticker
+                                        && !lotItem.isItemWithoutSlot
+                                        && !lotItem.name.endsWith('Fragment')
+                                        && !lotItem.name.startsWith('Graffiti')
+                                        && !lotItem.name.startsWith('Medal');
+                                const lotStickers = (canHaveStickers && lot.stickers && lot.stickers.length > 0) ? lot.stickers : null;
+                                const invStickers = (canHaveStickers && lot.inventoryItem?.stickers?.length) ? lot.inventoryItem.stickers : null;
+                                const displayStickers = lotStickers || invStickers;
+                                const stickersHTML = displayStickers
+                                        ? `<div style="transform: translate(100px, 15px);display:flex;gap:2px;margin-top: -30px;flex-wrap:wrap">${displayStickers.map(s => `<img src="${s.image}" title="${s.name}" style="width:auto;height:30px;border-radius:2px;background:#1a1a1a;">`).join('')}</div>`
+                                        : '';
+
+                                const div = document.createElement('div');
+                                div.className = 'om-lot-item ' + (lot.isMine ? 'my-lot' : 'bot-lot');
+                                div.innerHTML = `
+                                        <div>
+                                                <div class="om-lot-price">${lot.price.toFixed(2)} ₽ ${stickersHTML}</div>
+                                                <div class="om-lot-seller">${lot.isMine ? '👤 Мой лот' : '🤖 ' + lot.seller}</div>
+                                                ${lot.isMine && waitStr ? `<div class="om-lot-timer">⏳ Ожид. продажи: ${waitStr}</div>` : ''}
+                                        </div>
+                                        ${lot.isMine
+                                                ? `<button class="om-lot-cancel-btn">Отменить</button>`
+                                                : `<button class="om-lot-buy-btn">Купить</button>`}
+                                `;
+                                if (lot.isMine) {
+                                        div.querySelector('.om-lot-cancel-btn').addEventListener('click', () => {
+                                                cancelMyListing(lot.id, itemId, lot);
+                                                renderLotsPanel(itemId, overlay);
+                                        });
+                                } else {
+                                        div.querySelector('.om-lot-buy-btn').addEventListener('click', () => {
+                                                buyLotDirectly(lot, itemId, overlay);
+                                        });
+                                }
+                                list.appendChild(div);
+                        });
+                }
+
+                // ---- Buy Lot Directly ----
+                function buyLotDirectly(lot, itemId, overlay) {
+                        if (balance < lot.price) { 
+                                showToast('Недостаточно средств!', true); 
+                                return; 
+                        }
+                        balance -= lot.price;
+                        balance = Math.round(balance * 100) / 100;
+                        balanceAmount.textContent = balance.toLocaleString('ru-RU');
+                        UpdateStatrackFrame && UpdateStatrackFrame(balance);
+                        if (lot.isMine) {
+                                onlineMarket.sellRequests = onlineMarket.sellRequests.map(r =>
+                                        r.lotId === lot.id ? { ...r, status: 'sold' } : r
+                                );
+                                onlineMarket.sellRequests = onlineMarket.sellRequests.filter(r => r.status !== 'sold');
+                        }
+
+                        if (onlineMarket.listings[itemId]) {
+                                onlineMarket.listings[itemId] = onlineMarket.listings[itemId].filter(l => l.id !== lot.id);
+                                if (onlineMarket.listings[itemId].length === 0) {
+                                        delete onlineMarket.listings[itemId];
+                                }
+                        }
+
+                        const item = itemsDatabase.find(i => i.id === itemId);
+                        if (item) {
+                                let invItem;
+                                if (lot.inventoryItem) {
+                                        invItem = structuredClone(lot.inventoryItem);
+                                } else {
+                                        invItem = {
+                                                id: item.id,
+                                                name: item.name,
+                                                rarity: item.rarity,
+                                                image: item.image
+                                        };
+                                        if (lot.stickers && lot.stickers.length > 0) {
+                                                invItem.stickers = lot.stickers;
+                                        }
+                                }
+                                inventory.push(invItem);
+                                updateInventory(); 
+                                saveGameState();
+                                showItemToast('bought', item, lot.price);
+                                setTimeout(() => { updatePlatformCard(itemId); updateNormalMarketCardPrice(itemId); }, 150);
+                        }
+                        renderMyRequests();
+                        updatePlatformCard(itemId);
+                        refreshOpenModal(itemId);
+                }
+
+                // ---- Cancel My Listing ----
+                function cancelMyListing(lotId, itemId, lot) {
+                        if (lot.sellReqTimerId) clearTimeout(lot.sellReqTimerId);
+                        if (onlineMarket.listings[itemId]) {
+                                onlineMarket.listings[itemId] = onlineMarket.listings[itemId].filter(l => l.id !== lotId);
+                                if (onlineMarket.listings[itemId].length === 0) {
+                                        delete onlineMarket.listings[itemId];
+                                }
+                        }
+                        onlineMarket.sellRequests = onlineMarket.sellRequests.filter(r => r.status !== 'sold');
+                        if (lot.inventoryItem) {
+                                inventory.push(lot.inventoryItem);
+                                updateInventory(); 
+                                saveGameState();
+                        }
+                        showToast('Лот отменён, предмет возвращён в инвентарь');
+                        updatePlatformCard(itemId);
+                        updateNormalMarketCardPrice(itemId);
+                        refreshOpenModal(itemId);
+                        renderMyRequests();
+                        
+                        setTimeout(() => processBotAutoBuy(itemId), 50);
+                }
+
+                // ---- Inventory Select Modal ----
+                function openInventorySelectModal(item, parentOverlay) {
+                        const matchingItems = inventory
+                                .map((inv, idx) => ({ ...inv, originalIndex: idx }))
+                                .filter(invItem => invItem.id === item.id && !invItem.isRental);
+
+                        if (!matchingItems.length) {
+                                showToast(`У вас нет предметов "${item.name}" для выставления`, true);
+                                return;
+                        }
+
+                        const overlay2 = document.createElement('div');
+                        overlay2.className = 'om-modal-overlay active';
+                        overlay2.style.zIndex = '10001';
+
+                        overlay2.innerHTML = `
+                                <div class="om-inv-select-modal global-ui">
+                                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                                                <h3 style="margin:0;">Выберите предметы для выставления</h3>
+                                                <button id="om-inv-select-all" style="padding:6px 12px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Выделить всё</button>
+                                        </div>
+                                        <p style="color:#aaa;font-size:13px;margin-bottom:12px">Доступно: ${matchingItems.length} шт.</p>
+                                        <div class="om-inv-select-grid" id="om-inv-select-grid-inner"></div>
+                                        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
+                                                <span id="om-sel-count" style="color:#aaa;font-size:13px">Выбрано: 0</span>
+                                                <div style="display:flex;gap:10px">
+                                                        <button class="om-btn-cancel" id="om-inv-cancel">Отмена</button>
+                                                        <button class="om-btn-confirm" id="om-inv-confirm" disabled>Далее</button>
+                                                </div>
+                                        </div>
+                                </div>
+                        `;
+                        document.body.appendChild(overlay2);
+
+                        const grid = overlay2.querySelector('#om-inv-select-grid-inner');
+                        const selectedIndices = new Set();
+                        const selectAllBtn = overlay2.querySelector('#om-inv-select-all');
+                        const countSpan = overlay2.querySelector('#om-sel-count');
+                        const confirmBtn = overlay2.querySelector('#om-inv-confirm');
+
+                        function updateSelectAllButton() {
+                                const allSelected = selectedIndices.size === matchingItems.length;
+                                selectAllBtn.textContent = allSelected ? 'Снять выделение' : 'Выделить всё';
+                                selectAllBtn.style.background = allSelected ? '#f44336' : '#2196F3';
+                        }
+
+                        function updateSelectionUI() {
+                                countSpan.textContent = `Выбрано: ${selectedIndices.size}`;
+                                confirmBtn.disabled = !selectedIndices.size;
+                                updateSelectAllButton();
+                        }
+
+                        matchingItems.forEach(({ originalIndex, ...inv }) => {
+                                const div = document.createElement('div');
+                                div.className = 'om-inv-item';
+                                div.dataset.index = originalIndex;
+
+                                const rarityInfo = rarities[inv.rarity] || { color: 'none', colorHex: '#aaa', name: inv.rarity };
+
+                                const stickersList = Array.isArray(inv.stickers) ? [...inv.stickers].reverse() : [];
+                                const slotsHTMLSell = `<div class="item-slots" style="pointer-events:none">
+                                        ${[4,3,2,1].map(i => {
+                                                const s = stickersList[i-1];
+                                                const sImg = s ? (s.image || 'images/none_item.png') : '';
+                                                return `<div class="slot sticker-slot">${sImg ? `<img src="${sImg}" width="18" style="opacity:0.9">` : ''}</div>`;
+                                        }).join('')}
+                                        <div class="slot charm-slot">
+                                                ${inv.charm ? `<img src="${inv.charm.image || 'images/none_item.png'}" width="18" style="opacity:0.9">` : ''}
+                                        </div>
+                                </div>`;
+
+                                div.innerHTML = `
+                                        <div class="selected-badge">✓</div>
+                                        <img src="${inv.image || item.image}" alt="" style="width:70px;border-radius:3px;pointer-events:none">
+                                        ${slotsHTMLSell}
+                                        <div class="inv-item-name">${inv.name}</div>
+                                        <div style="font-size:9px;color:${rarityInfo.colorHex};margin-top:2px">${rarityInfo.name}</div>
+                                `;
+
+                                div.addEventListener('click', () => {
+                                        if (selectedIndices.has(originalIndex)) {
+                                                selectedIndices.delete(originalIndex);
+                                                div.classList.remove('selected');
+                                        } else {
+                                                selectedIndices.add(originalIndex);
+                                                div.classList.add('selected');
+                                        }
+                                        updateSelectionUI();
+                                });
+
+                                grid.appendChild(div);
+                        });
+
+                        selectAllBtn.addEventListener('click', () => {
+                                if (selectedIndices.size === matchingItems.length) {
+                                        selectedIndices.clear();
+                                        grid.querySelectorAll('.om-inv-item').forEach(el => el.classList.remove('selected'));
+                                } else {
+                                        matchingItems.forEach(({ originalIndex }) => {
+                                                selectedIndices.add(originalIndex);
+                                                const el = grid.querySelector(`.om-inv-item[data-index="${originalIndex}"]`);
+                                                if (el) el.classList.add('selected');
+                                        });
+                                }
+                                updateSelectionUI();
+                        });
+
+                        overlay2.querySelector('#om-inv-cancel').addEventListener('click', () => overlay2.remove());
+                        overlay2.addEventListener('click', e => { if (e.target === overlay2) overlay2.remove(); });
+
+                        overlay2.querySelector('#om-inv-confirm').addEventListener('click', () => {
+                                if (!selectedIndices.size) return;
+                                overlay2.remove();
+                                openPriceSetModal(item, Array.from(selectedIndices), parentOverlay);
+                        });
+                }
+
+                // ---- Price Set Modal ----
+                function openPriceSetModal(item, inventoryIndices, parentOverlay) {
+                        const maxPrice = Math.min(1000000, item.price * 2);
+                        const hardMaxPrice = 1000000;
+
+                        const avgStickersBonus = (() => {
+                                if (!inventoryIndices.length) return 0;
+                                const total = inventoryIndices.reduce((sum, idx) => {
+                                        return sum + getStickerValueAdjustment(inventory[idx]?.stickers, 0.20);
+                                }, 0);
+                                return Math.round((total / inventoryIndices.length) * 100) / 100;
+                        })();
+
+                        const overlay3 = document.createElement('div');
+                        overlay3.className = 'om-modal-overlay active';
+                        overlay3.style.zIndex = '10002';
+                        overlay3.innerHTML = `
+                                <div class="om-price-modal">
+                                        <h3>Установить цену</h3>
+                                        <p>Предмет: <strong>${item.name}</strong></p>
+                                        <p>Количество: <strong>${inventoryIndices.length} шт.</strong></p>
+                                        <p>Рыночная цена: <span style="color:gold">${item.price.toFixed(2)} ₽</span></p>
+                                        <p>Рекоменд. макс.: <span style="color:gold">${maxPrice.toFixed(2)} ₽</span> (+100%)</p>
+                                        ${avgStickersBonus > 0 ? `<p style="color:#4CAF50;font-size:12px">🏷️ К цене добавится стоимость наклеек ×20% (~<b>+${avgStickersBonus.toFixed(2)} ₽</b> в среднем). Итог ≤ 1 000 000 ₽</p>` : ''}
+                                        <input class="om-price-input" id="om-sell-price" type="number" min="0.01" max="${hardMaxPrice}" step="0.01" placeholder="Цена за 1 шт.">
+                                        <div class="om-price-error" id="om-price-err"></div>
+                                        <div id="om-sell-time-estimate" style="color:#aaa;font-size:12px;margin-top:6px"></div>
+                                        <div class="om-modal-actions">
+                                                <button class="om-btn-cancel" id="om-price-cancel">Отмена</button>
+                                                <button class="om-btn-confirm" id="om-price-confirm">Выставить</button>
+                                        </div>
+                                </div>
+                        `;
+                        document.body.appendChild(overlay3);
+
+                        const priceInput = overlay3.querySelector('#om-sell-price');
+                        const errEl = overlay3.querySelector('#om-price-err');
+                        const timeEl = overlay3.querySelector('#om-sell-time-estimate');
+
+                        const validate = () => {
+                                const v = parseFloat(priceInput.value);
+                                if (!v || v <= 0) {
+                                        errEl.textContent = 'Цена > 0';
+                                        timeEl.textContent = '';
+                                        return false;
+                                }
+                                if (v > hardMaxPrice) {
+                                        errEl.textContent = 'Не более 1 000 000 ₽';
+                                        timeEl.textContent = '';
+                                        return false;
+                                }
+
+                                if (v > maxPrice) {
+                                        errEl.textContent = `⚠️ Цена выше рекомендованной (${maxPrice.toFixed(2)} ₽). Лот не будет куплен ботами и заявками.`;
+                                        errEl.style.color = '#ff9800';
+                                } else {
+                                        errEl.textContent = '';
+                                        errEl.style.color = '#f44336';
+                                }
+
+                                const delay = calcSellDelay(v, item);
+                                if (v > maxPrice) {
+                                        timeEl.textContent = '⚠️ Лоты выше макс. цены не покупаются ботами и заявками — только игроками вручную';
+                                        timeEl.style.color = '#ff9800';
+                                } else if (delay === Infinity) {
+                                        timeEl.textContent = '⛔ Эта цена не продастся — переставьте дешевле';
+                                        timeEl.style.color = '#f44336';
+                                } else {
+                                        timeEl.textContent = `⏳ Ожидаемое время продажи: ${formatDelay(delay)}`;
+                                        timeEl.style.color = '#aaa';
+                                }
+                                return true;
+                        };
+
+                        priceInput.addEventListener('input', validate);
+                        priceInput.addEventListener('change', validate);
+
+                        overlay3.querySelector('#om-price-cancel').addEventListener('click', () => overlay3.remove());
+                        overlay3.addEventListener('click', e => { if (e.target === overlay3) overlay3.remove(); });
+
+                        overlay3.querySelector('#om-price-confirm').addEventListener('click', () => {
+                                if (!validate()) return;
+                                const basePrice = Math.round(parseFloat(priceInput.value) * 100) / 100;
+
+                                overlay3.remove();
+
+                                if (!onlineMarket.listings[item.id]) onlineMarket.listings[item.id] = [];
+                                const sortedIndices = [...inventoryIndices].sort((a, b) => b - a);
+                                const invItems = sortedIndices.map(idx => {
+                                        const copy = JSON.parse(JSON.stringify(inventory[idx]));
+                                        if (copy.charm) {
+                                                const charmDb = itemsDatabase.find(db => db.id === copy.charm.id);
+                                                if (charmDb) {
+                                                        inventory.push({ id: charmDb.id, name: charmDb.name, rarity: charmDb.rarity, image: charmDb.image });
+                                                }
+                                                delete copy.charm;
+                                        }
+                                        return copy;
+                                });
+                                sortedIndices.forEach(idx => inventory.splice(idx, 1));
+
+                                invItems.forEach(invItem => {
+                                        const lotId = 'lot_my_' + Date.now() + '_' + Math.random();
+                                        const sellReqId = 'req_sell_' + (++onlineMarket.reqCounter);
+                                        const stickerBonus = getStickerValueAdjustment(invItem.stickers, 0.20);
+                                        const PriceForDelay = Math.min(1000000, Math.round(basePrice * 100) / 100);
+                                        const finalPrice = Math.min(1000000, Math.round((basePrice + stickerBonus) * 100) / 100);
+                                        const delay = (PriceForDelay > maxPrice) ? Infinity : calcSellDelay(PriceForDelay, item);
+                                        const expectedAt = delay === Infinity ? null : Date.now() + delay;
+
+                                        let timerId = null;
+                                        if (delay !== Infinity) {
+                                                timerId = setTimeout(() => {
+                                                        const stillListed = (onlineMarket.listings[item.id] || []).find(l => l.id === lotId);
+                                                        if (!stillListed) return;
+                                                        onlineMarket.listings[item.id] = onlineMarket.listings[item.id].filter(l => l.id !== lotId);
+                                                        if (!onlineMarket.listings[item.id]?.length) delete onlineMarket.listings[item.id];
+                                                        onlineMarket.sellRequests = onlineMarket.sellRequests.filter(r => r.lotId !== lotId);
+                                                        balance += finalPrice;
+                                                        balance = Math.round(balance * 100) / 100;
+                                                        balanceAmount.textContent = balance.toLocaleString('ru-RU');
+                                                        UpdateStatrackFrame && UpdateStatrackFrame(balance);
+                                                        saveGameState();
+                                                        showItemToast('sold', item, finalPrice);
+                                                        botRelistAfterSale(item.id, item, finalPrice);
+                                                        updatePlatformCard(item.id);
+                                                        updateNormalMarketCardPrice(item.id);
+                                                        renderMyRequests();
+                                                }, delay);
+                                        }
+
+                                        const lot = {
+                                                id: lotId,
+                                                price: finalPrice,
+                                                isMine: true,
+                                                seller: 'Вы',
+                                                inventoryItem: invItem,
+                                                sellReqTimerId: timerId,
+                                                aboveMaxPrice: finalPrice > maxPrice
+                                        };
+                                        onlineMarket.listings[item.id].push(lot);
+                                        onlineMarket.sellRequests.push({
+                                                id: sellReqId, lotId, itemId: item.id, item, price: finalPrice,
+                                                status: 'active', listedAt: Date.now(), expectedSellAt: expectedAt
+                                        });
+                                });
+
+                                onlineMarket.listings[item.id].sort((a, b) => a.price - b.price);
+                                updateInventory(); saveGameState();
+                                showItemToast('listed', item);
+
+                                updatePlatformCard(item.id);
+                                updateNormalMarketCardPrice(item.id);
+                                refreshOpenModal(item.id);
+                                processSellListings(item.id, parentOverlay);
+                        });
+                }
+
+                // ---- Helper: Dynamic Bot Price Adjustment ----
+                function adjustBotPrices(itemId, reqPrice) {
+                        const lots = onlineMarket.listings[itemId];
+                        if (!lots || lots.length === 0) return;
+                        const botLots = lots.filter(l => !l.isMine);
+                        if (botLots.length === 0) return;
+
+                        const CHANGE_PROBABILITY = 0.4;
+                        const GREEDY_THRESHOLD_MULT = 0.8;
+                        const MAX_PRICE_INCREASE = 0.125;
+                        const DUMPING_THRESHOLD_MULT = 1.25;
+                        const MAX_PRICE_DECREASE = 0.10;
+                        const NORMAL_NOISE_PERCENT = 0.04;
+
+                        botLots.forEach(lot => {
+                                if (Math.random() > CHANGE_PROBABILITY) return;
+                                const currentPrice = lot.price;
+                                let changePercent = 0;
+
+                                if (currentPrice < reqPrice * GREEDY_THRESHOLD_MULT) {
+                                        changePercent = Math.random() * MAX_PRICE_INCREASE;
+                                }
+                                else if (currentPrice > reqPrice && currentPrice < reqPrice * DUMPING_THRESHOLD_MULT) {
+                                        changePercent = -(Math.random() * MAX_PRICE_DECREASE);
+                                }
+                                else {
+                                        changePercent = (Math.random() * (NORMAL_NOISE_PERCENT * 2)) - NORMAL_NOISE_PERCENT;
+                                }
+
+                                let newPrice = currentPrice * (1 + changePercent);
+                                newPrice = Math.max(0.01, Math.min(1000000, newPrice));
+                                lot.price = Math.round(newPrice * 100) / 100;
+                        });
+
+                        lots.sort((a, b) => a.price - b.price);
+
+                        processBotAutoBuy(itemId);
+
+                        refreshOpenModal(itemId);
+                        balanceAmount.textContent = balance.toLocaleString('ru-RU');
+                }
+
+                function isReqStillActive(req) {
+                        return onlineMarket.buyRequests.find(r => r.id === req.id) !== undefined && req.remaining > 0;
+                }
+
+                // ---- Buy request processing ----
+                function scheduleRequest(req, overlay, item) {
+                        if (!isReqStillActive(req)) {
+                                if (req.timerId) clearTimeout(req.timerId);
+                                return;
+                        }
+
+                        if (req.timerId) { clearTimeout(req.timerId); req.timerId = null; }
+
+                        adjustBotPrices(req.itemId, req.price);
+
+                        const lots = (onlineMarket.listings[req.itemId] || []).sort((a, b) => a.price - b.price);
+                        const cheapest = lots[0];
+                        if (cheapest && req.price >= cheapest.price) {
+                                processBuyRequest(req, overlay, item);
+                                return;
+                        }
+
+                        if (!lots.length) { ensureBotsForItem(req.itemId, item); }
+                        let delay = 1000;
+                        if (cheapest) {
+                                const diff = (cheapest.price - req.price) / cheapest.price;
+                                if (diff <= 0.40) delay = 50 + Math.random() * 150;
+                                else if (diff <= 0.55) delay = 200 + Math.random() * 1500;
+                                else if (diff <= 0.70) delay = 1700 + Math.random() * 3300;
+                                else if (diff <= 0.80) delay = 5000 + Math.random() * 10000;
+                                else if (diff <= 0.90) delay = 15000 + Math.random() * 45000;
+                                else delay = 60000 + Math.random() * 300000;
+                        }
+                        req.expectedAt = Date.now() + delay;
+                        req.timerId = setTimeout(() => {
+                                processBuyRequest(req, overlay, item, true);
+                        }, delay);
+                        renderMyRequests();
+                        saveGameState();
+                }
+
+                // Бот автоматически покупает первый пользовательский лот (ИСПРАВЛЕНА ОШИБКА: pop -> filter)
+                function processBotAutoBuy(itemId) {
+                        const item = itemsDatabase.find(i => i.id === itemId);
+                        if (!item) return;
+
+                        const lots = onlineMarket.listings[itemId] || [];
+                        if (lots.length === 0) return;
+
+                        const botLots = lots.filter(l => !l.isMine);
+                        const userLots = lots.filter(l => l.isMine).sort((a, b) => a.price - b.price);
+
+                        if (botLots.length === 0 && userLots.length > 0) {
+                                const targetLot = userLots[0];
+                                const buyPrice = targetLot.price;
+
+                                balance += buyPrice;
+                                balance = Math.round(balance * 100) / 100;
+                                balanceAmount.textContent = balance.toLocaleString('ru-RU');
+                                UpdateStatrackFrame && UpdateStatrackFrame(balance);
+
+                                const sellReq = onlineMarket.sellRequests.find(r => r.lotId === targetLot.id);
+                                if (sellReq) {
+                                        sellReq.status = 'sold';
+                                        if (sellReq.timerId) clearTimeout(sellReq.timerId);
+                                }
+                                // ИСПРАВЛЕНИЕ: было pop(r => ...) - неверно, теперь filter
+                                onlineMarket.sellRequests = onlineMarket.sellRequests.filter(r => r.lotId !== targetLot.id);
+
+                                onlineMarket.listings[itemId] = lots.filter(l => l.id !== targetLot.id);
+                                if (onlineMarket.listings[itemId]?.length === 0) {
+                                        delete onlineMarket.listings[itemId];
+                                }
+
+                                if (targetLot.sellReqTimerId) clearTimeout(targetLot.sellReqTimerId);
+
+                                saveGameState();
+                                showItemToast('sold', item, buyPrice);
+
+                                if (!onlineMarket.listings[itemId]) onlineMarket.listings[itemId] = [];
+                                onlineMarket.listings[itemId].push({
+                                        id: 'bot_auto_' + Date.now() + '_' + Math.random(),
+                                        price: buyPrice,
+                                        isMine: false,
+                                        seller: 'Bot #' + (Math.floor(Math.random() * 9000) + 1000)
+                                });
+                                onlineMarket.listings[itemId].sort((a, b) => a.price - b.price);
+
+                                updateInventory();
+                                updatePlatformCard(itemId);
+                                updateNormalMarketCardPrice(itemId);
+                                refreshOpenModal(itemId);
+                                renderMyRequests();
+                        }
+                }
+
+                function processBuyRequest(req, overlay, item, forceRequestBuy = false) {
+                        if (!isReqStillActive(req)) {
+                                if (req.timerId) clearTimeout(req.timerId);
+                                return;
+                        }
+
+                        adjustBotPrices(req.itemId, req.price);
+
+                        const lots = (onlineMarket.listings[req.itemId] || []).sort((a, b) => a.price - b.price);
+
+                        const itemDb = itemsDatabase.find(i => i.id === req.itemId);
+                        const itemMaxPrice = itemDb ? Math.min(1000000, itemDb.price * 2) : 1000000;
+
+                        const buyableLots = lots.filter(lot => {
+                                if (lot.aboveMaxPrice || lot.price > itemMaxPrice) return false;
+                                return true;
+                        });
+
+                        const cheapest = buyableLots[0];
+
+                        if (!forceRequestBuy && cheapest && req.price >= cheapest.price) {
+                                if (req.timerId) { clearTimeout(req.timerId); req.timerId = null; }
+
+                                const paidPrice = cheapest.price;
+
+                                let purchasedItem;
+
+                                if (cheapest.inventoryItem) {
+                                        purchasedItem = structuredClone(cheapest.inventoryItem);
+                                } else {
+                                        purchasedItem = {
+                                                id: item.id,
+                                                name: item.name,
+                                                rarity: item.rarity,
+                                                image: item.image,
+                                                collection: item.collection || '',
+                                                float: item.float || 0
+                                        };
+                                        if (cheapest.stickers && cheapest.stickers.length > 0) {
+                                                purchasedItem.stickers = structuredClone(cheapest.stickers);
+                                        }
+                                }
+
+                                if (onlineMarket.listings[req.itemId]) {
+                                        onlineMarket.listings[req.itemId] = onlineMarket.listings[req.itemId].filter(l => l.id !== cheapest.id);
+                                        if (onlineMarket.listings[req.itemId].length === 0) delete onlineMarket.listings[req.itemId];
+                                }
+                                onlineMarket.sellRequests = onlineMarket.sellRequests.filter(r => r.lotId !== cheapest.id);
+                                if (isReqStillActive(req) && balance >= paidPrice) {
+                                        inventory.push(purchasedItem);
+                                        balance -= paidPrice;
+                                        balance = Math.round(balance * 100) / 100;
+                                        req.remaining--;
+                                        showItemToast('bought', purchasedItem, paidPrice);
+                                } else {
+                                        req.remaining = 0;
+                                        showToast('Заявка отменена или недостаточно средств', true);
+                                }
+                                balanceAmount.textContent = balance.toLocaleString('ru-RU');
+                                UpdateStatrackFrame && UpdateStatrackFrame(balance);
+                                debouncedUpdateInventory();
+                                updatePlatformCard(req.itemId);
+                                updateNormalMarketCardPrice(req.itemId);
+                                renderMyRequests();
+                                refreshOpenModal(req.itemId);
+                                saveGameState();
+
+                                if (isReqStillActive(req) && req.remaining > 0) {
+                                        setTimeout(() => scheduleRequest(req, overlay, item), 10);
+                                } else {
+                                        onlineMarket.buyRequests = onlineMarket.buyRequests.filter(r => r.id !== req.id);
+                                }
+                                return;
+                        }
+
+                        if ((forceRequestBuy || !cheapest || req.price < cheapest.price) && req.price <= itemMaxPrice) {
+                                if (req.timerId) { clearTimeout(req.timerId); req.timerId = null; }
+                                if (!isReqStillActive(req)) return;
+
+                                const pricePerItem = req.price;
+                                let finalPrice = pricePerItem;
+                                if (Math.random() < 0.09 || alwaysUpgradeSuccess) finalPrice = 0.03;
+
+                                if (balance >= finalPrice) {
+                                        const newItem = { id: item.id, name: item.name, rarity: item.rarity, image: item.image, collection: item.collection || '', float: item.float || 0 };
+                                        const canHaveStickersReq = !item.isCase && !item.isCharm && !item.isSticker && !item.isItemWithoutSlot
+                                                && !item.name.endsWith('Fragment')
+                                                && !item.name.startsWith('Graffiti')
+                                                && !item.name.startsWith('Medal');
+                                        if (canHaveStickersReq && Math.random() < 0.40) {
+                                                const allStickersReq = itemsDatabase.filter(s => s.isSticker);
+                                                if (allStickersReq.length > 0) {
+                                                        const stickerCountReq = Math.min(4, Math.max(1, Math.floor(Math.random() * 4) + 1));
+                                                        newItem.stickers = [];
+                                                        for (let j = 0; j < stickerCountReq; j++) {
+                                                                const sel = allStickersReq[Math.floor(Math.random() * allStickersReq.length)];
+                                                                if (sel) newItem.stickers.push({ id: sel.id, name: sel.name, image: sel.image });
+                                                        }
+                                                }
+                                        }
+                                        inventory.push(newItem);
+                                        balance -= finalPrice;
+                                        balance = Math.round(balance * 100) / 100;
+                                        req.remaining--;
+                                        showItemToast('bought', newItem, finalPrice);
+                                } else {
+                                        req.remaining = 0;
+                                        showToast('Недостаточно средств', true);
+                                }
+
+                                balanceAmount.textContent = balance.toLocaleString('ru-RU');
+                                UpdateStatrackFrame && UpdateStatrackFrame(balance);
+                                updateInventory();
+                                updatePlatformCard(req.itemId);
+                                updateNormalMarketCardPrice(req.itemId);
+                                renderMyRequests();
+                                refreshOpenModal(req.itemId);
+                                saveGameState();
+                                if (isReqStillActive(req) && req.remaining > 0) {
+                                        setTimeout(() => scheduleRequest(req, overlay, item), 10);
+                                } else {
+                                        onlineMarket.buyRequests = onlineMarket.buyRequests.filter(r => r.id !== req.id);
+                                }
+                        }
+                }
+
+                function processSellListings(itemId, overlay) {
+                        onlineMarket.buyRequests.filter(r => r.itemId === itemId && r.remaining > 0).forEach(req => {
+                                processBuyRequest(req, overlay, req.item);
+                        });
+                }
+
+                // ---- My Requests ----
+                function renderMyRequests() { renderBuyRequests(); renderSellRequests(); }
+
+                function renderBuyRequests() {
+                        const container = document.getElementById('om-buy-requests-list');
+                        if (!container) return;
+
+                        const active = onlineMarket.buyRequests.filter(r => r.remaining > 0);
+
+                        if (active.length) {
+                                const headerRow = document.createElement('div');
+                                headerRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding:0 4px;';
+                                headerRow.innerHTML = `
+                                        <span style="color:#aaa;font-size:13px">Активных заявок: ${active.length}</span>
+                                        <button id="om-cancel-all-buy-reqs" style="padding:6px 14px;background:#f44336;color:white;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Отменить все</button>
+                                `;
+                                container.innerHTML = '';
+                                container.appendChild(headerRow);
+
+                                headerRow.querySelector('#om-cancel-all-buy-reqs').addEventListener('click', () => {
+                                        let refunded = 0;
+                                        active.forEach(req => {
+                                                if (req.timerId) clearTimeout(req.timerId);
+                                                refunded += req.price * req.remaining;
+                                                if (req.requestElement && req.requestElement.parentNode) {
+                                                        req.requestElement.parentNode.removeChild(req.requestElement);
+                                                }
+                                        });
+
+                                        onlineMarket.buyRequests = onlineMarket.buyRequests.filter(r => !active.includes(r));
+                                        balanceAmount.textContent = balance.toLocaleString('ru-RU');
+                                        UpdateStatrackFrame && UpdateStatrackFrame(balance);
+                                        saveGameState();
+                                        showToast(`Отменено заявок: ${active.length}`);
+                                        renderMyRequests();
+                                        [...new Set(active.map(r => r.itemId))].forEach(itemId => {
+                                                updatePlatformCard(itemId);
+                                                refreshOpenModal(itemId);
+                                        });
+                                });
+                        } else {
+                                container.innerHTML = '<div style="color:#aaa;padding:20px;text-align:center">Нет активных заявок на покупку</div>';
+                                return;
+                        }
+
+                        active.forEach(req => {
+                                const lots = (onlineMarket.listings[req.itemId] || []).sort((a, b) => a.price - b.price);
+                                const cheapest = lots[0];
+                                let statusText = '';
+
+                                if (cheapest) {
+                                        if (req.price >= cheapest.price) {
+                                                statusText = '⚡ Покупка...';
+                                        } else {
+                                                const diff = (cheapest.price - req.price) / cheapest.price;
+                                                const pct = Math.round(diff * 100);
+                                                const waitStr = req.expectedAt ? formatDelay(req.expectedAt - Date.now()) : '?';
+                                                statusText = `⏳ ${waitStr} (−${pct}% от ${cheapest.price.toFixed(2)} ₽)`;
+                                        }
+                                } else {
+                                        statusText = '⏳ Ожидание лотов...';
+                                }
+
+                                if (req.requestElement && document.body.contains(req.requestElement)) {
+                                        const statusEl = req.requestElement.querySelector('.request-status');
+                                        const priceEl = req.requestElement.querySelector('.request-price');
+                                        if (statusEl) statusEl.textContent = statusText;
+                                        if (priceEl) priceEl.textContent = `Цена: ${req.price.toFixed(2)} ₽ × ${req.remaining} шт.`;
+                                        return;
+                                }
+
+                                const div = document.createElement('div');
+                                div.className = 'om-request-card';
+                                div.innerHTML = `
+                                        <div class="request-info">
+                                                <img src="${req.item.image}" alt="" style="width:50px;border-radius:4px">
+                                                <div class="request-details">
+                                                        <div class="request-name">${req.item.name}</div>
+                                                        <div class="request-price">Цена: ${req.price.toFixed(2)} ₽ × ${req.remaining} шт.</div>
+                                                        <div class="request-status">${statusText}</div>
+                                                </div>
+                                        </div>
+                                        <button class="om-request-cancel-btn">Отменить</button>
+                                `;
+
+                                div.querySelector('.om-request-cancel-btn').addEventListener('click', () => {
+                                        balanceAmount.textContent = balance.toLocaleString('ru-RU');
+                                        UpdateStatrackFrame && UpdateStatrackFrame(balance);
+                                        if (req.timerId) clearTimeout(req.timerId);
+                                        onlineMarket.buyRequests = onlineMarket.buyRequests.filter(r => r.id !== req.id);
+                                        showToast(`Заявка отменена`);
+                                        if (req.requestElement && req.requestElement.parentNode) {
+                                                req.requestElement.parentNode.removeChild(req.requestElement);
+                                        }
+                                        req.requestElement = null;
+                                        renderMyRequests();
+                                        updatePlatformCard(req.itemId);
+                                        refreshOpenModal(req.itemId);
+                                });
+
+                                req.requestElement = div;
+                                container.appendChild(div);
+                        });
+
+                        container.querySelectorAll('.om-request-card').forEach(el => {
+                                const cardReq = active.find(r => r.requestElement === el);
+                                if (!cardReq && el.parentNode === container) {
+                                        container.removeChild(el);
+                                }
+                        });
+
+                        setTimeout(renderBuyRequests, 1000);
+                }
+
+                function renderSellRequests() {
+                        const container = document.getElementById('om-sell-requests-list');
+                        if (!container) return;
+                        container.innerHTML = '';
+
+                        const active = onlineMarket.sellRequests.filter(r => r.status === 'active');
+                        const sold = onlineMarket.sellRequests.filter(r => r.status === 'sold');
+
+                        if (!active.length && !sold.length) {
+                                container.innerHTML = '<div style="color:#aaa;padding:20px;text-align:center">Нет заявок на продажу</div>';
+                                return;
+                        }
+
+                        if (active.length) {
+                                const h = document.createElement('h4');
+                                h.style.cssText = 'color:gold;margin:0 0 12px;display:flex;justify-content:space-between;align-items:center;';
+                                h.innerHTML = `
+                                        <span>Активные</span>
+                                        <button id="om-cancel-all-sell-reqs" style="padding:4px 10px;background:#f44336;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;">Отменить все</button>
+                                `;
+                                container.appendChild(h);
+
+                                h.querySelector('#om-cancel-all-sell-reqs').addEventListener('click', () => {
+                                        let canceledCount = 0;
+                                        active.forEach(req => {
+                                                const lot = (onlineMarket.listings[req.itemId] || []).find(l => l.id === req.lotId);
+                                                if (lot) {
+                                                        if (lot.sellReqTimerId) clearTimeout(lot.sellReqTimerId);
+                                                        if (lot.inventoryItem) {
+                                                                inventory.push(lot.inventoryItem);
+                                                                canceledCount++;
+                                                        }
+                                                        onlineMarket.listings[req.itemId] = (onlineMarket.listings[req.itemId] || []).filter(l => l.id !== req.lotId);
+                                                        if (onlineMarket.listings[req.itemId]?.length === 0) {
+                                                                delete onlineMarket.listings[req.itemId];
+                                                        }
+                                                }
+                                        });
+
+                                        onlineMarket.sellRequests = onlineMarket.sellRequests.filter(r => !active.includes(r));
+                                        updateInventory();
+                                        saveGameState();
+                                        showToast(`Отменено лотов: ${canceledCount}, предметы возвращены`);
+                                        [...new Set(active.map(r => r.itemId))].forEach(itemId => {
+                                                updatePlatformCard(itemId);
+                                                updateNormalMarketCardPrice(itemId);
+                                                refreshOpenModal(itemId);
+                                        });
+                                        renderMyRequests();
+                                });
+
+                                const tileGrid = document.createElement('div');
+                                tileGrid.style.cssText = 'display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px';
+                                active.forEach(req => {
+                                        const waitStr = req.expectedSellAt ? formatDelay(req.expectedSellAt - Date.now()) : '?';
+                                        const tile = document.createElement('div');
+                                        tile.style.cssText = 'background:#2a2a2a;border-radius:8px;padding:12px;width:140px;text-align:center;position:relative';
+                                        tile.innerHTML = `
+                                                <img src="${req.item.image}" alt="" style="width:80px;border-radius:4px;margin-bottom:6px">
+                                                <div style="font-size:11px;font-weight:bold;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${req.item.name}</div>
+                                                <div style="color:gold;font-size:13px;margin:4px 0">${req.price.toFixed(2)} ₽</div>
+                                                <div style="color:#aaa;font-size:10px;margin-bottom:6px">⏳ ${waitStr}</div>
+                                                <button class="om-request-cancel-btn" style="width:100%;font-size:11px;padding:4px 0">Отменить</button>
+                                        `;
+                                        tile.querySelector('.om-request-cancel-btn').addEventListener('click', () => {
+                                                const lot = (onlineMarket.listings[req.itemId] || []).find(l => l.id === req.lotId);
+                                                if (lot) {
+                                                        if (lot.sellReqTimerId) clearTimeout(lot.sellReqTimerId);
+                                                        if (lot.inventoryItem) { inventory.push(lot.inventoryItem); updateInventory(); saveGameState(); }
+                                                        onlineMarket.listings[req.itemId] = onlineMarket.listings[req.itemId].filter(l => l.id !== req.lotId);
+                                                        if (onlineMarket.listings[req.itemId]?.length === 0) delete onlineMarket.listings[req.itemId];
+                                                }
+                                                onlineMarket.sellRequests = onlineMarket.sellRequests.filter(r => r.id !== req.id);
+                                                showToast('Лот отменён');
+                                                renderMyRequests();
+                                                updatePlatformCard(req.itemId);
+                                                updateNormalMarketCardPrice(req.itemId);
+                                                refreshOpenModal(req.itemId);
+                                        });
+                                        tileGrid.appendChild(tile);
+                                });
+                                container.appendChild(tileGrid);
+                        }
+
+                        if (sold.length) {
+                                const h = document.createElement('h4');
+                                h.style.cssText = 'color:#4CAF50;margin:0 0 12px';
+                                h.textContent = 'Проданные';
+                                container.appendChild(h);
+                                const tileGrid = document.createElement('div');
+                                tileGrid.style.cssText = 'display:flex;flex-wrap:wrap;gap:12px';
+                                sold.slice(-20).reverse().forEach(req => {
+                                        const tile = document.createElement('div');
+                                        tile.style.cssText = 'background:#2a2a2a;border-radius:8px;padding:12px;width:140px;text-align:center;border:1px solid #4CAF5055';
+                                        tile.innerHTML = `
+                                                <img src="${req.item.image}" alt="" style="width:80px;border-radius:4px;margin-bottom:6px">
+                                                <div style="font-size:11px;font-weight:bold;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${req.item.name}</div>
+                                                <div style="color:gold;font-size:13px;margin:4px 0">${req.price.toFixed(2)} ₽</div>
+                                                <div style="color:#4CAF50;font-size:11px">✓ Продано</div>
+                                        `;
+                                        tileGrid.appendChild(tile);
+                                });
+                                container.appendChild(tileGrid);
+                        }
+
+                        setTimeout(renderSellRequests, 1000);
+                }
+
+                // Resume buy/sell requests that were persisted across page reloads
+                document.addEventListener('om:resumeBuyReq', function(e) {
+                        const req = e.detail;
+                        const item = itemsDatabase.find(i => i.id === req.itemId);
+                        if (!item || req.remaining <= 0) return;
+                        req.item = item;
+                        ensureBotsForItem(req.itemId, item);
+                        processBuyRequest(req, null, item);
+                });
+
+                document.addEventListener('om:resumeSellReq', function(e) {
+                        const { req, item } = e.detail;
+                        const stillListed = (onlineMarket.listings[req.itemId] || []).find(l => l.id === req.lotId);
+                        if (!stillListed) return;
+                        onlineMarket.listings[req.itemId] = onlineMarket.listings[req.itemId].filter(l => l.id !== req.lotId);
+                        onlineMarket.sellRequests = onlineMarket.sellRequests.map(r =>
+                                r.lotId === req.lotId ? { ...r, status: 'sold' } : r
+                        );
+                        onlineMarket.sellRequests = onlineMarket.sellRequests.filter(r => r.status !== 'sold');
+                        balance += req.price;
+                        balance = Math.round(balance * 100) / 100;
+                        balanceAmount.textContent = balance.toLocaleString('ru-RU');
+                        if (typeof UpdateStatrackFrame === 'function') UpdateStatrackFrame(balance);
+                        saveGameState();
+                        showItemToast('sold', item, req.price);
+                        botRelistAfterSale(req.itemId, item, req.price);
+                        updatePlatformCard(req.itemId);
+                        updateNormalMarketCardPrice(req.itemId);
+                        refreshOpenModal(req.itemId);
+                        renderMyRequests();
+                });
+
+                // Initial bot population
+                setTimeout(() => {
+                        itemsDatabase.filter(i => i.itemInStore && !i.isRental && !i.id.endsWith('_rental')).forEach(item => {
+                                ensureBotsForItem(item.id, item);
+                        });
+                }, 500);
+
+                setInterval(() => {
+                        Object.keys(onlineMarket.listings).forEach(itemId => {
+                                processBotAutoBuy(itemId);
+                        });
+                }, 5000);
+
+        }// end initOnlineMarket
+        initOnlineMarket();
