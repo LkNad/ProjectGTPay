@@ -16762,3 +16762,243 @@ document.addEventListener('DOMContentLoaded', function() {
                         omTypeFilterModal.style.display = 'none';
                         renderPlatformGrid();
                 });
+
+                // ---- Rarity Filters ----
+                function buildRarityFilters() {
+                        const bar = document.getElementById('om-rarity-filters');
+                        if (!bar) return;
+                        bar.innerHTML = '<button class="filter-btn active" data-rarity="all">Все</button>';
+                        Object.keys(rarities).forEach(r => {
+                                const info = rarities[r];
+                                const btn = document.createElement('button');
+                                btn.className = 'filter-btn';
+                                btn.dataset.rarity = r;
+                                btn.textContent = info.name;
+                                btn.style.backgroundColor = info.colorHex || '';
+                                bar.appendChild(btn);
+                        });
+                        bar.querySelectorAll('.filter-btn').forEach(btn => {
+                                btn.addEventListener('click', () => {
+                                        bar.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                                        btn.classList.add('active');
+                                        onlineMarket.currentFilterRarity = btn.dataset.rarity;
+                                        renderPlatformGrid();
+                                });
+                        });
+                }
+
+                // ---- Collection Filter ----
+                function buildCollectionFilter() {
+                        const sel = document.getElementById('om-collection-filter');
+                        if (!sel) return;
+                        sel.innerHTML = '<option value="all">Все коллекции</option>';
+                        Object.values(collectionsDatabase).forEach(c => {
+                                const opt = document.createElement('option');
+                                opt.value = c.id;
+                                opt.textContent = c.name;
+                                sel.appendChild(opt);
+                        });
+                        sel.addEventListener('change', () => {
+                                onlineMarket.currentFilterCollection = sel.value;
+                                renderPlatformGrid();
+                        });
+                }
+
+                // Debounce helper
+                function omDebounce(fn, ms) { let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); }; }
+
+                document.getElementById('om-name-filter').addEventListener('input', omDebounce(e => {
+                        onlineMarket.currentFilterName = e.target.value.toLowerCase();
+                        renderPlatformGrid();
+                }, 250));
+
+                document.getElementById('om-sort-price-btn').addEventListener('click', function() {
+                        onlineMarket.sortDescending = !onlineMarket.sortDescending;
+                        this.textContent = onlineMarket.sortDescending ? 'По цене ↓' : 'По цене ↑';
+                        renderPlatformGrid();
+                });
+
+                // Sub-tab switching
+                omContainer.querySelectorAll('.online-market-subtab').forEach(btn => {
+                        btn.addEventListener('click', () => {
+                                omContainer.querySelectorAll('.online-market-subtab').forEach(b => b.classList.remove('active'));
+                                btn.classList.add('active');
+                                const tab = btn.dataset.tab;
+                                omContainer.querySelector('.om-platform-container').classList.toggle('active', tab === 'platform');
+                                omContainer.querySelector('.om-requests-container').classList.toggle('active', tab === 'requests');
+                                if (tab === 'platform') renderPlatformGrid();
+                                if (tab === 'requests') renderMyRequests();
+                        });
+                });
+
+                omContainer.querySelectorAll('.om-requests-subtab').forEach(btn => {
+                        btn.addEventListener('click', () => {
+                                omContainer.querySelectorAll('.om-requests-subtab').forEach(b => b.classList.remove('active'));
+                                btn.classList.add('active');
+                                const rtab = btn.dataset.rtab;
+                                document.getElementById('om-buy-requests-panel').style.display = rtab === 'buy' ? 'block' : 'none';
+                                document.getElementById('om-sell-requests-panel').style.display = rtab === 'sell' ? 'block' : 'none';
+                                renderMyRequests();
+                        });
+                });
+
+                document.getElementById('online-market-btn').addEventListener('click', function() {
+                        if (currentMarket !== 'online') {
+                                currentMarket = 'online';
+                                document.querySelectorAll('.market-btn').forEach(b => b.classList.remove('active'));
+                                this.classList.add('active');
+                                document.querySelector('.sort-container').style.display = 'none';
+                                document.getElementById('items-container').style.display = 'none';
+                                document.getElementById('types-filter').style.display = 'none';
+                                omContainer.style.display = 'flex';
+                                buildRarityFilters();
+                                buildCollectionFilter();
+                                renderPlatformGrid();
+                        }
+                });
+
+                ['normal-market-btn', 'rental-market-btn'].forEach(id => {
+                        document.getElementById(id)?.addEventListener('click', function() {
+                                document.querySelector('.sort-container').style.display = '';
+                                document.getElementById('items-container').style.display = '';
+                                document.getElementById('types-filter').style.display = 'block';
+                                omContainer.style.display = 'none';
+                        }, true);
+                });
+
+                // ---- Get Filtered Items ----
+                function getFilteredItems() {
+                        let items = itemsDatabase.filter(item =>
+                                item.itemInStore && !item.isRental && !item.id.endsWith('_rental')
+                        );
+                        
+                        const rar = onlineMarket.currentFilterRarity;
+                        if (rar !== 'all') items = items.filter(i => i.rarity === rar);
+                        
+                        const col = onlineMarket.currentFilterCollection;
+                        if (col !== 'all') items = items.filter(i => i.collection === col);
+                        
+                        const name = onlineMarket.currentFilterName;
+                        if (name) items = items.filter(i => i.name.toLowerCase().includes(name));
+                        
+                        // Type filter
+                        const types = onlineMarket.currentFilterTypes || ['all'];
+                        if (!types.includes('all')) {
+                                items = items.filter(item => {
+                                        const itemType = getItemType(item);
+                                        return types.includes(itemType);
+                                });
+                        }
+                        
+                        // Sort by lowest lot price
+                        items.sort((a, b) => {
+                                const pa = onlineMarket.listings[a.id]?.length ? Math.min(...onlineMarket.listings[a.id].map(l => l.price)) : Infinity;
+                                const pb = onlineMarket.listings[b.id]?.length ? Math.min(...onlineMarket.listings[b.id].map(l => l.price)) : Infinity;
+                                return onlineMarket.sortDescending ? pb - pa : pa - pb;
+                        });
+                        return items;
+                }
+
+                // ---- Build Platform Card ----
+                function buildPlatformCard(item) {
+                        const rarityInfo = rarities[item.rarity] || { color: 'none', name: item.rarity };
+                        const collectionInfo = collectionsDatabase[item.collection] || { name: item.collection, image: '' };
+                        const lots = onlineMarket.listings[item.id] || [];
+                        const lotsCount = lots.length;
+                        const lowestPrice = lotsCount > 0 ? Math.min(...lots.map(l => l.price)) : null;
+                        const myReq = onlineMarket.buyRequests.find(r => r.itemId === item.id && r.remaining > 0);
+                        const xCount = inventory.filter(i => i.id === item.id).length;
+                        let countInInv = `${xCount}`;
+                        if (xCount > 999) countInInv = `${Math.round(xCount/1000*10)/10}K`;
+                        if (xCount > 999000) countInInv = `${Math.round(xCount/1000000*10)/10}M`;
+
+                        const card = document.createElement('div');
+                        card.className = 'item-card';
+                        card.id = 'om-card-' + item.id;
+                        card.dataset.rarity = item.rarity;
+                        card.dataset.itemId = item.id;
+                        card.innerHTML = `
+                                <div class="item-img"><img src="${item.image}" alt="" width="150"></div>
+                                <div class="item-rarity ${rarityInfo.color}"><div class="item-name">${item.name}</div></div>
+                                <div class="item-collection" data-collection="${item.collection}">
+                                        ${collectionInfo.image ? `<img src="${collectionInfo.image}" class="collection-icon" style="width:30px;height:auto;" alt="">` : ''}
+                                        ${collectionInfo.name || item.collection}
+                                </div>
+                                <div class="item-price om-card-price" style="color:gold">${lowestPrice !== null ? lowestPrice.toFixed(2) + ' ₽' : '— ₽'}</div>
+                                <div class="item-stock om-card-lots" style="font-size:12px">Лотов: ${lotsCount}${myReq ? ` <span class="om-active-request-badge">Заявка: ${myReq.price.toFixed(2)} ₽ ×${myReq.remaining}</span>` : ''}</div>
+                                <span class="item-count-in-inv om-card-inv" style="${xCount > 0 ? '' : 'color:#ff3737'}">${countInInv} шт. в Инвентаре</span>
+                                <button class="find-on-platform-btn" data-id="${item.id}">Найти на платформе</button>
+                        `;
+                        card.querySelector('.find-on-platform-btn').addEventListener('click', e => {
+                                e.stopPropagation();
+                                openPlatformModal(item);
+                        });
+                        setup3DViewer(card.querySelector('.item-img'), item, item);
+                        return card;
+                }
+
+                // ---- Update Platform Card ----
+                function updatePlatformCard(itemId) {
+                        const card = document.getElementById('om-card-' + itemId);
+                        if (!card) return;
+                        const item = itemsDatabase.find(i => i.id === itemId);
+                        if (!item) return;
+                        const lots = onlineMarket.listings[itemId] || [];
+                        const lotsCount = lots.length;
+                        const lowestPrice = lotsCount > 0 ? Math.min(...lots.map(l => l.price)) : null;
+                        const myReq = onlineMarket.buyRequests.find(r => r.itemId === itemId && r.remaining > 0);
+                        const xCount = inventory.filter(i => i.id === itemId).length;
+                        let countInInv = `${xCount}`;
+                        if (xCount > 999) countInInv = `${Math.round(xCount/1000*10)/10}K`;
+                        if (xCount > 999000) countInInv = `${Math.round(xCount/1000000*10)/10}M`;
+
+                        const priceEl = card.querySelector('.om-card-price');
+                        if (priceEl) priceEl.textContent = lowestPrice !== null ? lowestPrice.toFixed(2) + ' ₽' : '— ₽';
+                        const lotsEl = card.querySelector('.om-card-lots');
+                        if (lotsEl) lotsEl.innerHTML = `Лотов: ${lotsCount}` + (myReq ? ` <span class="om-active-request-badge">Заявка: ${myReq.price.toFixed(2)} ₽ ×${myReq.remaining}</span>` : '');
+                        const invEl = card.querySelector('.om-card-inv');
+                        if (invEl) { invEl.textContent = countInInv + ' шт. в Инвентаре'; invEl.style.color = xCount > 0 ? '' : '#ff3737'; }
+
+                        if (lowestPrice !== null) {
+                                const nmCard = document.getElementById(itemId);
+                                if (nmCard) { const pe = nmCard.querySelector('.item-price'); if (pe) pe.textContent = lowestPrice.toFixed(2) + ' ₽'; }
+                                const dbItem = itemsDatabase.find(i => i.id === itemId);
+                                if (dbItem) dbItem.price = lowestPrice;
+                        }
+                }
+
+                // ---- Render Platform Grid ----
+                function renderPlatformGrid() {
+                        const grid = document.getElementById('om-platform-grid');
+                        if (!grid) return;
+                        grid.innerHTML = '';
+
+                        const items = getFilteredItems();
+                        if (!items.length) {
+                                grid.innerHTML = '<div style="color:#aaa;padding:30px;text-align:center">Нет предметов</div>';
+                                return;
+                        }
+
+                        const INITIAL = 30, CHUNK = 20;
+                        items.slice(0, INITIAL).forEach(item => {
+                                ensureBotsForItem(item.id, item);
+                                grid.appendChild(buildPlatformCard(item));
+                        });
+                        if (items.length > INITIAL) {
+                                const sentinel = document.createElement('div');
+                                sentinel.style.cssText = 'height:1px;width:100%;grid-column:1/-1;';
+                                grid.appendChild(sentinel);
+                                let nextIdx = INITIAL;
+                                const obs = new IntersectionObserver((entries) => {
+                                        if (!entries[0].isIntersecting) return;
+                                        const end = Math.min(nextIdx + CHUNK, items.length);
+                                        for (let i = nextIdx; i < end; i++) {
+                                                ensureBotsForItem(items[i].id, items[i]);
+                                                grid.insertBefore(buildPlatformCard(items[i]), sentinel);
+                                        }
+                                        nextIdx = end;
+                                        if (nextIdx >= items.length) { obs.disconnect(); sentinel.remove(); }
+                                }, { rootMargin: '400px' });
+                                obs.observe(sentinel);
+                        }
+                }
