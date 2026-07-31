@@ -58,7 +58,20 @@ document.addEventListener('DOMContentLoaded', function() {
 	document.querySelector('.sort-container').insertAdjacentElement('beforebegin', marketToggle);
 	
 	document.getElementById('generate-promo-btn').addEventListener('click', generateRandomPromocode);
-
+	
+	// === ONLINE MARKET DATA STRUCTURE ===
+	const onlineMarket = {
+		listings: {},      // itemId -> [{id, price, isMine, inventoryItem, seller, stickers}]
+		buyRequests: [],   // {id,itemId,item,price,quantity,remaining,timestamp,timerId,expectedAt,requestElement}
+		sellRequests: [],  // {id,lotId,itemId,item,price,status,listedAt,expectedSellAt,requestElement}
+		reqCounter: 0,
+		currentFilterRarity: 'all',
+		currentFilterCollection: 'all',
+		currentFilterName: '',
+		currentFilterTypes: ['all'],
+		sortDescending: false
+	};
+	
 	let currentMarket = 'normal'; // 'normal', 'rental' или 'online'
 	
 	document.getElementById('normal-market-btn').addEventListener('click', function() {
@@ -16211,4 +16224,334 @@ document.addEventListener('DOMContentLoaded', function() {
 	addQuickOpenButtonToInventory();
 
 	console.log('Element Editor loaded. Press Alt+A to open editor.');
-});
+
+	// ==================== ONLINE MARKET FUNCTIONS ====================
+	function initOnlineMarket() {
+		onlineMarket.currentFilterTypes = ['all'];
+
+		// Registry of currently open platform modals: itemId -> overlay element
+		const activeModals = {};
+		
+		function getStickerValueAdjustment(stickers, multiplier) {
+			if (!stickers || !stickers.length) return 0;
+			let total = 0;
+			stickers.forEach(s => {
+				const stickerItem = itemsDatabase.find(i => i.id === s.id);
+				if (stickerItem && stickerItem.price) {
+					total += stickerItem.price * multiplier;
+				}
+			});
+			return total;
+		}
+
+		// Refresh lots panel in any open modal for a given itemId
+		function refreshOpenModal(itemId) {
+			const overlay = activeModals[itemId];
+			if (overlay && document.body.contains(overlay)) {
+				renderLotsPanel(itemId, overlay);
+				
+				// Обновляем баннер активной заявки
+				const myReq = onlineMarket.buyRequests.find(r => r.itemId === itemId && r.remaining > 0);
+				const banner = overlay.querySelector('.om-active-req-banner');
+				if (myReq && !banner) {
+					const lotsPanel = overlay.querySelector('.om-lots-panel');
+					if (lotsPanel) {
+						const b = document.createElement('div');
+						b.className = 'om-active-req-banner';
+						b.id = 'om-active-req-banner-' + myReq.id;
+						b.innerHTML = `<span>📋 Активная заявка: ${myReq.price.toFixed(2)} ₽ × ${myReq.remaining} шт.</span><button class="om-cancel-active-req-btn" data-req-id="${myReq.id}">Отменить</button>`;
+						lotsPanel.insertBefore(b, lotsPanel.firstChild);
+					}
+				} else if (!myReq && banner) {
+					banner.remove();
+				} else if (myReq && banner) {
+					banner.querySelector('span').textContent = `📋 Активная заявка: ${myReq.price.toFixed(2)} ₽ × ${myReq.remaining} шт.`;
+				}
+				
+				// === ОБНОВЛЯЕМ КНОПКУ "ОТМЕНИТЬ ВСЕ МОИ ЛОТЫ" ===
+				const header = overlay.querySelector('.om-lots-header h3');
+				const headerContainer = overlay.querySelector('.om-lots-header');
+				if (headerContainer && header) {
+					const existingBtn = headerContainer.querySelector('#om-cancel-all-my-lots-btn');
+					if (existingBtn) existingBtn.remove();
+					
+					const lots = onlineMarket.listings[itemId] || [];
+					const myLotsCount = lots.filter(l => l.isMine).length;
+					if (myLotsCount > 0) {
+						const cancelAllBtn = document.createElement('button');
+						cancelAllBtn.id = 'om-cancel-all-my-lots-btn';
+						cancelAllBtn.textContent = `× Снять мои лоты (${myLotsCount})`;
+						cancelAllBtn.style.cssText = 'margin-left:10px;padding:4px 10px;background:#f44336;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;';
+						cancelAllBtn.addEventListener('click', (e) => {
+							e.stopPropagation();
+							
+							const myLots = lots.filter(l => l.isMine);
+							myLots.forEach(lot => {
+								if (lot.sellReqTimerId) clearTimeout(lot.sellReqTimerId);
+								if (lot.inventoryItem) inventory.push(lot.inventoryItem);
+								onlineMarket.sellRequests = onlineMarket.sellRequests.filter(r => r.lotId !== lot.id);
+							});
+							onlineMarket.listings[itemId] = lots.filter(l => !l.isMine);
+							if (onlineMarket.listings[itemId]?.length === 0) delete onlineMarket.listings[itemId];
+							
+							updateInventory();
+							saveGameState();
+							showToast(`Отменено лотов: ${myLotsCount}`);
+							updatePlatformCard(itemId);
+							updateNormalMarketCardPrice(itemId);
+							renderLotsPanel(itemId, overlay);
+							renderMyRequests();
+						});
+						header.appendChild(cancelAllBtn);
+					}
+				}
+				
+			} else if (overlay && !document.body.contains(overlay)) {
+				delete activeModals[itemId];
+			}
+		}
+		
+		// === Очистка "осиротевших" лотов при старте ===
+		Object.keys(onlineMarket.listings).forEach(itemId => {
+			const itemExists = itemsDatabase.find(i => i.id === itemId);
+			if (!itemExists) {
+				delete onlineMarket.listings[itemId];
+			} else {
+				// Также фильтруем внутри массива
+				onlineMarket.listings[itemId] = onlineMarket.listings[itemId].filter(lot => {
+					return itemsDatabase.find(i => i.id === itemId) !== undefined;
+				});
+				if (onlineMarket.listings[itemId].length === 0) {
+					delete onlineMarket.listings[itemId];
+				}
+			}
+		});
+
+		// ---- Bot price logic ----
+		function getOnlinePrice(itemId) {
+			const lots = onlineMarket.listings[itemId];
+			if (lots && lots.length > 0) {
+				return Math.min(...lots.map(l => l.price));
+			}
+			return null;
+		}
+
+		function getBotPrice(item, currentLotCount, botStickers = null) {
+			const allCurrentLots = onlineMarket.listings[item.id] 
+				? onlineMarket.listings[item.id].filter(l => !l.isMine) 
+				: [];
+			
+			const cleanLots = allCurrentLots.filter(l => !l.stickers || l.stickers.length === 0);
+			
+			let basePrice;
+			if (cleanLots.length > 0) {
+				const sum = cleanLots.reduce((acc, lot) => acc + lot.price, 0);
+				basePrice = sum / cleanLots.length;
+			} 
+			else if (allCurrentLots.length > 0) {
+				const minLotPrice = Math.min(...allCurrentLots.map(l => l.price));
+				basePrice = minLotPrice; 
+			} 
+			else {
+				basePrice = item.initialPrice || item.price || 1000000;
+			}
+			
+			if (botStickers && botStickers.length > 0) {
+				const stickerBonus = getStickerValueAdjustment(botStickers, 0.05);
+				basePrice += stickerBonus;
+			}
+			
+			const totalLots = currentLotCount !== undefined ? currentLotCount : allCurrentLots.length;
+			const initialStock = Math.max(1, item.stock || 5);
+			const scarcity = Math.max(0, 1 - totalLots / initialStock);
+			const floorMult = 0.95 + (scarcity * 0.05);
+			const ceilMult = 1.05 + (scarcity * 0.10);
+			
+			const floor = basePrice * floorMult;
+			const ceil = basePrice * ceilMult;
+			
+			let finalPrice = floor + Math.random() * (ceil - floor);
+			finalPrice = Math.max(0.01, Math.min(1000000, Math.round(finalPrice * 100) / 100));
+			return finalPrice;
+		}
+
+		const omInitialized = new Set();
+
+		function ensureBotsForItem(itemId, item) {
+			if (!onlineMarket.listings[itemId]) onlineMarket.listings[itemId] = [];
+			
+			const target = Math.min(10000, Math.max(3, item.stock || 5));
+			const needed = target - onlineMarket.listings[itemId].filter(l => !l.isMine).length;
+			if (needed <= 0) return;
+
+			function generateBotStickers() {
+				if (item.isCase || item.isCharm || item.isSticker || item.isItemWithoutSlot) return undefined;
+				if (item.name.endsWith('Fragment') || item.name.startsWith('Graffiti') || item.name.startsWith('Medal')) return undefined;
+				
+				if (Math.random() < 0.40) {
+					const allStickers = itemsDatabase.filter(s => s.isSticker);
+					if (!allStickers.length) return undefined;
+					const stickerCount = Math.min(4, Math.max(1, Math.floor(Math.random() * 4) + 1));
+					const stickers = [];
+					for (let j = 0; j < stickerCount; j++) {
+						const sel = allStickers[Math.floor(Math.random() * allStickers.length)];
+						if (sel) stickers.push({ id: sel.id, name: sel.name, image: sel.image });
+					}
+					return stickers.length ? stickers : undefined;
+				}
+				return undefined;
+			}
+
+			const batchSize = 500;
+			let generated = 0;
+			function addBatch() {
+				const n = Math.min(batchSize, needed - generated);
+				for (let i = 0; i < n; i++) {
+					const lotsSoFar = onlineMarket.listings[itemId].filter(l => !l.isMine).length;
+					const isFirstBotLot = (lotsSoFar === 0);
+					const botStickers = isFirstBotLot ? undefined : generateBotStickers();
+					
+					const lot = {
+						id: 'bot_' + itemId + '_' + Date.now() + '_' + Math.random(),
+						price: getBotPrice(item, lotsSoFar, botStickers),
+						isMine: false,
+						seller: 'Bot #' + (Math.floor(Math.random() * 9000) + 1000)
+					};
+					if (botStickers) lot.stickers = botStickers;
+					onlineMarket.listings[itemId].push(lot);
+				}
+				generated += n;
+				if (generated < needed) {
+					setTimeout(addBatch, 0);
+				} else {
+					onlineMarket.listings[itemId].sort((a, b) => a.price - b.price);
+					updateNormalMarketCardPrice(itemId);
+				}
+			}
+			addBatch();
+		}
+
+		function botRelistAfterSale(itemId, item, soldPrice) {
+			const currentLots = onlineMarket.listings[itemId] || [];
+			const botLots = currentLots.filter(l => !l.isMine);
+			
+			const isFirstBotLot = (botLots.length === 0);
+			
+			function generateBotStickers() {
+				if (item.isCase || item.isCharm || item.isSticker || item.isItemWithoutSlot) return undefined;
+				if (item.name.endsWith('Fragment') || item.name.startsWith('Graffiti') || item.name.startsWith('Medal')) return undefined;
+				if (Math.random() < 0.40) {
+					const allStickers = itemsDatabase.filter(s => s.isSticker);
+					if (!allStickers.length) return undefined;
+					const stickerCount = Math.min(4, Math.max(1, Math.floor(Math.random() * 4) + 1));
+					const stickers = [];
+					for (let j = 0; j < stickerCount; j++) {
+						const sel = allStickers[Math.floor(Math.random() * allStickers.length)];
+						if (sel) stickers.push({ id: sel.id, name: sel.name, image: sel.image });
+					}
+					return stickers.length ? stickers : undefined;
+				}
+				return undefined;
+			}
+			const botStickers = isFirstBotLot ? undefined : generateBotStickers();
+			let finalPrice;
+			if (botLots.length === 0) {
+				finalPrice = soldPrice; 
+			} else {
+				const calculatedPrice = getBotPrice(item, botLots.length, botStickers);
+				
+				const avgBotPrice = botLots.reduce((acc, l) => acc + l.price, 0) / botLots.length;
+				if (soldPrice > avgBotPrice * 1.1) {
+					finalPrice = Math.min(soldPrice, calculatedPrice * 1.05); 
+				} else {
+					finalPrice = calculatedPrice;
+				}
+			}
+
+			finalPrice = Math.max(0.01, Math.min(1000000, finalPrice));
+			finalPrice = Math.round(finalPrice * 100) / 100;
+			
+			if (!onlineMarket.listings[itemId]) onlineMarket.listings[itemId] = [];
+			
+			const newLot = {
+				id: 'bot_relist_' + Date.now() + '_' + Math.random(),
+				price: finalPrice,
+				isMine: false,
+				seller: 'Bot #' + (Math.floor(Math.random() * 9000) + 1000)
+			};
+			if (botStickers) {
+				newLot.stickers = botStickers;
+			}
+			onlineMarket.listings[itemId].push(newLot);
+			onlineMarket.listings[itemId].sort((a, b) => a.price - b.price);
+			updatePlatformCard(itemId);
+			updateNormalMarketCardPrice(itemId);
+			refreshOpenModal(itemId);
+		}
+
+		function updateNormalMarketCardPrice(itemId) {
+			const onlinePrice = getOnlinePrice(itemId);
+			if (onlinePrice === null) return;
+			
+			const card = document.getElementById(itemId);
+			if (card) {
+				const priceEl = card.querySelector('.item-price');
+				if (priceEl) priceEl.textContent = onlinePrice.toFixed(2) + ' ₽';
+				card.querySelectorAll('.add-to-cart, .buy-all-btn').forEach(btn => {
+					btn.setAttribute('data-price', onlinePrice.toFixed(2));
+				});
+			}
+			
+			const dbItem = itemsDatabase.find(i => i.id === itemId);
+			if (dbItem) dbItem.price = onlinePrice;
+			
+			const rentalId = itemId + '_rental';
+			const rentalCard = document.getElementById(rentalId);
+			const rentalDbItem = itemsDatabase.find(i => i.id === rentalId);
+			if (rentalDbItem) {
+				const newRentalPrice = Math.max(0.01, Math.round(onlinePrice * 0.01 * 100) / 100);
+				rentalDbItem.price = newRentalPrice;
+				if (rentalCard) {
+					const rPriceEl = rentalCard.querySelector('.item-price');
+					if (rPriceEl) rPriceEl.textContent = newRentalPrice.toFixed(2) + ' ₽';
+					rentalCard.querySelectorAll('.add-to-cart').forEach(btn => {
+						btn.setAttribute('data-price', newRentalPrice.toFixed(2));
+					});
+				}
+			}
+		}
+
+		function calcBuyDelay(reqPrice, lotPrice) {
+			if (reqPrice >= lotPrice) return 0;
+			const diff = (lotPrice - reqPrice) / lotPrice;
+			if (diff <= 0.50) return 200 + Math.random() * 800;
+			if (diff <= 0.70) return 3000 + diff * 60000;
+			if (diff <= 0.90) return 10000 + diff * 100000;
+			if (diff <= 1.00) return 20000 + diff * 80000;
+			return Math.min(60000, 40000 + diff * 40000);
+		}
+
+		function calcSellDelay(listPrice, item) {
+			const lots = onlineMarket.listings[item.id] || [];
+			const prices = lots.filter(l => !l.isMine).map(l => l.price);
+			if (!prices.length) prices.push(item.price);
+			const minBot = Math.min(...prices);
+			const avgBot = prices.reduce((a, b) => a + b, 0) / prices.length;
+			const maxAllowed = Math.min(1000000, item.price * 2);
+			if (listPrice > maxAllowed) return Infinity;
+			const diff = (listPrice - minBot) / Math.max(1, avgBot);
+			if (diff <= 0.50) return 100 + Math.random() * 400;
+			if (diff <= 0.70) return 1000 + diff * 20000;
+			if (diff <= 0.90) return 5000 + diff * 30000;
+			if (diff <= 1.00) return 15000 + diff * 40000;
+			return 40000 + diff * 20000;
+		}
+
+		function formatDelay(ms) {
+			if (ms <= 0) return 'скоро';
+			if (ms < 1000) return 'менее секунды';
+			const s = Math.round(ms / 1000);
+			if (s < 60) return `~${s} сек.`;
+			const m = Math.floor(s / 60), sec = s % 60;
+			return `~${m} мин. ${sec > 0 ? sec + ' сек.' : ''}`;
+		}
