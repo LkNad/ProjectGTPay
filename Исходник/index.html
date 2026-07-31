@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="ru" class="global-ui">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="images/icon.png">
+    <title>GoToPay V2ㅤㅤㅤㅤㅤ</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><a href="index.html"> <img src="images/title.png" alt=" " class="logo" width=90></a></h1>
+        </header>
+		<div class="toast"></div>
+        
+        <!-- Фильтры по редкости -->
+		<div class="sort-container">
+			<div class="filters">
+				<button class="filter-btn active" data-rarity="all">Все</button>
+				<button class="filter-btn" data-rarity="nameless" style="background-color: #ffd700; color: #000;">Nameless</button>
+				<button class="filter-btn" data-rarity="arcane" style="background-color: #ff3333;">Arcane</button>
+				<button class="filter-btn" data-rarity="legendary" style="background-color: #ff66ff;">Legendary</button>
+				<button class="filter-btn" data-rarity="epic" style="background-color: #aa55ff;">Epic</button>
+				<button class="filter-btn" data-rarity="rare" style="background-color: #5555ff;">Rare</button>
+				<button class="filter-btn" data-rarity="uncommon" style="background-color: #0eb2d3;">Uncommon</button>
+				<button class="filter-btn" data-rarity="common" style="background-color: #a5a5a5;">Common</button>
+				<button class="filter-btn" data-rarity="none" style="background-color: lightgrey;">none</button>
+				<button class="filter-btn" data-rarity="gold-none" style="background-color: #ffde00;">Gold none</button>
+				<button class="filter-btn" data-rarity="box-none" style="background-color: #adadad;">Boxes</button>
+				<button class="filter-btn" data-rarity="case-none" style="background-color: #ffc500;">Cases</button>
+				
+			</div>
+			<div class="name-filter">
+				<input type="text" id="name-filter-input" class="name-filter-input" placeholder="Поиск по названию">
+				<button id="apply-name-filter" style='background-color: #666666; color: #ffffff;'>Применить</button>
+				<button id="clear-name-filter" style='background-color: #666666; color: #ffffff;'>Сбросить</button>
+			</div>
+			<div class="collection-filter">
+				<select id="collection-filter" class="collection-filter">
+					<option value="all">Все коллекцииㅤㅤㅤㅤㅤ</option>
+					<!-- Collections will be added dynamically -->
+				</select>
+			</div>
+			<button class="sort-btn" id="sort-quantity-btn">Сортировать по количеству ↓</button>
+			<button class="sort-btn" id="sort-price-btn">Сортировать по цене ↓</button>
+		</div>
+
+        <div class="items-container" id="items-container">
+            <!-- Товары будут добавляться динамически -->
+        </div>
+		
+		
+		<!-- Баланс -->
+		<div class="balance-container">
+			<div class="balance-title">Баланс: <span id="balance-amount">0</span> <a style="color:gold">₽</a></div>
+			<button class="edit-balance-btn" id="edit-balance-btn">Изменить</button>
+		</div>
+
+		<!-- Окно редактирования баланса -->
+		<div class="balance-edit-modal" id="balance-edit-modal">
+			<div class="balance-edit-content">
+				<h3>Изменить баланс</h3>
+				<div class="balance-display" id="balance-display">0.00</div>
+				<div class="balance-keyboard">
+					<button class="balance-key" data-value="1">1</button>
+					<button class="balance-key" data-value="2">2</button>
+					<button class="balance-key" data-value="3">3</button>
+					<button class="balance-key" data-value="4">4</button>
+					<button class="balance-key" data-value="5">5</button>
+					<button class="balance-key" data-value="6">6</button>
+					<button class="balance-key" data-value="7">7</button>
+					<button class="balance-key" data-value="8">8</button>
+					<button class="balance-key" data-value="9">9</button>
+					<button class="balance-key" data-value=".">.</button> <!-- Новая кнопка для ввода точки -->
+					<button class="balance-key" data-value="0">0</button>
+					<button class="balance-key clear" data-value="clear">×</button>
+					<button class="balance-key backspace" data-value="backspace">⌫</button> <!-- Новая кнопка для удаления последнего символа -->
+				</div>
+				<div class="balance-actions">
+					<button class="balance-cancel" id="balance-cancel">Отмена</button>
+					<button class="balance-save" id="balance-save">Сохранить</button>
+				</div>
+			</div>
+		</div>
+		
+		
+		<!-- Промокоды -->
+		<div class="promocode-container">
+			<button class="edit-balance-btn" id="promocode-btn" style="position: fixed; top: 90px; left: 20px; background-color: rgb(30 30 30 / 85%); padding: 15px; border-radius: 6px; width: 200px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);">Промокоды</button>
+		</div>
+
+		<!-- Окно ввода промокода -->
+		<div class="promocode-modal" id="promocode-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); z-index: 1000; justify-content: center; align-items: center;">
+			<div class="promocode-content" style="background-color: rgb(30 30 30 / 85%); padding: 20px; border-radius: 8px; width: 400px; max-width: 90%;">
+				<h3 style="margin-top: 0;">Введите промокод</h3>
+				<input type="text" id="promocode-input" style="width: 85%; padding: 10px; margin-bottom: 15px; background-color: #2a2a2a; border: none; border-radius: 4px; color: white;">
+				<button id="generate-promo-btn" style="padding: 5px 10px; background: gold; color: black; border: none; border-radius: 4px; cursor: pointer;">
+					<span style="font-size: 140%">$</span>
+				  </button>
+				<div class="promocode-actions" style="display: flex; justify-content: space-between;">
+					<button id="promocode-cancel" style="padding: 10px 20px; background-color: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">Отмена</button>
+					<button id="promocode-apply" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Применить</button>
+				</div>
+				<div id="promocode-result" style="margin-top: 15px;"></div>
+			</div>
+		</div>
+		
+		
+		<!-- Кнопка добавления предмета -->
+		<div class="add-item-container" style="position: fixed; top: 180px; left: 20px; background-color: rgb(30 30 30 / 85%); padding: 15px; border-radius: 6px; width: 200px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);">
+			<button class="edit-balance-btn" id="add-item-btn">Добавить предмет</button>
+		</div>
+
+		<!-- Модальное окно добавления предмета -->
+		<div class="add-item-modal" id="add-item-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); z-index: 1000; justify-content: center; align-items: center;">
+		<div style="display: flex; flex-direction: column; max-width: 90%; max-height: 90vh; overflow-y: auto;">
+			<div class="add-item-content" style="background-color: rgb(30 30 30 / 85%); padding: 20px; border-radius: 8px; width: 400px; max-width: 100%;">
+				<h3 style="margin-top: 0;">Добавить новый предмет</h3>
+				
+				<div class="form-actions" style="display: flex; justify-content: space-between;">
+					<button id="cancel-add-item" style="padding: 10px 20px; background-color: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">Отмена</button>
+					<button id="confirm-add-item" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Добавить</button>
+				</div>
+				
+				<div class="form-group" style="margin-bottom: 15px;">
+					<label style="display: block; margin-bottom: 5px;">ID предмета:</label>
+					<input type="text" id="new-item-id" style="width: 100%; padding: 8px; background-color: #2a2a2a; border: none; border-radius: 4px; color: white;">
+				</div>
+				</div>
+				<div class="form-group" style="margin-bottom: 15px;">
+					<label style="display: block; margin-bottom: 5px;">Название:</label>
+					<input type="text" id="new-item-name" style="width: 100%; padding: 8px; background-color: #2a2a2a; border: none; border-radius: 4px; color: white;">
+				</div>
+				<div class="form-group" style="margin-bottom: 15px;">
+					<label style="display: block; margin-bottom: 5px;">Коллекция:</label>
+					<select id="new-item-collection" style="width: 100%; padding: 8px; background-color: #2a2a2a; border: none; border-radius: 4px; color: white;">
+						<option value="">Выберите коллекцию</option>
+						<!-- Collections will be added dynamically -->
+					</select>
+				</div>
+				<div class="form-group" style="margin-bottom: 15px;">
+					<label style="display: block; margin-bottom: 5px;">Количество:</label>
+					<input type="number" id="new-item-stock" min="1" value="1" style="width: 100%; padding: 8px; background-color: #2a2a2a; border: none; border-radius: 4px; color: white;">
+				</div>
+				<div class="form-group" style="margin-bottom: 15px;">
+					<label style="display: block; margin-bottom: 5px;">Цена:</label>
+					<input type="text" id="new-item-price" pattern="^\d+(\.\d{1,2})?$" title="Формат: целое число или число с одной-двумя цифрами после точки." style="width: 100%; padding: 8px; background-color: #2a2a2a; border: none; border-radius: 4px; color: white;">
+				</div>
+				<div class="form-group">
+					<label>Изменение цены при покупке/продаже:</label>
+					<input type="number" id="new-item-price-multiply" step="0.01" value="0">
+				</div>
+				<div class="form-group" style="margin-bottom: 15px;">
+					<label style="display: block; margin-bottom: 5px;">Редкость:</label>
+					<select id="new-item-rarity" style="width: 100%; padding: 8px; background-color: #2a2a2a; border: none; border-radius: 4px; color: white;">
+						<option value="case-none">case</option>
+						<option value="box-none">box</option>
+						<option value="none">none</option>
+						<option value="common">Common</option>
+						<option value="uncommon">Uncommon</option>
+						<option value="rare">Rare</option>
+						<option value="epic">Epic</option>
+						<option value="legendary">Legendary</option>
+						<option value="arcane">Arcane</option>
+						<option value="nameless">Nameless</option>
+					</select>
+				</div>
+				<div class="form-group" style="margin-bottom: 15px;">
+					<label style="display: block; margin-bottom: 5px;">Ссылка на изображение:</label>
+					<input type="text" id="new-item-image" placeholder="images/item.png" style="width: 100%; padding: 8px; background-color: #2a2a2a; border: none; border-radius: 4px; color: white;">
+				</div>
+				
+				
+				
+				<div class="form-group" style="margin-bottom: 15px;">
+					<div class="form-group" style="margin-bottom: 15px;">
+					<input type="checkbox" id="new-item-is-case">
+					<label for="new-item-is-case">Это кейс</label>
+				  </div>
+				</div>
+				
+				<!-- Новое боковое окно для редкостей кейса -->
+				<div id="case-fields" style="display: none; background-color: rgb(30 30 30 / 85%); padding: 20px; border-radius: 8px; width: 300px;">
+				  <h3 style="margin-top: 0;">Редкости в кейсе</h3>
+				  
+				  <div class="form-group" style="margin-bottom: 15px;">
+					<label style="display: block; margin-bottom: 5px;">ID предметов внутри (через запятую):</label>
+					<input type="text" id="new-item-contains" style="width: 100%; padding: 8px; background-color: #2a2a2a; border: none; border-radius: 4px; color: white;">
+				  </div>
+				  
+				  <div id="rarity-colors" style="margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 10px;">
+					<!-- Здесь будут отображаться цвета редкостей -->
+				  </div>
+				  
+				  <div class="form-group" style="margin-bottom: 15px;">
+					<label style="display: block; margin-bottom: 5px;">Шансы выпадения:</label>
+					 <div id="case-fields" style="display: none; background-color: rgb(30 30 30 / 85%); padding: 20px; border-radius: 8px; width: 400px; max-width: 100%; margin-top: 10px;">
+					  <!-- Поля для выбора редкостей и шансов -->
+					</div>
+				  </div>
+				  <div id="rarity-chances-container" style="margin-top: 15px;"></div>
+				  <div style="text-align: center; margin-top: 10px;">
+					<small>Сумма шансов должна быть 100%</small>
+				  </div>
+				</div>
+				
+				<div class="form-group" style="margin-bottom: 15px;">
+				  <input type="checkbox" id="new-item-is-charm">
+				  <label for="new-item-is-charm">Это брелок (Charm)</label>
+				</div>
+				<div class="form-group" style="margin-bottom: 15px;">
+				  <input type="checkbox" id="new-item-is-sticker">
+				  <label for="new-item-is-sticker">Это наклейка (Sticker)</label>
+				</div>
+				<div class="form-group" style="margin-bottom: 15px;">
+				  <input type="checkbox" id="new-item-is-without-slot">
+				  <label for="new-item-is-without-slot">Предмет без слотов (нельзя надеть стикеры/брелок)</label>
+				</div>
+				<div class="form-group" style="margin-bottom: 15px;">
+				  <input type="checkbox" id="new-item-is-limited">
+				  <label for="new-item-is-limited">Добавить как акцию</label>
+				</div>
+			  </div>
+			</div>
+		</div>
+
+		<script>
+		// Добавим обработчик для чекбокса "Это кейс"
+		document.getElementById('new-item-is-case').addEventListener('change', function() {
+			document.getElementById('case-fields').style.display = this.checked ? 'block' : 'none';
+		});
+		</script>
+		
+		<!-- Кнопка добавления редкости -->
+		<div class="add-rarity-container" style="position: fixed; top: 300px; left: 20px; background-color: rgb(30 30 30 / 85%); padding: 15px; border-radius: 6px; width: 200px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3); z-index: 100;">
+			<button class="edit-balance-btn" id="add-rarity-btn">Добавить редкость</button>
+		</div>
+
+		<!-- Модальное окно добавления редкости -->
+		<div class="add-rarity-modal" id="add-rarity-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); z-index: 1000; justify-content: center; align-items: center;">
+			<div class="add-rarity-content" style="background-color: rgb(30 30 30 / 85%); padding: 20px; border-radius: 8px; width: 400px; max-width: 90%;">
+				<h3 style="margin-top: 0;">Добавить новую редкость</h3>
+				<div class="form-group" style="margin-bottom: 15px;">
+					<label style="display: block; margin-bottom: 5px;">ID редкости (англ.):</label>
+					<input type="text" id="new-rarity-id" style="width: 100%; padding: 8px; background-color: #2a2a2a; border: none; border-radius: 4px; color: white;">
+				</div>
+				<div class="form-group" style="margin-bottom: 15px;">
+					<label style="display: block; margin-bottom: 5px;">Название:</label>
+					<input type="text" id="new-rarity-name" style="width: 100%; padding: 8px; background-color: #2a2a2a; border: none; border-radius: 4px; color: white;">
+				</div>
+				<div class="form-group" style="margin-bottom: 15px;">
+					<label style="display: block; margin-bottom: 5px;">Цвет (hex):</label>
+					<input type="color" id="new-rarity-color" value="#ffffff" style="width: 100%; height: 40px;">
+				</div>
+				<div class="form-group" style="margin-bottom: 15px;">
+					<label style="display: block; margin-bottom: 5px;">Из какой редкости крафтится (если есть):</label>
+					<select id="new-rarity-crafts-from" style="width: 100%; padding: 8px; background-color: #2a2a2a; border: none; border-radius: 4px; color: white;">
+						<option value="null">Null (не крафтится)</option>
+						<!-- Опции будут добавляться динамически -->
+					</select>
+				</div>
+				<div class="form-group" style="margin-bottom: 15px;">
+					<label style="display: block; margin-bottom: 5px;">Во что крафтится (если есть):</label>
+					<select id="new-rarity-crafts-to" style="width: 100%; padding: 8px; background-color: #2a2a2a; border: none; border-radius: 4px; color: white;">
+						<option value="null">Null (не улучшается)</option>
+						<!-- Опции будут добавляться динамически -->
+					</select>
+				</div>
+				<div class="form-group" style="margin-bottom: 20px;">
+					<label style="display: block; margin-bottom: 5px;">Порядок (чем больше число, тем выше редкость):</label>
+					<input type="number" id="new-rarity-order" min="1" value="1" style="width: 100%; padding: 8px; background-color: #2a2a2a; border: none; border-radius: 4px; color: white;">
+				</div>
+				<div class="form-actions" style="display: flex; justify-content: space-between;">
+					<button id="cancel-add-rarity" style="padding: 10px 20px; background-color: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">Отмена</button>
+					<button id="confirm-add-rarity" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Создать</button>
+				</div>
+			</div>
+		</div>
+		
+		
+		<!-- Кнопка изменения предмета -->
+		<div class="edit-item-container" style="position: fixed; top: 240px; left: 20px; background-color: rgb(30 30 30 / 85%); padding: 15px; border-radius: 6px; width: 200px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);">
+			<button class="edit-balance-btn" id="edit-item-btn">Изменить предмет</button>
+		</div>
+
+		<!-- Модальное окно изменения предмета -->
+		<div class="edit-item-modal" id="edit-item-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); z-index: 1000; justify-content: center; align-items: center;">
+			<div class="edit-item-content" style="background-color: rgb(30 30 30 / 85%); padding: 20px; border-radius: 8px; width: 400px; max-width: 90%;">
+				<h3 style="margin-top: 0;">Изменить предмет</h3>
+				<div class="form-group" style="margin-bottom: 15px;">
+					<label style="display: block; margin-bottom: 5px;">Редкость:</label>
+					<select id="edit-item-rarity" style="width: 100%; padding: 8px; background-color: #2a2a2a; border: none; border-radius: 4px; color: white;">
+						<option value="">Выберите редкость</option>
+						<!-- Опции будут добавляться динамически -->
+					</select>
+				</div>
+				<div class="form-group" style="margin-bottom: 15px;">
+					<label style="display: block; margin-bottom: 5px;">Предмет:</label>
+					<select id="edit-item-select" style="width: 100%; padding: 8px; background-color: #2a2a2a; border: none; border-radius: 4px; color: white;" disabled>
+						<option value="">Сначала выберите редкость</option>
+					</select>
+				</div>
+				
+				<div class="form-group" style="margin-bottom: 15px;">
+					<label style="display: block; margin-bottom: 5px;">Название:</label>
+					<input type="text" id="edit-item-name" style="width: 100%; padding: 8px; background-color: #2a2a2a; border: none; border-radius: 4px; color: white;">
+				</div>
+				<div class="form-group" style="margin-bottom: 15px;">
+					<label style="display: block; margin-bottom: 5px;">Коллекция:</label>
+					<select id="edit-item-collection" style="width: 100%; padding: 8px; background-color: #2a2a2a; border: none; border-radius: 4px; color: white;">
+						<option value="">Выберите коллекцию</option>
+						<!-- Collections will be added dynamically -->
+					</select>
+				</div>
+				<div class="form-group" style="margin-bottom: 15px;">
+					<label style="display: block; margin-bottom: 5px;">Количество:</label>
+					<input type="number" id="edit-item-stock" min="0" value="0" style="width: 100%; padding: 8px; background-color: #2a2a2a; border: none; border-radius: 4px; color: white;">
+				</div>
+				<div class="form-group" style="margin-bottom: 15px;">
+					<label style="display: block; margin-bottom: 5px;">Цена:</label>
+					<input type="text" id="edit-item-price" pattern="^\d+(\.\d{1,2})?$" title="Формат: целое число или число с одной-двумя цифрами после точки." style="width: 100%; padding: 8px; background-color: #2a2a2a; border: none; border-radius: 4px; color: white;">
+				</div>
+				<div class="form-group">
+					<label>Изменение цены при покупке/продаже:</label>
+					<input type="number" id="edit-item-price-multiply" step="0.01" value="0">
+				</div>
+				<div class="form-group" style="margin-bottom: 15px;">
+					<label style="display: block; margin-bottom: 5px;">Ссылка на изображение:</label>
+					<input type="text" id="edit-item-image" style="width: 100%; padding: 8px; background-color: #2a2a2a; border: none; border-radius: 4px; color: white;">
+				</div>
+				
+				<div class="form-group" style="margin-bottom: 15px;">
+					<input type="checkbox" id="edit-item-is-case">
+					<label for="edit-item-is-case">Это кейс</label>
+				</div>
+				
+				<!-- Поля для кейса -->
+				<div id="edit-case-fields" style="display: none; background-color: rgb(30 30 30 / 85%); padding: 20px; border-radius: 8px; width: 100%; margin-bottom: 15px;">
+					<div class="form-group" style="margin-bottom: 15px;">
+						<label style="display: block; margin-bottom: 5px;">ID предметов внутри (через запятую):</label>
+						<input type="text" id="edit-item-contains" style="width: 100%; padding: 8px; background-color: #2a2a2a; border: none; border-radius: 4px; color: white;">
+					</div>
+					
+					<div id="edit-rarity-chances-container" style="margin-top: 15px;"></div>
+					<div style="text-align: center; margin-top: 10px;">
+						<small>Сумма шансов должна быть 100%</small>
+					</div>
+				</div>
+				
+				<div class="form-group" style="margin-bottom: 15px;">
+				  <input type="checkbox" id="edit-item-is-charm">
+				  <label for="edit-item-is-charm">Это брелок (Charm)</label>
+				</div>
+				<div class="form-group" style="margin-bottom: 15px;">
+				  <input type="checkbox" id="edit-item-is-sticker">
+				  <label for="edit-item-is-sticker">Это наклейка (Sticker)</label>
+				</div>
+				
+				<div class="form-group" style="margin-bottom: 15px;">
+				  <input type="checkbox" id="edit-item-is-without-slot">
+				  <label for="edit-item-is-without-slot">Предмет без слотов (нельзя надеть стикеры/брелок)</label>
+				</div>
+				
+				<div class="form-group" style="margin-bottom: 15px;">
+				  <input type="checkbox" id="edit-item-is-limited">
+				  <label for="edit-item-is-limited">Предмет добавится в акции</label>
+				</div>
+				
+				<div class="form-actions" style="display: flex; justify-content: space-between;">
+					<button id="cancel-edit-item" style="padding: 10px 20px; background-color: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer;">Отмена</button>
+					<button id="confirm-edit-item" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Сохранить</button>
+				</div>
+			</div>
+		</div>
+		
+		<!-- окно коллекций -->
+		<div class="admin-buttons-container" style="position: fixed; top: 360px; left: 20px; background-color: rgb(30 30 30 / 85%); padding: 15px; border-radius: 6px; width: 200px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3); z-index: 100;">
+			<button class="edit-balance-btn" id="edit-rarity-btn">Изменить редкость</button>
+		</div>
+		<div class="admin-buttons-container" style="position: fixed; top: 420px; left: 20px; background-color: rgb(30 30 30 / 85%); padding: 15px; border-radius: 6px; width: 200px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3); z-index: 100;">
+			<button class="edit-balance-btn" id="add-collection-btn">Добавить коллекцию</button>
+		</div>
+		<div class="admin-buttons-container" style="position: fixed; top: 480px; left: 20px; background-color: rgb(30 30 30 / 85%); padding: 15px; border-radius: 6px; width: 200px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3); z-index: 100;">
+			<button class="edit-balance-btn" id="edit-collection-btn">Изменить коллекцию</button>
+		</div>
+		
+		<div class="admin-buttons-container" style="position: fixed; top: 540px; left: 20px; background-color: rgb(30 30 30 / 85%); padding: 15px; border-radius: 6px; width: 200px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3); z-index: 100;">
+			<button class="edit-balance-btn" id="add-promocode-btn">Добавить промокод</button>
+		</div>
+		
+		
+			
+
+        <!-- Корзина -->
+        <div class="cart-container">
+            <div class="cart-title">Корзина</div>
+            <div class="cart-items" id="cart-items"></div>
+            <div class="cart-total">
+                Итого: <a style="color:gold"><span id="cart-total">0</span> ₽</a>
+            </div>
+            <div class="cart-actions">
+                <button class="checkout-btn" id="checkout-btn">Оформить заказ</button>
+                <button class="clear-cart-btn" id="clear-cart-btn" disabled>Очистить корзину</button>
+            </div>
+        </div>
+        
+		<div class="container" style='position: fixed; bottom: 240px; right: -100px; background-color: rgb(30 30 30 / 85%); padding: 15px; border-radius: 6px; width: 250px;'><button class="open-btn" id="open-clan-btn"><a>Клан</a></button></div>
+		<div class="container" style='position: fixed; bottom: 180px; right: -100px; background-color: rgb(30 30 30 / 85%); padding: 15px; border-radius: 6px; width: 250px;'><button class="open-btn" id="profile-btn"><a>Профиль</a></button></div>
+		<div class="container" style='position: fixed; bottom: 120px; right: -100px; background-color: rgb(30 30 30 / 85%); padding: 15px; border-radius: 6px; width: 250px;'><button class="open-btn" id="promo-items-btn"><a>Акции</a></button></div>
+		<div class="container" style='position: fixed; bottom: 60px; right: -100px; background-color: rgb(30 30 30 / 85%); padding: 15px; border-radius: 6px; width: 250px;'><button class="open-btn" id="battle-pass-btn">Battle Pass</button></div>
+        <!-- Кнопка инвентаря -->
+        <div class="container" style='position: fixed; bottom: 10px; right: -100px; background-color: rgb(30 30 30 / 85%); padding: 15px; border-radius: 6px; width: 250px;'><button class="open-btn" id="inventory-btn">Инвентарь📦</button></div>
+        
+        <!-- Оверлей и инвентарь -->
+        <div class="overlay" id="overlay"></div>
+        <div class="inventory-container" id="inventory-container">
+            <div class="inventory-header">
+                <h2>Инвентарь</h2>
+                <button class="close-inventory" id="close-inventory">×</button>
+            </div>
+            <div class="inventory-items" id="inventory-items">
+                <!-- Предметы инвентаря будут добавляться динамически -->
+            </div>
+            <div class="inventory-footer">
+				<button class="sell-all-btn" id="sell-all-btn">Продать все</button>
+				<button class="craft-btn" id="craft-btn" disabled>Создать предмет (10)</button>
+			</div>
+			<div class="inventory-total-value" id="inventory-total-value">Общая стоимость: 0.00 ₽</div>
+			<div class="selected-count" id="selected-count">Выбрано: 0/10</div>
+			<div class="inventory-actions">
+				<button id="export-database-btn" style="padding: 10px 15px; background-color: rgb(76, 175, 80); color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: 10px;">Открыть датабазу</button>
+				<div class="save-options">
+					<button id="manual-save-btn" style="padding: 10px 15px; background-color: rgb(76, 175, 80); color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: 10px;">Сохранить прогресс</button>
+					<button id="load-file-btn" style="transform: translateY(10px); padding: 10px 15px; background-color: rgb(76, 175, 80); color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: 10px;">Выбрать сохранение с файла</button>
+				</div>
+			</div>
+        </div>
+    </div>
+
+    <script type="module" src="script.js"></script>
+</body>
+</html>
+
+<!-- cd /c/html/main/files/project_GPT/Project_GTPAY_V2 -->
