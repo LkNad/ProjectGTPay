@@ -53,18 +53,25 @@ document.addEventListener('DOMContentLoaded', function() {
 	marketToggle.innerHTML = `
 	  <button id="normal-market-btn" class="market-btn active"><a style="font-size: 120%">Рынок</a></button>
 	  <button id="rental-market-btn" class="market-btn"><a style="font-size: 120%">Аренда</a></button>
+	  <button id="online-market-btn" class="market-btn"><a style="font-size: 120%">Онлайн-рынок</a></button>
 	`;
 	document.querySelector('.sort-container').insertAdjacentElement('beforebegin', marketToggle);
 	
 	document.getElementById('generate-promo-btn').addEventListener('click', generateRandomPromocode);
 
-	let currentMarket = 'normal'; // 'normal' или 'rental'
+	let currentMarket = 'normal'; // 'normal', 'rental' или 'online'
 	
 	document.getElementById('normal-market-btn').addEventListener('click', function() {
 		if (currentMarket !== 'normal') {
 			currentMarket = 'normal';
 			this.classList.add('active');
 			document.getElementById('rental-market-btn').classList.remove('active');
+			document.getElementById('online-market-btn').classList.remove('active');
+			// Show shop UI
+			document.querySelector('.sort-container').style.display = '';
+			document.getElementById('items-container').style.display = '';
+			const omSection = document.getElementById('online-market-section');
+			if (omSection) omSection.style.display = 'none';
 			initShop(); // Перезагружаем магазин
 		}
 	});
@@ -74,7 +81,32 @@ document.addEventListener('DOMContentLoaded', function() {
 			currentMarket = 'rental';
 			this.classList.add('active');
 			document.getElementById('normal-market-btn').classList.remove('active');
+			document.getElementById('online-market-btn').classList.remove('active');
+			// Show shop UI
+			document.querySelector('.sort-container').style.display = '';
+			document.getElementById('items-container').style.display = '';
+			const omSection = document.getElementById('online-market-section');
+			if (omSection) omSection.style.display = 'none';
 			initShop(); // Перезагружаем магазин
+		}
+	});
+	
+	// Online market button handler - placeholder, will be implemented later
+	document.getElementById('online-market-btn').addEventListener('click', function() {
+		if (currentMarket !== 'online') {
+			currentMarket = 'online';
+			this.classList.add('active');
+			document.getElementById('normal-market-btn').classList.remove('active');
+			document.getElementById('rental-market-btn').classList.remove('active');
+			// Hide shop UI, show online market section
+			document.querySelector('.sort-container').style.display = 'none';
+			document.getElementById('items-container').style.display = 'none';
+			const omSection = document.getElementById('online-market-section');
+			if (omSection) {
+				omSection.style.display = 'flex';
+			} else {
+				console.log('Online market section not found - needs initialization');
+			}
 		}
 	});
 	
