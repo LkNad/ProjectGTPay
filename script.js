@@ -16554,4 +16554,211 @@ document.addEventListener('DOMContentLoaded', function() {
 			if (s < 60) return `~${s} сек.`;
 			const m = Math.floor(s / 60), sec = s % 60;
 			return `~${m} мин. ${sec > 0 ? sec + ' сек.' : ''}`;
-		}
+
+                // ---- Container ----
+                const omContainer = document.createElement('div');
+                omContainer.id = 'online-market-section';
+                omContainer.className = 'online-market-container';
+                omContainer.innerHTML = `
+                        <div class="online-market-subtabs">
+                                <button class="online-market-subtab active" data-tab="platform">Платформа</button>
+                                <button class="online-market-subtab" data-tab="requests">Мои заявки</button>
+                        </div>
+                        <div class="om-platform-container active" id="om-platform-container">
+                                <!-- Filters bar -->
+                                <div class="om-filters-bar">
+                                        <div class="filters" id="om-rarity-filters">
+                                                <button class="filter-btn active" data-rarity="all">Все</button>
+                                        </div>
+                                        <div class="om-filters-row2">
+                                                <input type="text" id="om-name-filter" class="name-filter-input" placeholder="Поиск по названию" style="padding:6px 10px;border-radius:4px;border:none;background:#434343;color:#fff">
+                                                <select id="om-collection-filter" class="collection-filter">
+                                                        <option value="all">Все коллекции</option>
+                                                </select>
+                                                <button class="sort-btn" id="om-sort-price-btn">По цене ↑</button>
+                                        </div>
+                                </div>
+                                <div class="om-platform-grid" id="om-platform-grid"></div>
+                        </div>
+                        <div class="om-requests-container" id="om-requests-container">
+                                <div class="om-requests-subtabs">
+                                        <button class="om-requests-subtab active" data-rtab="buy">Заявки на покупку</button>
+                                        <button class="om-requests-subtab" data-rtab="sell">Заявки на продажу</button>
+                                </div>
+                                <div id="om-buy-requests-panel"><div id="om-buy-requests-list"></div></div>
+                                <div id="om-sell-requests-panel" style="display:none"><div id="om-sell-requests-list"></div></div>
+                        </div>
+                `;
+
+                const itemsContainerEl = document.getElementById('items-container');
+                itemsContainerEl.parentNode.insertBefore(omContainer, itemsContainerEl.nextSibling);
+
+                // ---- Type Filter Button for OnlineMarket ----
+                const omTypeFilterBtn = document.createElement('button');
+                omTypeFilterBtn.textContent = 'Фильтр типов';
+                omTypeFilterBtn.id = 'om-types-filter';
+                omTypeFilterBtn.style.cssText = `
+                        padding: 8px 12px;
+                        background-color: rgb(65, 65, 65);
+                        color: rgb(177, 177, 177);
+                        border-width: medium;
+                        border-style: none;
+                        border-color: currentcolor;
+                        border-image: initial;
+                        border-radius: 4px; cursor: pointer;
+                        margin-bottom: 15px;
+                        font-size: 14px; display: block;
+                `;
+
+                // Вставляем кнопку в строку фильтров
+                const filtersRow2 = document.querySelector('.om-filters-row2');
+                if (filtersRow2) {
+                        filtersRow2.insertBefore(omTypeFilterBtn, filtersRow2.firstChild);
+                }
+
+                // ---- Type Filter Modal for OnlineMarket ----
+                const omTypeFilterModal = document.createElement('div');
+                omTypeFilterModal.id = 'om-type-filter-modal';
+                omTypeFilterModal.style.cssText = `
+                        display: none;
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background-color: rgba(0, 0, 0, 0.6);
+                        z-index: 1000;
+                        justify-content: center;
+                        align-items: flex-start;
+                        padding-top: 60px;
+                `;
+
+                omTypeFilterModal.innerHTML = `
+                        <div style="
+                                transform: translateY(175px);
+                                background: #222;
+                                color: #b1b1b1;
+                                padding: 20px;
+                                border-radius: 8px;
+                                max-width: 320px;
+                                width: 90%;
+                                max-height: 70vh;
+                                overflow-y: auto;
+                                box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+                                font-size: 14px;
+                        ">
+                                <style>
+                                        .om-type-checkbox {
+                                                appearance: none;
+                                                width: 18px;
+                                                height: 18px;
+                                                border: 2px solid #555;
+                                                border-radius: 4px;
+                                                background: #2a2a2a;
+                                                position: relative;
+                                                cursor: pointer;
+                                                transition: all 0.2s;
+                                        }
+                                        .om-type-checkbox:checked {
+                                                background: #4CAF50;
+                                                border-color: #4CAF50;
+                                        }
+                                        .om-type-checkbox:checked::after {
+                                                content: "✓";
+                                                color: white;
+                                                font-size: 14px;
+                                                position: absolute;
+                                                top: -1px;
+                                                left: 3px;
+                                                font-weight: bold;
+                                        }
+                                </style>
+                                <h3 style="margin-top: 0; margin-bottom: 14px; font-size: 18px;">Тип предмета</h3>
+                                <label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+                                        <input type="checkbox" class="om-type-checkbox" data-type="all" checked /> Все
+                                </label>
+                                <label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+                                        <input type="checkbox" class="om-type-checkbox" data-type="weapons" checked /> Weapons (со слотами)
+                                </label>
+                                <label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+                                        <input type="checkbox" class="om-type-checkbox" data-type="st_weapons" checked /> StatTrack Weapons
+                                </label>
+                                <label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+                                        <input type="checkbox" class="om-type-checkbox" data-type="items" checked /> Items (без слотов)
+                                </label>
+                                <label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+                                        <input type="checkbox" class="om-type-checkbox" data-type="stickers" checked /> Stickers (наклейки)
+                                </label>
+                                <label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+                                        <input type="checkbox" class="om-type-checkbox" data-type="charms" checked /> Charms (брелки)
+                                </label>
+                                <label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+                                        <input type="checkbox" class="om-type-checkbox" data-type="medals" checked /> Medals (медали)
+                                </label>
+                                <label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+                                        <input type="checkbox" class="om-type-checkbox" data-type="graffiti" checked /> Graffiti (граффити)
+                                </label>
+                                <label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+                                        <input type="checkbox" class="om-type-checkbox" data-type="fragments" checked /> Fragments (Фрагменты)
+                                </label>
+                                <label style="display: flex; align-items: center; margin: 8px 0; gap: 10px;">
+                                        <input type="checkbox" class="om-type-checkbox" data-type="cases" checked /> Cases (кейсы и боксы)
+                                </label>
+                                <div style="display:flex;gap:10px;margin-top:20px;">
+                                        <button id="om-type-filter-apply" style="flex:1;padding:8px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer;">Применить</button>
+                                        <button id="om-type-filter-reset" style="flex:1;padding:8px;background:#f44336;color:white;border:none;border-radius:4px;cursor:pointer;">Сбросить</button>
+                                </div>
+                        </div>
+                `;
+                document.body.appendChild(omTypeFilterModal);
+
+                // ---- Type Filter Event Handlers ----
+                omTypeFilterBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        omTypeFilterModal.style.display = 'flex';
+                });
+
+                omTypeFilterModal.addEventListener('click', (e) => {
+                        if (e.target === omTypeFilterModal) {
+                                omTypeFilterModal.style.display = 'none';
+                        }
+                });
+
+                // "Все" чекбокс управляет остальными
+                const allCheckbox = omTypeFilterModal.querySelector('[data-type="all"]');
+                const otherCheckboxes = omTypeFilterModal.querySelectorAll('.om-type-checkbox:not([data-type="all"])');
+
+                allCheckbox.addEventListener('change', function() {
+                        const checked = this.checked;
+                        otherCheckboxes.forEach(cb => cb.checked = checked);
+                });
+
+                // Если изменён любой другой чекбокс — обновляем "Все"
+                otherCheckboxes.forEach(cb => {
+                        cb.addEventListener('change', () => {
+                                const checkedCount = Array.from(otherCheckboxes).filter(c => c.checked).length;
+                                allCheckbox.checked = checkedCount === otherCheckboxes.length;
+                                allCheckbox.indeterminate = checkedCount > 0 && checkedCount < otherCheckboxes.length;
+                        });
+                });
+
+                // Применить фильтр
+                document.getElementById('om-type-filter-apply').addEventListener('click', () => {
+                        const selectedTypes = Array.from(otherCheckboxes)
+                                .filter(cb => cb.checked)
+                                .map(cb => cb.dataset.type);
+
+                        onlineMarket.currentFilterTypes = selectedTypes.length === otherCheckboxes.length ? ['all'] : selectedTypes;
+                        omTypeFilterModal.style.display = 'none';
+                        renderPlatformGrid();
+                });
+
+                // Сбросить фильтр
+                document.getElementById('om-type-filter-reset').addEventListener('click', () => {
+                        otherCheckboxes.forEach(cb => cb.checked = true);
+                        allCheckbox.checked = true;
+                        allCheckbox.indeterminate = false;
+                        onlineMarket.currentFilterTypes = ['all'];
+                        omTypeFilterModal.style.display = 'none';
+                        renderPlatformGrid();
+                });
