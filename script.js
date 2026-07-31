@@ -17002,3 +17002,382 @@ document.addEventListener('DOMContentLoaded', function() {
                                 obs.observe(sentinel);
                         }
                 }
+
+                // ---- Open Platform Modal ----
+                function openPlatformModal(item) {
+                        ensureBotsForItem(item.id, item);
+                        const rarityInfo = rarities[item.rarity] || { color: 'none', name: item.rarity };
+                        const collectionInfo = collectionsDatabase[item.collection] || { name: item.collection, image: '' };
+                        const myReq = onlineMarket.buyRequests.find(r => r.itemId === item.id && r.remaining > 0);
+                        const currentCollection = collectionsDatabase[item.collection];
+
+                        const overlay = document.createElement('div');
+                        overlay.className = 'om-modal-overlay active';
+                        overlay.innerHTML = `
+                                <div class="om-platform-modal global-ui">
+                                        <button class="om-modal-close" style="position:absolute;top:12px;right:15px;background:none;border:none;color:#aaa;font-size:26px;cursor:pointer;z-index:2;line-height:1">×</button>
+                                        <div class="om-modal-body">
+                                                <div class="om-item-panel">
+                                                        <div class="om-item-img-wrap" style="cursor:pointer" title="Просмотр 3D">
+                                                                <img src="${item.image}" alt="${item.name}" style="width:150px;border-radius:4px;display:block">
+                                                        </div>
+                                                        <div class="item-rarity ${rarityInfo.color} om-item-rarity-badge" style="transform:none;width:auto;margin-top:4px"><div class="om-item-name">${item.name}</div></div>
+                                                        <div class="om-item-collection" style="margin-top:-3px">${currentCollection.image ? `<img src="${currentCollection.image}" class="collection-icon" style="width: 30px; height: auto;">` : ''} ${collectionInfo.name || item.collection}</div>
+                                                        <button class="om-list-btn" style="margin-top:10px">Выставить</button>
+                                                </div>
+                                                <div class="om-lots-panel">
+                                                        ${myReq ? `
+                                                        <div class="om-active-req-banner" id="om-active-req-banner-${myReq.id}">
+                                                                <span>📋 Активная заявка: ${myReq.price.toFixed(2)} ₽ × ${myReq.remaining} шт.</span>
+                                                                <button class="om-cancel-active-req-btn" data-req-id="${myReq.id}">Отменить</button>
+                                                        </div>` : ''}
+                                                        <div class="om-lots-header">
+                                                                <div class="om-buy-request-area">
+                                                                        <span style="font-size:13px;color:#aaa;white-space:nowrap">Заявка на покупку:</span>
+                                                                        <input type="number" id="om-req-price" placeholder="Цена ₽" min="0" max="1000000" step="0.01" style="width:110px">
+                                                                        <input type="number" id="om-req-count" placeholder="Кол-во" min="1" value="1" style="width:65px">
+                                                                        <button class="om-buy-request-btn" id="om-place-req-btn">Разместить</button>
+                                                                </div>
+                                                                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px">
+                                                        <h3 style="margin:0;font-size:15px">Лоты (${(onlineMarket.listings[item.id] || []).length})</h3>
+                                                        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#aaa;cursor:pointer;user-select:none">
+                                                                <input type="checkbox" id="om-filter-mine-${item.id}" style="cursor:pointer"> Мои
+                                                        </label>
+                                                        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#aaa;cursor:pointer;user-select:none">
+                                                                <input type="checkbox" id="om-filter-stickers-${item.id}" style="cursor:pointer"> С наклейками
+                                                        </label>
+                                                        <span id="om-filter-hint-${item.id}" style="font-size:11px;color:gold;display:none"></span>
+                                                </div>
+                                                                </div>
+                                                                <div class="om-lots-list" id="om-lots-list-${item.id}"></div>
+                                                        </div>
+                                                </div>
+                                        </div>
+                                </div>
+                        `;
+                        document.body.appendChild(overlay);
+
+                        activeModals[item.id] = overlay;
+                        let updateInterval = null;
+                        
+                        function startBannerUpdate() {
+                                if (myReq) {
+                                        myReq.bannerElement = overlay.querySelector(`#om-active-req-banner-${myReq.id}`);
+                                        
+                                        updateInterval = setInterval(() => {
+                                                const currentReq = onlineMarket.buyRequests.find(r => r.id === myReq.id);
+                                                if (!currentReq || currentReq.remaining <= 0) {
+                                                        if (myReq.bannerElement && document.body.contains(myReq.bannerElement)) {
+                                                                myReq.bannerElement.style.display = 'none';
+                                                        }
+                                                        if (!currentReq) {
+                                                                clearInterval(updateInterval);
+                                                                updateInterval = null;
+                                                        }
+                                                        return;
+                                                }
+                                                
+                                                if (currentReq.bannerElement && document.body.contains(currentReq.bannerElement)) {
+                                                        const span = currentReq.bannerElement.querySelector('span');
+                                                        if (span) {
+                                                                span.textContent = `📋 Активная заявка: ${currentReq.price.toFixed(2)} ₽ × ${currentReq.remaining} шт.`;
+                                                        }
+                                                        if (currentReq.bannerElement.style.display === 'none') {
+                                                                currentReq.bannerElement.style.display = '';
+                                                        }
+                                                } else {
+                                                        clearInterval(updateInterval);
+                                                        updateInterval = null;
+                                                }
+                                        }, 1000);
+                                }
+                        }
+                        
+                        startBannerUpdate();
+
+                        // Close handlers
+                        overlay.querySelector('.om-modal-close').addEventListener('click', () => {
+                                if (updateInterval) clearInterval(updateInterval); 
+                                delete activeModals[item.id];
+                                overlay.remove();
+                        });
+                        
+                        overlay.addEventListener('click', e => { 
+                                if (e.target === overlay) {
+                                        if (updateInterval) clearInterval(updateInterval); 
+                                        delete activeModals[item.id];
+                                        overlay.remove(); 
+                                }
+                        });
+
+                        // 3D viewer
+                        const imgWrap = overlay.querySelector('.om-item-img-wrap');
+                        setup3DViewer(imgWrap, item, item);
+
+                        // List button
+                        overlay.querySelector('.om-list-btn').addEventListener('click', e => {
+                                e.stopPropagation();
+                                openInventorySelectModal(item, overlay);
+                        });
+
+                        // Cancel active request banner
+                        const cancelReqBtn = overlay.querySelector('.om-cancel-active-req-btn');
+                        if (cancelReqBtn) {
+                                cancelReqBtn.addEventListener('click', e => {
+                                        e.stopPropagation();
+                                        const reqId = cancelReqBtn.dataset.reqId;
+                                        const req = onlineMarket.buyRequests.find(r => r.id === reqId);
+                                        if (req) {
+                                                if (updateInterval) clearInterval(updateInterval);
+                                                balanceAmount.textContent = balance.toLocaleString('ru-RU');
+                                                UpdateStatrackFrame && UpdateStatrackFrame(balance);
+                                                if (req.timerId) clearTimeout(req.timerId);
+                                                onlineMarket.buyRequests = onlineMarket.buyRequests.filter(r => r.id !== reqId);
+                                                showToast('Заявка отменена');
+                                                overlay.remove();
+                                                openPlatformModal(item);
+                                                updatePlatformCard(item.id);
+                                        }
+                                });
+                        }
+
+                        // Place buy request
+                        overlay.querySelector('#om-place-req-btn').addEventListener('click', () => {
+                                const priceInput = overlay.querySelector('#om-req-price');
+                                const countInput = overlay.querySelector('#om-req-count');
+                                const price = Math.round((parseFloat(priceInput.value) || 0) * 100) / 100;
+                                const count = Math.max(1, parseInt(countInput.value) || 1);
+
+                                if (price < 0 || price > 1000000) { showToast('Цена от 0 до 1 000 000 ₽', true); return; }
+                                if (balance < price * count) { showToast('Недостаточно средств', true); return; }
+
+                                balanceAmount.textContent = balance.toLocaleString('ru-RU');
+
+                                const reqId = 'req_buy_' + (++onlineMarket.reqCounter);
+                                const req = { id: reqId, itemId: item.id, item, price, quantity: count, remaining: count, timestamp: Date.now(), timerId: null, expectedAt: null };
+                                onlineMarket.buyRequests.push(req);
+
+                                showToast(`Заявка: ${count}× ${item.name} по ${price.toFixed(2)} ₽`);
+                                priceInput.value = '';
+                                countInput.value = '1';
+
+                                scheduleRequest(req, overlay, item);
+                                renderLotsPanel(item.id, overlay);
+                                updatePlatformCard(item.id);
+                                
+                                if (updateInterval) clearInterval(updateInterval);
+                                overlay.remove();
+                                openPlatformModal(item);
+                        });
+
+                        renderLotsPanel(item.id, overlay);
+
+                        // Checkbox filters
+                        ['mine','stickers'].forEach(type => {
+                                const cb = overlay.querySelector(`#om-filter-${type}-${item.id}`);
+                                if (cb) cb.addEventListener('change', () => renderLotsPanel(item.id, overlay));
+                        });
+                }
+
+                // ---- Render Lots Panel ----
+                function renderLotsPanel(itemId, overlay) {
+                        const list = overlay.querySelector(`#om-lots-list-${itemId}`);
+                        if (!list) return;
+                        const header = overlay.querySelector('.om-lots-header h3');
+                        let lots = onlineMarket.listings[itemId] || [];
+                        lots = lots.filter(lot => {
+                                const itemExists = itemsDatabase.find(i => i.id === itemId);
+                                return itemExists !== undefined;
+                        });
+                        if (onlineMarket.listings[itemId]) {
+                                onlineMarket.listings[itemId] = lots;
+                                if (lots.length === 0) {
+                                        delete onlineMarket.listings[itemId];
+                                }
+                        }
+                        if (header) header.textContent = `Лоты (${lots.length})`;
+                        const headerContainer = overlay.querySelector('.om-lots-header');
+                        if (headerContainer && !headerContainer.querySelector('#om-cancel-all-my-lots-btn')) {
+                                const myLotsCount = lots.filter(l => l.isMine).length;
+                                if (myLotsCount > 0) {
+                                        const cancelAllBtn = document.createElement('button');
+                                        cancelAllBtn.id = 'om-cancel-all-my-lots-btn';
+                                        cancelAllBtn.textContent = `× Все мои (${myLotsCount})`;
+                                        cancelAllBtn.style.cssText = 'margin-left:10px;padding:4px 10px;background:#f44336;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;';
+                                        cancelAllBtn.addEventListener('click', (e) => {
+                                                e.stopPropagation();
+                                                const myLots = lots.filter(l => l.isMine);
+                                                myLots.forEach(lot => {
+                                                        if (lot.sellReqTimerId) clearTimeout(lot.sellReqTimerId);
+                                                        if (lot.inventoryItem) inventory.push(lot.inventoryItem);
+                                                        onlineMarket.sellRequests = onlineMarket.sellRequests.filter(r => r.lotId !== lot.id);
+                                                });
+                                                onlineMarket.listings[itemId] = lots.filter(l => !l.isMine);
+                                                if (onlineMarket.listings[itemId]?.length === 0) delete onlineMarket.listings[itemId];
+                                                
+                                                updateInventory();
+                                                saveGameState();
+                                                showToast(`Отменено лотов: ${myLotsCount}`);
+                                                updatePlatformCard(itemId);
+                                                updateNormalMarketCardPrice(itemId);
+                                                renderLotsPanel(itemId, overlay);
+                                                renderMyRequests();
+                                        });
+                                        header.appendChild(cancelAllBtn);
+                                }
+                        }
+                        
+                        const cbMine = overlay.querySelector(`#om-filter-mine-${itemId}`);
+                        const cbStickers = overlay.querySelector(`#om-filter-stickers-${itemId}`);
+                        const hintEl = overlay.querySelector(`#om-filter-hint-${itemId}`);
+                        const filterMine = cbMine?.checked || false;
+                        const filterStickers = cbStickers?.checked || false;
+
+                        let displayLots = [...lots];
+                        if (filterMine) displayLots = displayLots.filter(l => l.isMine);
+                        if (filterStickers) {
+                                const hasStk = l => (l.stickers?.length > 0) || (l.inventoryItem?.stickers?.length > 0);
+                                displayLots = displayLots.filter(hasStk);
+                        }
+
+                        if (hintEl) {
+                                if ((filterMine || filterStickers) && displayLots.length > 0) {
+                                        const sortedDisplay = [...lots].sort((a,b) => a.price - b.price);
+                                        hintEl.textContent = `Первый лот стоит: ${sortedDisplay[0].price.toFixed(2)} ₽`;
+                                        hintEl.style.display = '';
+                                } else {
+                                        hintEl.style.display = 'none';
+                                }
+                        }
+
+                        if (!lots.length) { 
+                                list.innerHTML = '<div class="om-empty-lots">Нет активных лотов</div>'; 
+                                return; 
+                        }
+                        if (!displayLots.length) {
+                                list.innerHTML = '<div class="om-empty-lots">Нет лотов по фильтру</div>';
+                                return;
+                        }
+                        list.innerHTML = '';
+                        displayLots.sort((a, b) => {
+                                if (a.price !== b.price) return a.price - b.price;
+                                const aHas = a.stickers?.length > 0 ? 1 : 0, bHas = b.stickers?.length > 0 ? 1 : 0;
+                                return aHas - bHas;
+                        });
+                        displayLots.forEach(lot => {
+                                const sellReq = lot.isMine ? onlineMarket.sellRequests.find(r => r.lotId === lot.id) : null;
+                                const waitStr = sellReq?.expectedSellAt ? formatDelay(sellReq.expectedSellAt - Date.now()) : '';
+
+                                const lotItem = itemsDatabase.find(i => i.id === itemId);
+                                const canHaveStickers = lotItem && !lotItem.isCase && !lotItem.isCharm && !lotItem.isSticker
+                                        && !lotItem.isItemWithoutSlot
+                                        && !lotItem.name.endsWith('Fragment')
+                                        && !lotItem.name.startsWith('Graffiti')
+                                        && !lotItem.name.startsWith('Medal');
+                                const lotStickers = (canHaveStickers && lot.stickers && lot.stickers.length > 0) ? lot.stickers : null;
+                                const invStickers = (canHaveStickers && lot.inventoryItem?.stickers?.length) ? lot.inventoryItem.stickers : null;
+                                const displayStickers = lotStickers || invStickers;
+                                const stickersHTML = displayStickers
+                                        ? `<div style="transform: translate(100px, 15px);display:flex;gap:2px;margin-top: -30px;flex-wrap:wrap">${displayStickers.map(s => `<img src="${s.image}" title="${s.name}" style="width:auto;height:30px;border-radius:2px;background:#1a1a1a;">`).join('')}</div>`
+                                        : '';
+
+                                const div = document.createElement('div');
+                                div.className = 'om-lot-item ' + (lot.isMine ? 'my-lot' : 'bot-lot');
+                                div.innerHTML = `
+                                        <div>
+                                                <div class="om-lot-price">${lot.price.toFixed(2)} ₽ ${stickersHTML}</div>
+                                                <div class="om-lot-seller">${lot.isMine ? '👤 Мой лот' : '🤖 ' + lot.seller}</div>
+                                                ${lot.isMine && waitStr ? `<div class="om-lot-timer">⏳ Ожид. продажи: ${waitStr}</div>` : ''}
+                                        </div>
+                                        ${lot.isMine
+                                                ? `<button class="om-lot-cancel-btn">Отменить</button>`
+                                                : `<button class="om-lot-buy-btn">Купить</button>`}
+                                `;
+                                if (lot.isMine) {
+                                        div.querySelector('.om-lot-cancel-btn').addEventListener('click', () => {
+                                                cancelMyListing(lot.id, itemId, lot);
+                                                renderLotsPanel(itemId, overlay);
+                                        });
+                                } else {
+                                        div.querySelector('.om-lot-buy-btn').addEventListener('click', () => {
+                                                buyLotDirectly(lot, itemId, overlay);
+                                        });
+                                }
+                                list.appendChild(div);
+                        });
+                }
+
+                // ---- Buy Lot Directly ----
+                function buyLotDirectly(lot, itemId, overlay) {
+                        if (balance < lot.price) { 
+                                showToast('Недостаточно средств!', true); 
+                                return; 
+                        }
+                        balance -= lot.price;
+                        balance = Math.round(balance * 100) / 100;
+                        balanceAmount.textContent = balance.toLocaleString('ru-RU');
+                        UpdateStatrackFrame && UpdateStatrackFrame(balance);
+                        if (lot.isMine) {
+                                onlineMarket.sellRequests = onlineMarket.sellRequests.map(r =>
+                                        r.lotId === lot.id ? { ...r, status: 'sold' } : r
+                                );
+                                onlineMarket.sellRequests = onlineMarket.sellRequests.filter(r => r.status !== 'sold');
+                        }
+
+                        if (onlineMarket.listings[itemId]) {
+                                onlineMarket.listings[itemId] = onlineMarket.listings[itemId].filter(l => l.id !== lot.id);
+                                if (onlineMarket.listings[itemId].length === 0) {
+                                        delete onlineMarket.listings[itemId];
+                                }
+                        }
+
+                        const item = itemsDatabase.find(i => i.id === itemId);
+                        if (item) {
+                                let invItem;
+                                if (lot.inventoryItem) {
+                                        invItem = structuredClone(lot.inventoryItem);
+                                } else {
+                                        invItem = {
+                                                id: item.id,
+                                                name: item.name,
+                                                rarity: item.rarity,
+                                                image: item.image
+                                        };
+                                        if (lot.stickers && lot.stickers.length > 0) {
+                                                invItem.stickers = lot.stickers;
+                                        }
+                                }
+                                inventory.push(invItem);
+                                updateInventory(); 
+                                saveGameState();
+                                showItemToast('bought', item, lot.price);
+                                setTimeout(() => { updatePlatformCard(itemId); updateNormalMarketCardPrice(itemId); }, 150);
+                        }
+                        renderMyRequests();
+                        updatePlatformCard(itemId);
+                        refreshOpenModal(itemId);
+                }
+
+                // ---- Cancel My Listing ----
+                function cancelMyListing(lotId, itemId, lot) {
+                        if (lot.sellReqTimerId) clearTimeout(lot.sellReqTimerId);
+                        if (onlineMarket.listings[itemId]) {
+                                onlineMarket.listings[itemId] = onlineMarket.listings[itemId].filter(l => l.id !== lotId);
+                                if (onlineMarket.listings[itemId].length === 0) {
+                                        delete onlineMarket.listings[itemId];
+                                }
+                        }
+                        onlineMarket.sellRequests = onlineMarket.sellRequests.filter(r => r.status !== 'sold');
+                        if (lot.inventoryItem) {
+                                inventory.push(lot.inventoryItem);
+                                updateInventory(); 
+                                saveGameState();
+                        }
+                        showToast('Лот отменён, предмет возвращён в инвентарь');
+                        updatePlatformCard(itemId);
+                        updateNormalMarketCardPrice(itemId);
+                        refreshOpenModal(itemId);
+                        renderMyRequests();
+                        
+                        setTimeout(() => processBotAutoBuy(itemId), 50);
+                }
