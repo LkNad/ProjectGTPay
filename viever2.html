@@ -3,34 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simple 3D Model Viewer</title>
+	<link rel="icon" href="images/icon.png">
+    <title>Advanced 3D Model Viewer</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { background: #1a1a1a; color: white; min-height: 100vh; overflow-x: hidden; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Gold Shreaft', sans-serif !important; }
+        @font-face { font-family: 'Gold Shreaft'; src: url('fonts/gold_shreaft.ttf') format('truetype'); font-weight: normal; font-style: normal; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #000000 0%, #000000 100%) !important; color: white; min-height: 100vh; overflow-x: hidden; }
+        body.fallback-gradient { background: linear-gradient(135deg, #2a2a2a 0%, #4a4a4a 100%) !important; }
         .app-container { display: flex; min-height: 100vh; gap: 20px; }
-        .scene-container { height: auto; width: auto; flex: 1; overflow: hidden; position: relative; min-width: 400px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); background: #2a2a2a; }
+        .scene-container { height: auto; width: auto; flex: 1; overflow: hidden; position: relative; min-width: 400px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); }
         #viewer-canvas { width: 100%; height: 100%; display: block; }
-        
-        .bg-logo-overlay {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            width: 150px; 
-            height: auto;
-            pointer-events: none; 
-            z-index: 5;
-            opacity: 0.9;
-            display: none;
-        }
-        
+        .item-title { position: absolute; top: 20px; left: -10px; background: rgba(0, 0, 0, 0.0); color: white; padding: 8px 16px; border-radius: 8px; font-size: 40px; font-weight: bold; z-index: 10; max-width: 80%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .back-btn { position: absolute; bottom: 15px; left: 15px; background: rgba(50, 50, 50, 0.5); color: #9c9c9c; border: 2px solid #9c9c9c; padding: 12px 60px; border-radius: 1px; cursor: pointer; z-index: 10; font-size: 16px; text-transform: uppercase; }
         .back-btn:hover { background: rgba(55, 55, 55, 0.5); }
         
+        /* === СТИЛЬ БЛОКА ПАТТЕРНА === */
         .pattern-display {
-            transform: translate(-60px, -40px);
+			transform: translate(-60px, -40px);
             position: absolute;
             bottom: 60px;
             right: 25px;
@@ -47,18 +39,43 @@
             backdrop-filter: blur(5px);
             user-select: none;
         }
-        .pattern-display:hover { background: rgba(0, 0, 0, 0.5); }
-        .pattern-logo { width: 28px; height: 28px; object-fit: contain; display: block; pointer-events: none; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); }
-        .pattern-seed { font-size: 26px; font-weight: 800; color: #ffffff; min-width: 55px; text-align: center; font-family: monospace; letter-spacing: 2px; pointer-events: none; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
-        .pattern-display.editing { cursor: default; background: rgba(20, 20, 20, 0.95); }
-        .pattern-display.editing .pattern-seed { color: #667eea; background: transparent; pointer-events: auto; }
+        .pattern-display:hover {
+            background: rgba(0, 0, 0, 0.5);
+        }
+        .pattern-logo {
+            width: 28px;
+            height: 28px;
+            object-fit: contain;
+            display: block;
+            pointer-events: none;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+        }
+        .pattern-seed {
+            font-size: 26px;
+            font-weight: 800;
+            color: #ffffff;
+            min-width: 55px;
+            text-align: center;
+            font-family: monospace;
+            letter-spacing: 2px;
+            pointer-events: none;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+        }
+        .pattern-display.editing {
+            cursor: default;
+            background: rgba(20, 20, 20, 0.95);
+        }
+        .pattern-display.editing .pattern-seed {
+            color: #667eea;
+            background: transparent;
+            pointer-events: auto;
+        }
         
         .loading-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); display: flex; justify-content: center; align-items: center; color: white; font-size: 18px; z-index: 30; display: none; }
         .spinner { width: 30px; height: 30px; border: 3px solid rgba(255, 255, 255, 0.3); border-radius: 50%; border-top-color: #667eea; animation: spin 1s linear infinite; margin-right: 10px; }
         @keyframes spin { to { transform: rotate(360deg); } }
         .drop-zone { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; font-size: 24px; z-index: 15; display: none; border: 3px dashed #667eea; border-radius: 15px; pointer-events: none; }
         .drop-zone p { margin-top: 20px; font-size: 16px; text-align: center; max-width: 80%; }
-        
         .controls-panel { width: 420px; background: rgba(25, 25, 45, 0.95); border-radius: 15px; padding: 25px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); backdrop-filter: blur(10px); max-height: calc(100vh - 40px); overflow-y: auto; display: none; }
         .panel-header { text-align: center; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 2px solid #667eea; display: flex; justify-content: space-between; align-items: center; }
         .panel-header h2 { font-size: 24px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin: 0; }
@@ -67,10 +84,6 @@
         .upload-section h3 { margin-bottom: 15px; color: #667eea; font-size: 18px; }
         .upload-btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 12px 20px; border-radius: 10px; cursor: pointer; width: 100%; margin: 8px 0; font-weight: 600; transition: transform 0.2s, box-shadow 0.2s; font-size: 14px; }
         .upload-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4); }
-        .pattern-btn { background: linear-gradient(135deg, #F7971E 0%, #FFD200 100%); color: #1a1a1a; border: none; padding: 12px 20px; border-radius: 10px; cursor: pointer; width: 100%; margin: 8px 0; font-weight: 600; transition: transform 0.2s, box-shadow 0.2s; font-size: 14px; }
-        .pattern-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(255, 210, 0, 0.4); }
-        .mask-btn { background: linear-gradient(135deg, #8E2DE2 0%, #4A00E0 100%); color: white; border: none; padding: 12px 20px; border-radius: 10px; cursor: pointer; width: 100%; margin: 8px 0; font-weight: 600; transition: transform 0.2s, box-shadow 0.2s; font-size: 14px; }
-        .mask-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(74, 0, 224, 0.4); }
         .control-group { margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
         .control-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
         .control-group h3 { margin-bottom: 15px; color: #667eea; font-size: 18px; }
@@ -87,24 +100,6 @@
         .render-shadow-btn { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; border: none; padding: 12px 15px; border-radius: 8px; cursor: pointer; width: 100%; margin-top: 10px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 4px 15px rgba(56, 239, 125, 0.4); }
         .render-shadow-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(56, 239, 125, 0.6); }
         .file-input { display: none; }
-        
-        .render-options { margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; gap: 8px; }
-        .checkbox-label { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13px; color: #ccc; }
-        .checkbox-label input { width: 18px; height: 18px; cursor: pointer; }
-        
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 100; justify-content: center; align-items: center; }
-        .modal.active { display: flex; }
-        .modal-content { background: rgba(25, 25, 45, 0.95); border-radius: 15px; padding: 25px; max-width: 400px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .modal-content h3 { margin-bottom: 20px; color: #667eea; font-size: 18px; text-align: center; }
-        .modal-options { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
-        .modal-option { display: flex; align-items: center; gap: 10px; padding: 10px; background: rgba(102,126,234,0.1); border-radius: 8px; cursor: pointer; transition: background 0.2s; }
-        .modal-option:hover, .modal-option.selected { background: rgba(102,126,234,0.3); }
-        .modal-option input { width: 18px; height: 18px; }
-        .modal-buttons { display: flex; gap: 10px; }
-        .modal-btn { flex: 1; padding: 10px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px; }
-        .modal-btn.cancel { background: rgba(255,255,255,0.1); color: white; }
-        .modal-btn.confirm { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
-        
         @media (max-width: 950px) { .app-container { flex-direction: column; } .scene-container { min-width: auto; height: 400px; } .controls-panel { width: 100%; max-height: 500px; } }
         @media (max-width: 500px) { .scene-container { height: 300px; } .controls-panel { max-height: 400px; } }
     </style>
@@ -113,11 +108,10 @@
     <div class="app-container">
         <div class="scene-container" id="scene-container">
             <canvas id="viewer-canvas"></canvas>
+            <div id="item-title" class="item-title" style="display: none;"></div>
+            <button id="back-btn" class="back-btn">назад</button>
             
-            <img src="Bglogo.png" alt="Background Logo" class="bg-logo-overlay" id="bg-logo">
-            
-            <button id="back-btn" class="back-btn" style="display: none;">назад</button>
-            
+            <!-- === БЛОК ПАТТЕРНА === -->
             <div id="pattern-display" class="pattern-display">
                 <img src="images/pattern_logo.png" alt="Pattern" class="pattern-logo" id="pattern-logo" onerror="this.style.display='none'">
                 <span class="pattern-seed" id="pattern-seed">000</span>
@@ -142,12 +136,8 @@
                 <h3>📁 Загрузить контент</h3>
                 <input type="file" id="model-input" class="file-input" accept=".glb,.gltf">
                 <input type="file" id="texture-input" class="file-input" accept=".jpg,.jpeg,.png,.webp">
-                <input type="file" id="pattern-input" class="file-input" accept=".jpg,.jpeg,.png,.webp">
-                <input type="file" id="mask-input" class="file-input" accept=".jpg,.jpeg,.png,.webp">
                 <button id="load-model-btn" class="upload-btn">Выбрать модель (GLB/GLTF)</button>
                 <button id="load-texture-btn" class="upload-btn">Выбрать текстуру (опционально)</button>
-                <button id="load-pattern-btn" class="pattern-btn">🎨 Загрузить паттерн</button>
-                <button id="load-mask-btn" class="mask-btn">🎭 Загрузить маску паттерна</button>
             </div>
             <div class="control-group">
                 <h3>🔄 Трансформация модели</h3>
@@ -156,9 +146,9 @@
                 <div class="transform-control"><h4>Позиция Z</h4><div class="slider-container"><input type="range" id="pos-z" min="-50" max="50" step="0.1" value="0"><span class="slider-value" id="pos-z-value">0.0</span></div></div>
                 <div class="transform-control"><h4>Масштаб</h4><div class="slider-container"><input type="range" id="scale" min="0.01" max="20" step="0.01" value="1.0"><span class="slider-value" id="scale-value">1.00</span></div></div>
                 <div class="transform-control"><h4>Вращение X</h4><div class="slider-container"><input type="range" id="rot-x" min="0" max="360" step="1" value="0"><span class="slider-value" id="rot-x-value">0°</span></div></div>
-                <div class="transform-control"><h4>Вращение Y</h4><div class="slider-container"><input type="range" id="rot-y" min="0" max="360" step="1" value="0"><span class="slider-value" id="rot-y-value">0°</span></div></div>
-                <div class="transform-control"><h4>Вращение Z</h4><div class="slider-container"><input type="range" id="rot-z" min="0" max="360" step="1" value="0"><span class="slider-value" id="rot-z-value">0°</span></div></div>
-                <button id="reset-transform-btn" class="action-btn">Сбросить трансформацию</button>
+				<div class="transform-control"><h4>Вращение Y</h4><div class="slider-container"><input type="range" id="rot-y" min="0" max="360" step="1" value="0"><span class="slider-value" id="rot-y-value">0°</span></div></div>
+				<div class="transform-control"><h4>Вращение Z</h4><div class="slider-container"><input type="range" id="rot-z" min="0" max="360" step="1" value="0"><span class="slider-value" id="rot-z-value">0°</span></div></div>
+				<button id="reset-transform-btn" class="action-btn">Сбросить трансформацию</button>
             </div>
             <div class="control-group">
                 <h3>💡 Система освещения</h3>
@@ -171,91 +161,34 @@
             </div>
             <div class="control-group" style="border-bottom: none;">
                 <button id="render-btn" class="render-btn">📷 Рендер (прозрачный)</button>
-                <button id="render-shadow-btn" class="render-shadow-btn">🖼️ Рендер с тенью</button>
-                <div class="render-options">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="render-bg-checkbox" checked>
-                        <span>Рендерить фон</span>
-                    </label>
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="render-logo-checkbox" checked>
-                        <span>Рендерить лого</span>
-                    </label>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div id="texture-channel-modal" class="modal">
-        <div class="modal-content">
-            <h3>Применить текстуру к:</h3>
-            <div class="modal-options">
-                <label class="modal-option selected">
-                    <input type="radio" name="texture-channel" value="albedo" checked>
-                    <span>🎨 Альбедо (цвет)</span>
-                </label>
-                <label class="modal-option">
-                    <input type="radio" name="texture-channel" value="metallic">
-                    <span>⚙️ Металлик</span>
-                </label>
-                <label class="modal-option">
-                    <input type="radio" name="texture-channel" value="pattern">
-                    <span>🎨 Паттерн</span>
-                </label>
-                <label class="modal-option">
-                    <input type="radio" name="texture-channel" value="mask">
-                    <span>🎭 Маска паттерна</span>
-                </label>
-                <label class="modal-option">
-                    <input type="radio" name="texture-channel" value="normal">
-                    <span>🔷 Нормаль</span>
-                </label>
-                <label class="modal-option">
-                    <input type="radio" name="texture-channel" value="roughness">
-                    <span>✨ Roughness</span>
-                </label>
-                <label class="modal-option">
-                    <input type="radio" name="texture-channel" value="ao">
-                    <span>🌑 AO (окклюзия)</span>
-                </label>
-            </div>
-            <div class="modal-buttons">
-                <button class="modal-btn cancel" id="modal-cancel">Отмена</button>
-                <button class="modal-btn confirm" id="modal-confirm">Применить</button>
+                <button id="render-shadow-btn" class="render-shadow-btn">🎨 Рендер с тенью</button>
             </div>
         </div>
     </div>
 
     <script>
+        // DOM элементы
         const canvas = document.getElementById('viewer-canvas');
         const loadingOverlay = document.getElementById('loading-overlay');
         const backBtn = document.getElementById('back-btn');
+        const itemTitle = document.getElementById('item-title');
         const controlsPanel = document.getElementById('controls-panel');
         const toggleControlsBtn = document.getElementById('toggle-controls-btn');
         const modelInput = document.getElementById('model-input');
         const textureInput = document.getElementById('texture-input');
-        const patternInput = document.getElementById('pattern-input');
-        const maskInput = document.getElementById('mask-input');
         const loadModelBtn = document.getElementById('load-model-btn');
         const loadTextureBtn = document.getElementById('load-texture-btn');
-        const loadPatternBtn = document.getElementById('load-pattern-btn');
-        const loadMaskBtn = document.getElementById('load-mask-btn');
         const sceneContainer = document.getElementById('scene-container');
         const dropZone = document.getElementById('drop-zone');
         const renderBtn = document.getElementById('render-btn');
         const renderShadowBtn = document.getElementById('render-shadow-btn');
-        const renderBgCheckbox = document.getElementById('render-bg-checkbox');
-        const renderLogoCheckbox = document.getElementById('render-logo-checkbox');
         
+        // Элементы паттерна
         const patternDisplay = document.getElementById('pattern-display');
         const patternSeedEl = document.getElementById('pattern-seed');
         const patternLogoEl = document.getElementById('pattern-logo');
         
-        const textureModal = document.getElementById('texture-channel-modal');
-        const modalCancel = document.getElementById('modal-cancel');
-        const modalConfirm = document.getElementById('modal-confirm');
-        const modalOptions = document.querySelectorAll('.modal-option');
-        
+        // Слайдеры трансформации
         const posXSlider = document.getElementById('pos-x'), posXValue = document.getElementById('pos-x-value');
         const posYSlider = document.getElementById('pos-y'), posYValue = document.getElementById('pos-y-value');
         const posZSlider = document.getElementById('pos-z'), posZValue = document.getElementById('pos-z-value');
@@ -265,6 +198,7 @@
         const rotZSlider = document.getElementById('rot-z'), rotZValue = document.getElementById('rot-z-value');
         const resetTransformBtn = document.getElementById('reset-transform-btn');
         
+        // Слайдеры освещения
         const mainIntensitySlider = document.getElementById('main-intensity'), mainValue = document.getElementById('main-value');
         const fill1IntensitySlider = document.getElementById('fill1-intensity'), fill1Value = document.getElementById('fill1-value');
         const fill2IntensitySlider = document.getElementById('fill2-intensity'), fill2Value = document.getElementById('fill2-value');
@@ -272,6 +206,7 @@
         const ambientLightSlider = document.getElementById('ambient-light'), ambientValue = document.getElementById('ambient-value');
         const resetLightsBtn = document.getElementById('reset-lights-btn');
         
+        // Three.js переменные
         let scene, camera, renderer, model, controls;
         let mainLight, fillLight1, fillLight2, backLight, ambientLightObj;
         let originalModelPosition = new THREE.Vector3();
@@ -294,38 +229,44 @@
         // Установите 2.0, чтобы цвета сменились дважды за один оборот и т.д.
         const HUE_CYCLES_PER_ROTATION = 1.0;
         
-        let pendingTextureFile = null;
-        let bgLogoImage = null;
-        
-        let customPatternTexture = null;
-        let customMaskTexture = null;
-        let customAlbedoTexture = null;
-        
+        // URL параметры
         const urlParams = new URLSearchParams(window.location.search);
         const modelUrl = urlParams.get('model');
+        const bgUrl = urlParams.get('bg');
+        const rarity = urlParams.get('rarity');
         const backUrl = urlParams.get('backUrl');
-        
+        const titleText = urlParams.get('title');
+        const collectionText = urlParams.get('collection');
         const albedoUrl = urlParams.get('albedo');
         const normalUrl = urlParams.get('normal');
         const roughnessUrl = urlParams.get('roughness');
         const metalnessUrl = urlParams.get('metalness');
         const aoUrl = urlParams.get('ao');
-        
+        // === ПАТТЕРНЫ ===
         const patternUrl = urlParams.get('pattern');
         const maskUrl = urlParams.get('mask');
         const gradientMaskUrl = urlParams.get('gradientMask');
+        // === СИД ПАТТЕРНА ===
         const patternSeedParam = urlParams.get('patternSeed');
         const currentPatternSeed = patternSeedParam ? parseInt(patternSeedParam, 10) : Math.floor(Math.random() * 1000);
         
+        // === НОВАЯ ЛОГИКА ГЕНЕРАЦИИ ПАРАМЕТРОВ ИЗ СИДА ===
+        // Используем сид как зерно для детерминированной "случайности"
+        // Функция pseudo-random generator на основе сида
         function seededRandom(seed) {
             var x = Math.sin(seed++) * 10000;
             return x - Math.floor(x);
         }
 
+        // Генерируем уникальные параметры для текущего сида
+        // Смещение по X: от -1000 до +1000 пикселей
         const randomOffsetX = (seededRandom(currentPatternSeed) * 2000) - 1000;
+        // Смещение по Y: от -1000 до +1000 пикселей
         const randomOffsetY = (seededRandom(currentPatternSeed + 1) * 2000) - 1000;
+        // Вращение: от 0 до 360 градусов (в радианах)
         const randomRotation = seededRandom(currentPatternSeed + 2) * Math.PI * 2;
         
+        // Кнопка "Назад"
         if (backUrl) {
             backBtn.style.display = 'block';
             backBtn.onclick = () => {
@@ -335,6 +276,7 @@
             };
         }
         
+        // Инициализация UI паттерна
         function initPatternDisplay() {
             patternSeedEl.textContent = String(currentPatternSeed).padStart(3, '0');
             patternDisplay.addEventListener('click', handlePatternSeedClick);
@@ -399,6 +341,114 @@
             });
         }
         
+        // Заголовок
+        if (titleText || rarity || collectionText) {
+            itemTitle.style.display = 'block';
+            itemTitle.innerHTML = '';
+            const mainRow = document.createElement('div');
+            mainRow.style.display = 'flex';
+            mainRow.style.alignItems = 'flex-start';
+            mainRow.style.gap = '5px';
+            const logoUrl = urlParams.get('logo');
+            if (logoUrl && logoUrl !== 'undefined') {
+                const logoImg = document.createElement('img');
+                logoImg.src = logoUrl;
+                logoImg.style.height = '100px';
+                logoImg.style.width = 'auto';
+                logoImg.style.objectFit = 'contain';
+                logoImg.style.display = 'block';
+                logoImg.style.alignSelf = 'flex-start';
+                logoImg.onerror = () => { if (logoImg.parentNode) logoImg.parentNode.removeChild(logoImg); };
+                mainRow.appendChild(logoImg);
+            }
+            const textColumn = document.createElement('div');
+            textColumn.style.display = 'flex';
+            textColumn.style.flexDirection = 'column';
+            textColumn.style.justifyContent = 'center';
+            textColumn.style.transform = 'translate(2px, 5px)';
+            const titleRarityRow = document.createElement('div');
+            titleRarityRow.style.display = 'flex';
+            titleRarityRow.style.alignItems = 'center';
+            titleRarityRow.style.gap = '12px';
+            if (titleText) {
+                const upperTitle = titleText.toUpperCase();
+                const statTrackIndex = upperTitle.indexOf('STATTRACK');
+                if (statTrackIndex !== -1) {
+                    const statTrackSpan = document.createElement('span');
+                    statTrackSpan.textContent = upperTitle.substring(statTrackIndex, statTrackIndex + 9) + '*';
+                    statTrackSpan.style.fontWeight = 'bold';
+                    statTrackSpan.style.fontSize = '38px';
+                    statTrackSpan.style.color = '#e8c945';
+                    titleRarityRow.appendChild(statTrackSpan);
+                    if (statTrackIndex > 0) {
+                        const beforeSpan = document.createElement('span');
+                        beforeSpan.textContent = upperTitle.substring(0, statTrackIndex);
+                        beforeSpan.style.fontWeight = 'bold';
+                        beforeSpan.style.fontSize = '40px';
+                        beforeSpan.style.color = 'white';
+                        beforeSpan.style.transform = 'translateX(-6px)';
+                        titleRarityRow.appendChild(beforeSpan);
+                    }
+                    const afterIndex = statTrackIndex + 9;
+                    if (afterIndex < upperTitle.length) {
+                        const afterSpan = document.createElement('span');
+                        afterSpan.textContent = upperTitle.substring(afterIndex);
+                        afterSpan.style.fontWeight = 'bold';
+                        afterSpan.style.fontSize = '40px';
+                        afterSpan.style.color = 'white';
+                        afterSpan.style.transform = 'translateX(-14px)';
+                        titleRarityRow.appendChild(afterSpan);
+                    }
+                } else {
+                    const titleSpan = document.createElement('span');
+                    titleSpan.textContent = upperTitle;
+                    titleSpan.style.fontWeight = 'bold';
+                    titleSpan.style.fontSize = '40px';
+                    titleSpan.style.color = 'white';
+                    titleRarityRow.appendChild(titleSpan);
+                }
+            }
+            let hasRarity = rarity && rarity.toLowerCase() !== 'none';
+            if (hasRarity) {
+                const rarityNameMap = { 'none-rarity': 'None', 'gold-none': 'None', 'case-none': 'None', 'box-none': 'None', 'common': 'Common', 'uncommon': 'Uncommon', 'rare': 'Rare', 'epic': 'Epic', 'legendary': 'Legendary', 'arcane': 'Arcane', 'nameless': 'Nameless' };
+                const displayName = rarityNameMap[rarity.toLowerCase()] || rarity;
+                const rarityBox = document.createElement('span');
+                rarityBox.textContent = displayName.toUpperCase();
+                rarityBox.style.fontSize = '18px';
+                rarityBox.style.color = '#ffffff';
+                rarityBox.style.fontWeight = 'bold';
+                rarityBox.style.padding = '6px 14px';
+                rarityBox.style.borderRadius = '1px';
+                rarityBox.style.display = 'inline-block';
+                const rarityColors = { 'none-rarity': '#c2c2c2', 'gold-none': '#d39e19', 'case-none': '#d39e19', 'box-none': '#c2c2c2', 'common': '#a5a5a5', 'uncommon': '#0eb2d3', 'rare': '#5555ff', 'epic': '#aa55ff', 'legendary': '#ab27ab', 'arcane': '#d10000', 'nameless': '#d39e19' };
+                const key = rarity.toLowerCase();
+                const fillColor = rarityColors[key] || 'white';
+                rarityBox.style.backgroundColor = fillColor;
+                rarityBox.style.border = '1px solid ' + fillColor;
+                titleRarityRow.appendChild(rarityBox);
+            }
+            if (titleText || hasRarity) { textColumn.appendChild(titleRarityRow); }
+            if (collectionText) {
+                const collectionSpan = document.createElement('div');
+                collectionSpan.style.fontSize = '22px';
+                collectionSpan.style.fontWeight = 'normal';
+                collectionSpan.style.marginTop = '8px';
+                const collectionLabel = document.createElement('span');
+                collectionLabel.textContent = 'Коллекция: '.toUpperCase();
+                collectionLabel.style.color = '#cccccc';
+                const collectionName = document.createElement('span');
+                collectionName.textContent = collectionText.toUpperCase();
+                collectionName.style.color = '#ffffff';
+                collectionName.style.fontWeight = 'bold';
+                collectionSpan.appendChild(collectionLabel);
+                collectionSpan.appendChild(collectionName);
+                textColumn.appendChild(collectionSpan);
+            }
+            mainRow.appendChild(textColumn);
+            itemTitle.appendChild(mainRow);
+        }
+        
+        // Инициализация сцены
         function initScene() {
             scene = new THREE.Scene();
             const container = canvas.parentElement;
@@ -491,10 +541,12 @@
                 accumulatedAngle += angleDiff;
                 lastCameraAngle = currentCameraAngle;
                 
-                // Преобразуем накопленный угол в диапазон [0, PI] для цикла туда-обратно
+                // Преобразуем накопленный угол в диапазон [0, 1] для полного цикла туда-обратно
+                // Используем sin для плавного изменения от 0 до 1 и обратно за 180 градусов
                 // Умножаем на HUE_CYCLES_PER_ROTATION для управления скоростью смены цветов
                 const normalizedAngle = Math.abs(Math.sin(accumulatedAngle * 0.5 * HUE_CYCLES_PER_ROTATION));
                 
+                // Передаем полный угол (0..PI) в шейдер
                 gradientUniforms.time.value = normalizedAngle * Math.PI;
             }
             
@@ -535,6 +587,7 @@
             );
         }
         
+        // === ОБНОВЛЕННАЯ ФУНКЦИЯ ПРИМЕНЕНИЯ ПАТТЕРНА С ВРАЩЕНИЕМ ===
         function applyPatternWithMask(albedoTexture, patternTexture, maskTexture, callback) {
             if (!albedoTexture?.image) { callback(albedoTexture); return; }
             if (!patternTexture?.image || !maskTexture?.image) { callback(albedoTexture); return; }
@@ -546,9 +599,12 @@
             const height = albedoTexture.image.height || 1024;
             cvs.width = width; cvs.height = height;
             
+            // 1. Рисуем базовую Albedo текстуру
             ctx.drawImage(albedoTexture.image, 0, 0, width, height);
             const baseData = ctx.getImageData(0, 0, width, height);
             
+            // 2. Создаем БЕСШОВНЫЙ тайл (Seamless Tile)
+            // Используем метод "Offset + Feather": сдвигаем изображение на 50% и смягчаем центр
             const patImg = patternTexture.image;
             const tileSize = Math.min(patImg.width, patImg.height);
             
@@ -557,53 +613,76 @@
             tileCvs.height = tileSize;
             const tCtx = tileCvs.getContext('2d', { willReadFrequently: true });
             
+            // А) Рисуем оригинал по центру
             tCtx.drawImage(patImg, 0, 0, tileSize, tileSize, 0, 0, tileSize, tileSize);
             
+            // Б) Рисуем сдвинутую копию (Offset by 50%) поверх с мягким градиентом
+            // Это "склеивает" противоположные края в центре
             tCtx.save();
             tCtx.globalCompositeOperation = 'source-over';
             
+            // Создаем радиальный градиент для маскирования сдвинутой копии
+            // Центр градиента - центр холста. 
+            // Внутренний круг прозрачный (чтобы не перекрывать центр оригинала слишком сильно), внешний - непрозрачный
             const gradient = tCtx.createRadialGradient(tileSize/2, tileSize/2, tileSize * 0.25, tileSize/2, tileSize/2, tileSize * 0.7);
             gradient.addColorStop(0, 'rgba(0,0,0,0)');
             gradient.addColorStop(1, 'rgba(0,0,0,1)');
             
             tCtx.fillStyle = gradient;
+            
+            // Сдвигаем контекст на 50%
             tCtx.translate(tileSize / 2, tileSize / 2);
+            
+            // Рисуем маску
             tCtx.fillRect(-tileSize/2, -tileSize/2, tileSize, tileSize);
             
-            tCtx.globalCompositeOperation = 'source-in';
+            // Рисуем саму текстуру (сдвинутую) под маской
+            // Важно: мы рисуем её так, чтобы она легла поверх краев оригинала
+            tCtx.globalCompositeOperation = 'source-in'; // Оставляем пиксели только там, где градиент
             tCtx.drawImage(patImg, -tileSize/2, -tileSize/2, tileSize, tileSize);
+            
             tCtx.restore();
             
+            // Теперь tileCvs содержит текстуру, у которой края идеально совпадают друг с другом
+            
+            // 3. Подготовка к финальному рендеру с вращением
             const rotatedCvs = document.createElement('canvas');
+            // Диагональ для безопасного вращения без черных углов
             const diag = Math.ceil(Math.sqrt(width*width + height*height));
             rotatedCvs.width = diag;
             rotatedCvs.height = diag;
             const rCtx = rotatedCvs.getContext('2d');
             
+            // Создаем паттерн из нашего сглаженного тайла
             const seamlessPattern = rCtx.createPattern(tileCvs, 'repeat');
             
             rCtx.save();
             rCtx.translate(diag/2, diag/2);
-            rCtx.rotate(randomRotation);
+            rCtx.rotate(randomRotation); // Вращение из сида
             rCtx.translate(-diag/2, -diag/2);
             
+            // Смещение из сида
             const offsetX = randomOffsetX % tileSize;
             const offsetY = randomOffsetY % tileSize;
             
             rCtx.save();
             rCtx.translate(offsetX, offsetY); 
             rCtx.fillStyle = seamlessPattern;
+            // Заполняем с запасом
             rCtx.fillRect(-tileSize, -tileSize, diag + tileSize*2, diag + tileSize*2);
             rCtx.restore();
             
             rCtx.restore();
             
+            // 4. Вырезаем итоговый кусок и накладываем маску
             ctx.drawImage(rotatedCvs, (diag - width)/2, (diag - height)/2, width, height, 0, 0, width, height);
             const patternData = ctx.getImageData(0, 0, width, height);
             
+            // Маска
             ctx.drawImage(maskTexture.image, 0, 0, width, height);
             const maskImageData = ctx.getImageData(0, 0, width, height);
             
+            // Композитинг
             const result = ctx.createImageData(width, height);
             for (let i = 0; i < baseData.data.length; i += 4) {
                 const maskLuminance = (maskImageData.data[i] + maskImageData.data[i+1] + maskImageData.data[i+2]) / 3;
@@ -628,48 +707,62 @@
             callback(resultTexture);
         }
         
-        function applyMaskToExistingAlbedo(albedoTexture, maskTexture, callback) {
-            if (!albedoTexture?.image || !maskTexture?.image) { 
-                callback(albedoTexture); 
-                return; 
+        // Шейдер для градиентного эффекта цвета
+        const gradientShaderChunk = `
+            uniform float time;
+            uniform sampler2D gradientMask;
+            varying vec2 vUv;
+            
+            vec3 rgb2hsv(vec3 c) {
+                vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+                vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+                vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+                float d = q.x - min(q.w, q.y);
+                float e = 1.0e-10;
+                return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
             }
             
-            const cvs = document.createElement('canvas');
-            const ctx = cvs.getContext('2d', { willReadFrequently: true });
-            
-            const width = albedoTexture.image.width || 1024;
-            const height = albedoTexture.image.height || 1024;
-            cvs.width = width; cvs.height = height;
-            
-            ctx.drawImage(albedoTexture.image, 0, 0, width, height);
-            const baseData = ctx.getImageData(0, 0, width, height);
-            
-            ctx.drawImage(maskTexture.image, 0, 0, width, height);
-            const maskImageData = ctx.getImageData(0, 0, width, height);
-            
-            const result = ctx.createImageData(width, height);
-            for (let i = 0; i < baseData.data.length; i += 4) {
-                const maskLuminance = (maskImageData.data[i] + maskImageData.data[i+1] + maskImageData.data[i+2]) / 3;
-                const maskFactor = maskLuminance / 255;
-                result.data[i] = baseData.data[i] * (1 - maskFactor);
-                result.data[i+1] = baseData.data[i+1] * (1 - maskFactor);
-                result.data[i+2] = baseData.data[i+2] * (1 - maskFactor);
-                result.data[i+3] = 255;
+            vec3 hsv2rgb(vec3 c) {
+                vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+                vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+                return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
             }
-            ctx.putImageData(result, 0, 0);
             
-            const resultTexture = new THREE.CanvasTexture(cvs);
-            resultTexture.wrapS = albedoTexture.wrapS;
-            resultTexture.wrapT = albedoTexture.wrapT;
-            resultTexture.minFilter = albedoTexture.minFilter;
-            resultTexture.magFilter = albedoTexture.magFilter;
-            resultTexture.encoding = albedoTexture.encoding;
-            resultTexture.flipY = false;
-            resultTexture.needsUpdate = true;
-            
-            callback(resultTexture);
-        }
-        
+            vec3 applyGradientColor(vec3 originalColor, vec2 uv) {
+                // Получаем значение маски (0-1)
+                float maskValue = texture2D(gradientMask, uv).r;
+                
+                // Если маска чёрная (0), возвращаем оригинальный цвет без изменений
+                if (maskValue < 0.01) {
+                    return originalColor;
+                }
+                
+                // Вычисляем угол вращения камеры для анимации (время приходит от JS)
+                // Анимация идёт туда-обратно: 0 -> PI -> 0
+                float angle = time;
+                
+                // Преобразуем оригинальный цвет в HSV
+                vec3 hsv = rgb2hsv(originalColor);
+                
+                // Сдвигаем тон (hue) на основе угла
+                // За один полный цикл (0 -> PI -> 0) тон проходит весь спектр
+                // hue идет от 0 (красный) через оранжевый, жёлтый, зелёный, голубой, синий, фиолетовый и обратно
+                float hueShift = angle / 3.14159; // Нормализуем к [0, 1]
+                hsv.x = fract(hsv.x + hueShift); // Циклически сдвигаем тон
+                
+                // Повышаем насыщенность для более ярких цветов
+                hsv.y = min(hsv.y * 1.3, 1.0);
+                
+                // Преобразуем обратно в RGB
+                vec3 shiftedColor = hsv2rgb(hsv);
+                
+                // Маска определяет интенсивность эффекта (где белее - там активнее)
+                // Но не перекрашиваем полностью, а меняем только тон
+                float blendIntensity = maskValue * 0.8; // Ограничиваем максимальную интенсивность
+                return mix(originalColor, shiftedColor, blendIntensity);
+            }
+        `;
+
         function applyTexturesToModel() {
             if (!model) return;
             
@@ -699,10 +792,12 @@
                     checkPatternPreload(); 
                 });
             }
+            
             function checkPatternPreload() {
                 if (patternReady && maskReady && albedoReady && gradientMaskReady) {
                     applyToAllMaterials();
                     
+                    // Управление видимостью блока паттерна
                     if (hasPattern && hasMask && patternTexture && maskTexture) {
                         patternDisplay.style.display = 'flex';
                     } else {
@@ -820,35 +915,34 @@
                                 }
                             }
                             
-                            function checkDone() {
-                                if (pendingTasks <= 0) {
-                                    child.material = newMat;
                             // Применяем градиентный эффект если есть маска
                             if (hasGradientMask && gradientMaskTexture && !isStatTrack) {
                                 newMat.onBeforeCompile = function(shader) {
                                     shader.uniforms.time = { value: 0 };
                                     shader.uniforms.gradientMask = { value: gradientMaskTexture };
-
+                                    
                                     // Добавляем uniform и varying в vertex shader
                                     shader.vertexShader = `
                                         uniform float time;
                                         uniform sampler2D gradientMask;
+                                        
                                         varying vec2 vGradientUv;
+                                    \n` + shader.vertexShader;
                                     
-` + shader.vertexShader;
-
                                     // Заменяем main() чтобы передать UV
                                     shader.vertexShader = shader.vertexShader.replace(
                                         'void main() {',
                                         'void main() {\nvGradientUv = uv;'
                                     );
-
+                                    
                                     // Добавляем функцию смены тона (Hue shift) в fragment shader
+                                    // === ФРАГМЕНТНЫЙ ШЕЙДЕР (ИСПРАВЛЕН) ===
                                     shader.fragmentShader = `
                                         uniform float time;
                                         uniform sampler2D gradientMask;
                                         varying vec2 vGradientUv;
-
+                                        
+                                        
                                         // Функция для конвертации RGB в HSV
                                         vec3 rgb2hsv(vec3 c) {
                                             vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
@@ -893,19 +987,22 @@
                                             float blendIntensity = maskValue * 0.8;
                                             return mix(originalColor, shiftedColor, blendIntensity);
                                         }
+                                    \n` + shader.fragmentShader;
                                     
-` + shader.fragmentShader;
-
                                     // Модифицируем outgoing light
                                     shader.fragmentShader = shader.fragmentShader.replace(
                                         '#include <dithering_fragment>',
                                         '#include <dithering_fragment>\nvec4 correctedColor = gl_FragColor;\ncorrectedColor.rgb = applyHueShift(correctedColor.rgb);\ngl_FragColor = correctedColor;'
                                     );
-
+                                    
                                     // Сохраняем ссылку на uniforms для обновления
                                     gradientUniforms = shader.uniforms;
                                 };
                             }
+                            
+                            function checkDone() {
+                                if (pendingTasks <= 0) {
+                                    child.material = newMat;
                                     processed++;
                                     if (processed >= total) showLoading(false);
                                 }
@@ -975,32 +1072,56 @@
             });
         }
         
-        async function loadBackgroundAndRarity() {
-            try {
-                const bgTexture = await new Promise((resolve, reject) => textureLoader.load('background.png', resolve, undefined, reject));
-                bgTexture.encoding = THREE.sRGBEncoding;
-                scene.background = bgTexture;
-            } catch (e) {
-                console.log('background.png not found, using dark gray.');
-                scene.background = new THREE.Color(0x2a2a2a);
+        async function loadBackgroundAndRarity(bgUrl, rarity) {
+            let bgTexture = null, hasBg = false;
+            if (bgUrl) {
+                try {
+                    bgTexture = await new Promise((resolve, reject) => textureLoader.load(bgUrl, resolve, undefined, reject));
+                    hasBg = true;
+                } catch (e) { console.warn('Не удалось загрузить bg:', bgUrl); }
             }
-        }
-        
-        function loadBgLogo() {
-            return new Promise((resolve) => {
-                const img = new Image();
-                img.crossOrigin = 'anonymous';
-                img.onload = () => {
-                    bgLogoImage = img;
-                    document.getElementById('bg-logo').style.display = 'block';
-                    resolve(img);
-                };
-                img.onerror = () => {
-                    console.log('Bglogo.png not found, logo will not be displayed');
-                    resolve(null);
-                };
-                img.src = 'Bglogo.png';
-            });
+            if (!hasBg) {
+                try {
+                    bgTexture = await new Promise((resolve, reject) => textureLoader.load('background.png', resolve, undefined, reject));
+                    hasBg = true;
+                } catch (e) { console.warn('Не удалось загрузить background.png'); }
+            }
+            const cvs = document.createElement('canvas');
+            cvs.width = 512; cvs.height = 512;
+            const ctx = cvs.getContext('2d', { willReadFrequently: true });
+            if (hasBg && bgTexture.image) ctx.drawImage(bgTexture.image, 0, 0, 512, 512);
+            else {
+                const fallbackGrd = ctx.createLinearGradient(0, 0, 512, 512);
+                fallbackGrd.addColorStop(0, '#2a2a2a'); fallbackGrd.addColorStop(1, '#4a4a4a');
+                ctx.fillStyle = fallbackGrd; ctx.fillRect(0, 0, 512, 512);
+                document.body.classList.add('fallback-gradient');
+            }
+            if (rarity && rarity.toLowerCase() !== 'none') {
+                const colors = { 'case-none': ['#d28c19', '#0d1217'], 'box-none': ['#89949b', '#0d1217'], 'none-rarity': ['#cfd1d2', '#0d1217'], 'gold-none': ['#d28c19', '#0d1217'], 'common': ['#89949b', '#0d1217'], 'uncommon': ['#288bbb', '#0d1217'], 'rare': ['#01349b', '#0d1217'], 'epic': ['#7d02a9', '#0d1217'], 'legendary': ['#b90f80', '#0d1217'], 'arcane': ['#c1101e', '#0d1217'], 'nameless': ['#d28c19', '#0d1217'] };
+                const key = rarity.toLowerCase();
+                if (colors[key]) {
+                    const [start, end] = colors[key];
+                    const gradient = ctx.createLinearGradient(0, 0, 230, 230);
+                    gradient.addColorStop(0, start); gradient.addColorStop(1, end);
+                    ctx.globalAlpha = 0.4; ctx.fillStyle = gradient; ctx.fillRect(0, 0, 512, 512);
+                    ctx.globalAlpha = 1.0;
+                }
+            }
+            const brightness = 1.75;
+            if (brightness !== 1.0) {
+                const imageData = ctx.getImageData(0, 0, 512, 512);
+                const data = imageData.data;
+                for (let i = 0; i < data.length; i += 4) {
+                    data[i] = Math.min(255, data[i] * brightness);
+                    data[i + 1] = Math.min(255, data[i + 1] * brightness);
+                    data[i + 2] = Math.min(255, data[i + 2] * brightness);
+                }
+                ctx.putImageData(new ImageData(data, 512, 512), 0, 0);
+            }
+            const finalTexture = new THREE.CanvasTexture(cvs);
+            finalTexture.encoding = THREE.sRGBEncoding;
+            scene.background = finalTexture;
+            document.body.classList.remove('fallback-gradient');
         }
         
         function showLoading(show) { loadingOverlay.style.display = show ? 'flex' : 'none'; }
@@ -1032,364 +1153,38 @@
             }, undefined, (error) => { console.error('Ошибка загрузки модели:', error); alert('Не удалось загрузить модель.'); showLoading(false); });
         }
         
-        function openTextureChannelModal(file) {
-            pendingTextureFile = file;
-            textureModal.classList.add('active');
-            modalOptions.forEach(opt => opt.classList.remove('selected'));
-            modalOptions[0].classList.add('selected');
-            document.querySelector('input[name="texture-channel"][value="albedo"]').checked = true;
-        }
-        
-        function closeTextureChannelModal() {
-            textureModal.classList.remove('active');
-            pendingTextureFile = null;
-        }
-        
-        function getSelectedTextureChannel() {
-            const selected = document.querySelector('input[name="texture-channel"]:checked');
-            return selected ? selected.value : 'albedo';
-        }
-        
-        function applyCustomTextureWithChannel(file, channel) {
-            if (!model && !fallbackPlane) { alert('Сначала загрузите модель или плоскость.'); return; }
-            showLoading(true);
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const target = model || fallbackPlane;
-                const isColorMap = (channel === 'albedo' || channel === 'pattern');
-                let tasksPending = 0;
-                let tasksCompleted = 0;
-                
-                target.traverse((child) => {
-                    if (child.isMesh && child.material) {
-                        const materials = Array.isArray(child.material) ? child.material : [child.material];
-                        tasksPending += materials.length;
-                    }
-                });
-                
-                if (tasksPending === 0) { showLoading(false); return; }
-                
-                function onTaskDone() {
-                    tasksCompleted++;
-                    if (tasksCompleted >= tasksPending) {
-                        showLoading(false);
-                    }
-                }
-                
-                const img = new Image();
-                img.onload = () => {
-                    const texture = new THREE.Texture();
-                    texture.image = img; 
-                    texture.flipY = false;
-                    if (isColorMap) texture.encoding = THREE.sRGBEncoding;
-                    texture.wrapS = THREE.RepeatWrapping; 
-                    texture.wrapT = THREE.RepeatWrapping;
-                    texture.minFilter = THREE.LinearMipmapLinearFilter; 
-                    texture.magFilter = THREE.LinearFilter;
-                    texture.needsUpdate = true;
-                    
-                    target.traverse((child) => {
-                        if (child.isMesh && child.material) {
-                            const materials = Array.isArray(child.material) ? child.material : [child.material];
-                            
-                            materials.forEach(mat => {
-                                const isStatTrack = (child.name && child.name.includes('StatTrack')) || 
-                                                   (mat.name && mat.name.includes('StatTrack'));
-                                
-                                if (isStatTrack && (channel === 'albedo' || channel === 'pattern' || channel === 'mask')) {
-                                    onTaskDone();
-                                    return;
-                                }
-                                
-                                if (mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial) {
-                                    const newMat = mat.clone();
-                                    
-                                    switch(channel) {
-                                        case 'albedo':
-                                            newMat.map = texture;
-                                            break;
-                                        case 'pattern':
-                                            customPatternTexture = texture;
-                                            applyCustomPatternToMaterial(newMat, texture, mat);
-                                            break;
-                                        case 'mask':
-                                            customMaskTexture = texture;
-                                            applyCustomMaskToMaterial(newMat, texture, mat);
-                                            break;
-                                        case 'metallic':
-                                            newMat.metalnessMap = texture;
-                                            newMat.metalness = 1.0;
-                                            break;
-                                        case 'normal':
-                                            newMat.normalMap = texture;
-                                            newMat.normalScale = new THREE.Vector2(1, 1);
-                                            break;
-                                        case 'roughness':
-                                            newMat.roughnessMap = texture;
-                                            newMat.roughness = 1.0;
-                                            break;
-                                        case 'ao':
-                                            newMat.aoMap = texture;
-                                            newMat.aoMapIntensity = 1.0;
-                                            break;
-                                    }
-                                    
-                                    newMat.needsUpdate = true;
-                                    child.material = newMat;
-                                    onTaskDone();
-                                } else {
-                                    onTaskDone();
-                                }
-                            });
-                        }
-                    });
-                };
-                img.onerror = () => {
-                    for (let i = 0; i < tasksPending; i++) onTaskDone();
-                };
-                img.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
-        }
-        
-        function applyCustomPatternToMaterial(newMat, patternTexture, originalMat) {
-            const hasMask = !!customMaskTexture;
-            const currentAlbedo = originalMat.map;
-            
-            if (!currentAlbedo?.image) {
-                newMat.map = patternTexture;
-                return;
-            }
-            
-            if (!hasMask) {
-                newMat.map = patternTexture;
-                return;
-            }
-            
-            if (customMaskTexture) {
-                const albedoImg = currentAlbedo.image;
-                const maskImg = customMaskTexture.image;
-                const patternImg = patternTexture.image;
-                
-                const cvs = document.createElement('canvas');
-                cvs.width = albedoImg.width || 1024;
-                cvs.height = albedoImg.height || 1024;
-                const ctx = cvs.getContext('2d');
-                
-                ctx.drawImage(albedoImg, 0, 0, cvs.width, cvs.height);
-                const baseData = ctx.getImageData(0, 0, cvs.width, cvs.height);
-                
-                ctx.drawImage(patternImg, 0, 0, cvs.width, cvs.height);
-                const patternData = ctx.getImageData(0, 0, cvs.width, cvs.height);
-                
-                ctx.drawImage(maskImg, 0, 0, cvs.width, cvs.height);
-                const maskData = ctx.getImageData(0, 0, cvs.width, cvs.height);
-                
-                const result = ctx.createImageData(cvs.width, cvs.height);
-                for (let i = 0; i < baseData.data.length; i += 4) {
-                    const maskFactor = maskData.data[i] / 255;
-                    result.data[i] = baseData.data[i] * (1 - maskFactor) + patternData.data[i] * maskFactor;
-                    result.data[i+1] = baseData.data[i+1] * (1 - maskFactor) + patternData.data[i+1] * maskFactor;
-                    result.data[i+2] = baseData.data[i+2] * (1 - maskFactor) + patternData.data[i+2] * maskFactor;
-                    result.data[i+3] = 255;
-                }
-                ctx.putImageData(result, 0, 0);
-                
-                const finalTexture = new THREE.CanvasTexture(cvs);
-                finalTexture.wrapS = THREE.RepeatWrapping;
-                finalTexture.wrapT = THREE.RepeatWrapping;
-                finalTexture.encoding = THREE.sRGBEncoding;
-                finalTexture.needsUpdate = true;
-                
-                newMat.map = finalTexture;
-            }
-        }
-        
-        function applyCustomMaskToMaterial(newMat, maskTexture, originalMat) {
-            const currentAlbedo = originalMat.map;
-            
-            if (!currentAlbedo?.image) {
-                return;
-            }
-            
-            const hasPattern = !!customPatternTexture;
-            
-            if (hasPattern) {
-                applyCustomPatternToMaterial(newMat, customPatternTexture, originalMat);
-            } else {
-                const albedoImg = currentAlbedo.image;
-                const maskImg = maskTexture.image;
-                
-                const cvs = document.createElement('canvas');
-                cvs.width = albedoImg.width || 1024;
-                cvs.height = albedoImg.height || 1024;
-                const ctx = cvs.getContext('2d');
-                
-                ctx.drawImage(albedoImg, 0, 0, cvs.width, cvs.height);
-                const baseData = ctx.getImageData(0, 0, cvs.width, cvs.height);
-                
-                ctx.drawImage(maskImg, 0, 0, cvs.width, cvs.height);
-                const maskData = ctx.getImageData(0, 0, cvs.width, cvs.height);
-                
-                const result = ctx.createImageData(cvs.width, cvs.height);
-                for (let i = 0; i < baseData.data.length; i += 4) {
-                    const maskFactor = maskData.data[i] / 255;
-                    result.data[i] = baseData.data[i] * (1 - maskFactor);
-                    result.data[i+1] = baseData.data[i+1] * (1 - maskFactor);
-                    result.data[i+2] = baseData.data[i+2] * (1 - maskFactor);
-                    result.data[i+3] = 255;
-                }
-                ctx.putImageData(result, 0, 0);
-                
-                const finalTexture = new THREE.CanvasTexture(cvs);
-                finalTexture.wrapS = THREE.RepeatWrapping;
-                finalTexture.wrapT = THREE.RepeatWrapping;
-                finalTexture.encoding = THREE.sRGBEncoding;
-                finalTexture.needsUpdate = true;
-                
-                newMat.map = finalTexture;
-            }
-        }
-        
-        function loadCustomPattern(file) {
-            if (!file) return;
-            if (!file.type.startsWith('image/')) { alert('Пожалуйста, выберите изображение.'); return; }
-            if (!model && !fallbackPlane) { alert('Сначала загрузите модель!'); return; }
-            
-            showLoading(true);
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const img = new Image();
-                img.onload = () => {
-                    const texture = new THREE.Texture();
-                    texture.image = img;
-                    texture.flipY = false;
-                    texture.encoding = THREE.sRGBEncoding;
-                    texture.wrapS = THREE.RepeatWrapping;
-                    texture.wrapT = THREE.RepeatWrapping;
-                    texture.minFilter = THREE.LinearMipmapLinearFilter;
-                    texture.magFilter = THREE.LinearFilter;
-                    texture.needsUpdate = true;
-                    
-                    customPatternTexture = texture;
-                    applyPatternOrMaskToModel();
-                };
-                img.onerror = () => {
-                    alert('Не удалось загрузить паттерн');
-                    showLoading(false);
-                };
-                img.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
-        }
-        
-        function loadCustomMask(file) {
-            if (!file) return;
-            if (!file.type.startsWith('image/')) { alert('Пожалуйста, выберите изображение.'); return; }
-            if (!model && !fallbackPlane) { alert('Сначала загрузите модель!'); return; }
-            
-            showLoading(true);
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const img = new Image();
-                img.onload = () => {
-                    const texture = new THREE.Texture();
-                    texture.image = img;
-                    texture.flipY = false;
-                    texture.wrapS = THREE.RepeatWrapping;
-                    texture.wrapT = THREE.RepeatWrapping;
-                    texture.minFilter = THREE.LinearMipmapLinearFilter;
-                    texture.magFilter = THREE.LinearFilter;
-                    texture.needsUpdate = true;
-                    
-                    customMaskTexture = texture;
-                    applyPatternOrMaskToModel();
-                };
-                img.onerror = () => {
-                    alert('Не удалось загрузить маску');
-                    showLoading(false);
-                };
-                img.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
-        }
-        
-        function applyPatternOrMaskToModel() {
-            if (!model) { showLoading(false); return; }
-            
-            const hasPattern = !!customPatternTexture;
-            const hasMask = !!customMaskTexture;
-            
-            if (!hasPattern && !hasMask) {
-                showLoading(false);
-                return;
-            }
-            
-            let tasksPending = 0;
-            let tasksCompleted = 0;
-            
-            model.traverse((child) => {
-                if (child.isMesh && child.material) {
-                    const materials = Array.isArray(child.material) ? child.material : [child.material];
-                    tasksPending += materials.length;
-                }
-            });
-            
-            if (tasksPending === 0) {
-                showLoading(false);
-                return;
-            }
-            
-            function onTaskDone() {
-                tasksCompleted++;
-                if (tasksCompleted >= tasksPending) {
-                    showLoading(false);
-                    patternDisplay.style.display = 'flex';
-                }
-            }
-            
-            model.traverse((child) => {
-                if (child.isMesh && child.material) {
-                    const materials = Array.isArray(child.material) ? child.material : [child.material];
-                    
-                    materials.forEach(mat => {
-                        const isStatTrack = (child.name && child.name.includes('StatTrack')) || 
-                                           (mat.name && mat.name.includes('StatTrack'));
-                        
-                        if (isStatTrack) {
-                            onTaskDone();
-                            return;
-                        }
-                        
-                        if (mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial) {
-                            const newMat = mat.clone();
-                            
-                            if (hasPattern && hasMask) {
-                                applyCustomPatternToMaterial(newMat, customPatternTexture, mat);
-                            } else if (hasPattern) {
-                                newMat.map = customPatternTexture;
-                            } else if (hasMask) {
-                                applyCustomMaskToMaterial(newMat, customMaskTexture, mat);
-                            }
-                            
-                            newMat.needsUpdate = true;
-                            child.material = newMat;
-                            onTaskDone();
-                        } else {
-                            onTaskDone();
-                        }
-                    });
-                }
-            });
-        }
-        
         function loadCustomTexture(file) {
             if (!file) return;
             if (!file.type.startsWith('image/')) { alert('Пожалуйста, выберите изображение.'); return; }
-            openTextureChannelModal(file);
+            if (!model && !fallbackPlane) { alert('Сначала загрузите модель или плоскость.'); return; }
+            showLoading(true);
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const target = model || fallbackPlane;
+                target.traverse((child) => {
+                    if (child.isMesh && child.material) {
+                        const material = child.material;
+                        const materials = Array.isArray(material) ? material : [material];
+                        materials.forEach(mat => {
+                            if (mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial) {
+                                const newMat = mat.clone();
+                                const texture = new THREE.Texture();
+                                const img = new Image();
+                                img.onload = () => {
+                                    texture.image = img; texture.flipY = false;
+                                    texture.encoding = THREE.sRGBEncoding;
+                                    texture.wrapS = THREE.RepeatWrapping; texture.wrapT = THREE.RepeatWrapping;
+                                    texture.minFilter = THREE.LinearMipmapLinearFilter; texture.magFilter = THREE.LinearFilter;
+                                    texture.needsUpdate = true; newMat.map = texture; newMat.needsUpdate = true;
+                                    child.material = newMat; showLoading(false);
+                                };
+                                img.src = e.target.result;
+                            }
+                        });
+                    }
+                });
+            };
+            reader.readAsDataURL(file);
         }
         
         function resetTransformSliders() {
@@ -1445,144 +1240,78 @@
         }
         function handleKeyUp(event) { if (event.key === 'Alt' || event.key === 'AltGraph') altPressed = false; }
 
-        function drawLogoOnCanvas(canvas, scale) {
-            if (!bgLogoImage || !bgLogoImage.complete || bgLogoImage.naturalWidth === 0) return;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return;
-            
-            const cssWidth = 150;
-            const logoWidth = cssWidth * scale;
-            const logoHeight = (bgLogoImage.naturalHeight / bgLogoImage.naturalWidth) * logoWidth;
-            const margin = 20 * scale;
-            
-            const drawX = margin;
-            const drawY = canvas.height - margin - logoHeight;
-            
-            ctx.drawImage(bgLogoImage, drawX, drawY, logoWidth, logoHeight);
-        }
-        
-        function prepareForRender() {
-            if (!renderer || (!model && !fallbackPlane)) { 
-                alert('Сначала загрузите модель!'); 
-                return null; 
-            }
-            
+        function captureRender() {
+            if (!renderer || !model) { alert('Сначала загрузите модель!'); return; }
+            const oldBg = scene.background;
+            const oldWidth = renderer.domElement.width;
+            const oldHeight = renderer.domElement.height;
+            const oldAspect = camera.aspect;
             const container = canvas.parentElement;
             const width = container.clientWidth;
             const height = container.clientHeight;
             const scale = 2;
-            
-            const state = {
-                oldBg: scene.background,
-                oldWidth: renderer.domElement.width,
-                oldHeight: renderer.domElement.height,
-                oldAspect: camera.aspect,
-                backBtnVisible: backBtn.style.display
-            };
-            
             renderer.setSize(width * scale, height * scale, false);
             camera.aspect = width / height;
             camera.updateProjectionMatrix();
-            
-            const renderBg = renderBgCheckbox.checked;
-            if (!renderBg) {
-                scene.background = null;
-            }
-            
-            backBtn.style.display = 'none';
+            scene.background = null;
             renderer.render(scene, camera);
-            
-            return { state, scale };
-        }
-        
-        async function finalizeRender(renderInfo, withShadow, postProcessFn = null) {
-            const { state, scale } = renderInfo;
-            
-            try {
-                let finalCanvas;
-                
-                if (postProcessFn) {
-                    finalCanvas = await postProcessFn(renderer.domElement, scale);
-                } else {
-                    finalCanvas = document.createElement('canvas');
-                    finalCanvas.width = renderer.domElement.width;
-                    finalCanvas.height = renderer.domElement.height;
-                    const ctx = finalCanvas.getContext('2d');
-                    ctx.drawImage(renderer.domElement, 0, 0);
-                }
-                
-                if (renderBgCheckbox.checked && renderLogoCheckbox.checked) {
-                    drawLogoOnCanvas(finalCanvas, scale);
-                }
-                
-                const link = document.createElement('a');
-                link.download = `render_${withShadow ? 'shadow_' : ''}${Date.now()}.png`;
-                link.href = finalCanvas.toDataURL('image/png');
-                link.click();
-            } catch (error) {
-                console.error('Ошибка при финализации рендера:', error);
-            } finally {
-                scene.background = state.oldBg;
-                renderer.setSize(state.oldWidth, state.oldHeight, false);
-                camera.aspect = state.oldAspect;
-                camera.updateProjectionMatrix();
-                backBtn.style.display = state.backBtnVisible;
-            }
-        }
-        
-        function addShadowToRender(sourceCanvas, scale) {
-            return new Promise((resolve, reject) => {
-                const shadowOffsetX = -40, shadowOffsetY = 40, shadowBlur = 6, shadowOpacity = 0.7;
-                
-                const compCanvas = document.createElement('canvas');
-                compCanvas.width = sourceCanvas.width; 
-                compCanvas.height = sourceCanvas.height;
-                const ctx = compCanvas.getContext('2d', { willReadFrequently: true });
-                
-                const modelImg = new Image();
-                modelImg.onload = function() {
-                    try {
-                        const sCvs = document.createElement('canvas');
-                        sCvs.width = sourceCanvas.width; 
-                        sCvs.height = sourceCanvas.height;
-                        const sCtx = sCvs.getContext('2d', { willReadFrequently: true });
-                        sCtx.drawImage(modelImg, 0, 0);
-                        
-                        const imgData = sCtx.getImageData(0, 0, sCvs.width, sCvs.height);
-                        const d = imgData.data;
-                        for (let i = 0; i < d.length; i += 4) {
-                            if (d[i+3] > 0) { 
-                                d[i] = 0; d[i+1] = 0; d[i+2] = 0; 
-                                d[i+3] = Math.round(255 * shadowOpacity); 
-                            }
-                        }
-                        sCtx.putImageData(imgData, 0, 0);
-                        
-                        ctx.filter = `blur(${shadowBlur * scale}px)`; 
-                        ctx.drawImage(sCvs, shadowOffsetX * scale, shadowOffsetY * scale);
-                        ctx.filter = 'none';
-                        ctx.drawImage(modelImg, 0, 0);
-                        
-                        resolve(compCanvas);
-                    } catch (e) {
-                        reject(e);
-                    }
-                };
-                modelImg.onerror = () => reject(new Error('Failed to load image for shadow'));
-                modelImg.src = sourceCanvas.toDataURL('image/png');
-            });
-        }
-        
-        function captureRender() {
-            const renderInfo = prepareForRender();
-            if (!renderInfo) return;
-            finalizeRender(renderInfo, false);
+            const dataURL = renderer.domElement.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.download = 'render_' + Date.now() + '.png';
+            link.href = dataURL;
+            link.click();
+            scene.background = oldBg;
+            renderer.setSize(oldWidth, oldHeight, false);
+            camera.aspect = oldAspect;
+            camera.updateProjectionMatrix();
         }
 
         function captureRenderWithShadow() {
-            const renderInfo = prepareForRender();
-            if (!renderInfo) return;
-            finalizeRender(renderInfo, true, addShadowToRender);
+            if (!renderer || !model) { alert('Сначала загрузите модель!'); return; }
+            const shadowOffsetX = -40, shadowOffsetY = 40, shadowBlur = 6, shadowOpacity = 0.7;
+            const oldBg = scene.background;
+            const oldWidth = renderer.domElement.width;
+            const oldHeight = renderer.domElement.height;
+            const oldAspect = camera.aspect;
+            const container = canvas.parentElement;
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            const scale = 2;
+            renderer.setSize(width * scale, height * scale, false);
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            scene.background = null;
+            renderer.render(scene, camera);
+            const modelDataUrl = renderer.domElement.toDataURL('image/png');
+            const compCanvas = document.createElement('canvas');
+            compCanvas.width = width * scale; compCanvas.height = height * scale;
+            const ctx = compCanvas.getContext('2d', { willReadFrequently: true });
+            const modelImg = new Image();
+            modelImg.onload = function() {
+                const sCvs = document.createElement('canvas');
+                sCvs.width = width * scale; sCvs.height = height * scale;
+                const sCtx = sCvs.getContext('2d', { willReadFrequently: true });
+                sCtx.drawImage(modelImg, 0, 0);
+                const imgData = sCtx.getImageData(0, 0, sCvs.width, sCvs.height);
+                const d = imgData.data;
+                for (let i = 0; i < d.length; i += 4) {
+                    if (d[i+3] > 0) { d[i] = 0; d[i+1] = 0; d[i+2] = 0; d[i+3] = Math.round(255 * shadowOpacity); }
+                }
+                sCtx.putImageData(imgData, 0, 0);
+                ctx.filter = `blur(${shadowBlur * scale}px)`; 
+                ctx.drawImage(sCvs, shadowOffsetX * scale, shadowOffsetY * scale);
+                ctx.filter = 'none';
+                ctx.drawImage(modelImg, 0, 0);
+                const link = document.createElement('a');
+                link.download = 'render_shadow_' + Date.now() + '.png';
+                link.href = compCanvas.toDataURL('image/png');
+                link.click();
+                scene.background = oldBg;
+                renderer.setSize(oldWidth, oldHeight, false);
+                camera.aspect = oldAspect;
+                camera.updateProjectionMatrix();
+            };
+            modelImg.src = modelDataUrl;
         }
         
         function setupDragAndDrop() {
@@ -1591,49 +1320,47 @@
             sceneContainer.addEventListener('dragenter', e => { e.preventDefault(); e.stopPropagation(); dragCounter++; dropZone.style.display = 'flex'; dropZone.style.pointerEvents = 'none'; });
             sceneContainer.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); });
             sceneContainer.addEventListener('dragleave', e => { e.preventDefault(); e.stopPropagation(); dragCounter--; if (dragCounter <= 0) { dropZone.style.display = 'none'; dragCounter = 0; } });
-            sceneContainer.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); dropZone.style.display = 'none'; dragCounter = 0; const files = e.dataTransfer.files; if (files.length === 0) return; const file = files[0], fileName = file.name.toLowerCase(); if (fileName.endsWith('.glb') || fileName.endsWith('.gltf')) loadCustomModel(file); else if (fileName.match(/\.(jpg|jpeg|png|webp)$/)) loadCustomTexture(file); else alert('Поддерживаются только .glb, .gltf, .jpg, .png, .webp'); });
+            sceneContainer.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); dropZone.style.display = 'none'; dragCounter = 0; const files = e.dataTransfer.files; if (files.length === 0) return; const file = files[0], fileName = file.name.toLowerCase(); if (fileName.endsWith('.glb') || fileName.endsWith('.gltf')) loadCustomModel(file); else if (fileName.match(/\.(jpg|jpeg|png|webp)$/)) loadCustomTextureWithStatTrack(file); else alert('Поддерживаются только .glb, .gltf, .jpg, .png, .webp'); });
         }
-        
-        modalOptions.forEach(option => {
-            option.addEventListener('click', () => {
-                modalOptions.forEach(opt => opt.classList.remove('selected'));
-                option.classList.add('selected');
-                const radio = option.querySelector('input[type="radio"]');
-                if (radio) radio.checked = true;
+
+        function loadCustomTextureWithStatTrack(file) {
+            if (!model) { alert('Сначала загрузите модель!'); return; }
+            const url = URL.createObjectURL(file); showLoading(true);
+            let taskCount = 0, completedTasks = 0;
+            function onTaskComplete() { completedTasks++; if (completedTasks >= taskCount) showLoading(false); }
+            model.traverse((child) => { if (child.isMesh && child.material) { const materials = Array.isArray(child.material) ? child.material : [child.material]; taskCount += materials.length; } });
+            if (taskCount === 0) { showLoading(false); return; }
+            model.traverse((child) => {
+                if (child.isMesh && child.material) {
+                    const materials = Array.isArray(child.material) ? child.material : [child.material];
+                    materials.forEach(mat => {
+                        if (mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial) {
+                            const isStatTrack = (child.name && child.name.includes('StatTrack')) || (mat.name && mat.name.includes('StatTrack'));
+                            const newMat = mat.clone();
+                            if (isStatTrack) {
+                                textureLoader.load('materials/StatTrack_A.png', (texture) => { texture.flipY = false; texture.encoding = THREE.sRGBEncoding; texture.wrapS = THREE.RepeatWrapping; texture.wrapT = THREE.RepeatWrapping; texture.minFilter = THREE.LinearMipmapLinearFilter; texture.magFilter = THREE.LinearFilter; newMat.map = texture; newMat.needsUpdate = true; onTaskComplete(); }, undefined, onTaskComplete);
+                            } else {
+                                textureLoader.load(url, (texture) => { texture.flipY = false; texture.encoding = THREE.sRGBEncoding; texture.wrapS = THREE.RepeatWrapping; texture.wrapT = THREE.RepeatWrapping; texture.minFilter = THREE.LinearMipmapLinearFilter; texture.magFilter = THREE.LinearFilter; newMat.map = texture; newMat.needsUpdate = true; onTaskComplete(); }, undefined, onTaskComplete);
+                            }
+                            child.material = newMat;
+                        } else onTaskComplete();
+                    });
+                }
             });
-        });
-        
-        modalCancel.addEventListener('click', closeTextureChannelModal);
-        modalConfirm.addEventListener('click', () => {
-            if (pendingTextureFile) {
-                const channel = getSelectedTextureChannel();
-                applyCustomTextureWithChannel(pendingTextureFile, channel);
-            }
-            closeTextureChannelModal();
-        });
-        
-        textureModal.addEventListener('click', (e) => {
-            if (e.target === textureModal) closeTextureChannelModal();
-        });
-        
-        async function init() {
-            initScene();
-            initPatternDisplay();
-            setupDragAndDrop();
-            await loadBackgroundAndRarity();
-            await loadBgLogo();
-            if (modelUrl) loadModelFromUrl(modelUrl);
         }
-        init();
         
+        // Инициализация
+        initScene();
+        initPatternDisplay();
+        setupDragAndDrop();
+        loadBackgroundAndRarity(bgUrl, rarity).catch(err => console.error('Ошибка при загрузке фона/редкости:', err));
+        if (modelUrl) loadModelFromUrl(modelUrl);
+        
+        // Обработчики
         loadModelBtn.addEventListener('click', () => modelInput.click());
         loadTextureBtn.addEventListener('click', () => textureInput.click());
-        loadPatternBtn.addEventListener('click', () => patternInput.click());
-        loadMaskBtn.addEventListener('click', () => maskInput.click());
         modelInput.addEventListener('change', (e) => { if (e.target.files[0]) loadCustomModel(e.target.files[0]); });
         textureInput.addEventListener('change', (e) => { if (e.target.files[0]) loadCustomTexture(e.target.files[0]); });
-        patternInput.addEventListener('change', (e) => { if (e.target.files[0]) loadCustomPattern(e.target.files[0]); });
-        maskInput.addEventListener('change', (e) => { if (e.target.files[0]) loadCustomMask(e.target.files[0]); });
         toggleControlsBtn.addEventListener('click', toggleControlsPanel);
         resetTransformBtn.addEventListener('click', resetTransformSliders);
         resetLightsBtn.addEventListener('click', resetLighting);

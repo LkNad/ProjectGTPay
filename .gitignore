@@ -1,1 +1,3 @@
-Nothing should be ignored based on the provided file changes. The modified files (`viever.html` and `viever2.html`) are HTML source files that should be tracked in version control. No build artifacts, dependencies, temporary files, or other ignorable content was detected in the changes.
+```
+*.bak
+```

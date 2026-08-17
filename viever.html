@@ -541,10 +541,12 @@
                 accumulatedAngle += angleDiff;
                 lastCameraAngle = currentCameraAngle;
                 
-                // Преобразуем накопленный угол в диапазон [0, PI] для цикла туда-обратно
+                // Преобразуем накопленный угол в диапазон [0, 1] для полного цикла туда-обратно
+                // Используем sin для плавного изменения от 0 до 1 и обратно за 180 градусов
                 // Умножаем на HUE_CYCLES_PER_ROTATION для управления скоростью смены цветов
                 const normalizedAngle = Math.abs(Math.sin(accumulatedAngle * 0.5 * HUE_CYCLES_PER_ROTATION));
                 
+                // Передаем полный угол (0..PI) в шейдер
                 gradientUniforms.time.value = normalizedAngle * Math.PI;
             }
             
@@ -923,6 +925,7 @@
                                     shader.vertexShader = `
                                         uniform float time;
                                         uniform sampler2D gradientMask;
+                                        
                                         varying vec2 vGradientUv;
                                     \n` + shader.vertexShader;
                                     
@@ -933,10 +936,12 @@
                                     );
                                     
                                     // Добавляем функцию смены тона (Hue shift) в fragment shader
+                                    // === ФРАГМЕНТНЫЙ ШЕЙДЕР (ИСПРАВЛЕН) ===
                                     shader.fragmentShader = `
                                         uniform float time;
                                         uniform sampler2D gradientMask;
                                         varying vec2 vGradientUv;
+                                        
                                         
                                         // Функция для конвертации RGB в HSV
                                         vec3 rgb2hsv(vec3 c) {
