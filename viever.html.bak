@@ -220,7 +220,7 @@
         // Переменные для градиентного эффекта цвета
         let gradientMaskTexture = null;
         let hasGradientMask = false;
-        let gradientUniformsList = []; // Храним список uniforms для всех мешей
+        let gradientUniforms = null;
         let lastCameraAngle = 0;
         let accumulatedAngle = 0;
         
@@ -521,7 +521,7 @@
             if (controls) controls.update();
             
             // Вычисляем угол камеры по оси Y для градиентного эффекта
-            if (hasGradientMask && gradientMaskTexture && camera && model) {
+            if (hasGradientMask && gradientUniforms && camera && model) {
                 // Получаем текущий угол камеры вокруг модели по оси Y
                 const dx = camera.position.x - model.position.x;
                 const dz = camera.position.z - model.position.z;
@@ -541,18 +541,11 @@
                 accumulatedAngle += angleDiff;
                 lastCameraAngle = currentCameraAngle;
                 
-                // Преобразуем накопленный угол в диапазон [0, 1] для полного цикла туда-обратно
-                // Используем sin для плавного изменения от 0 до 1 и обратно за 180 градусов
+                // Преобразуем накопленный угол в диапазон [0, PI] для цикла туда-обратно
                 // Умножаем на HUE_CYCLES_PER_ROTATION для управления скоростью смены цветов
                 const normalizedAngle = Math.abs(Math.sin(accumulatedAngle * 0.5 * HUE_CYCLES_PER_ROTATION));
                 
-                // Обновляем uniforms во ВСЕХ материалах с градиентным эффектом
-                const timeValue = normalizedAngle * Math.PI;
-                for (let i = 0; i < gradientUniformsList.length; i++) {
-                    if (gradientUniformsList[i]) {
-                        gradientUniformsList[i].time.value = timeValue;
-                    }
-                }
+                gradientUniforms.time.value = normalizedAngle * Math.PI;
             }
             
             if (model) {
@@ -930,7 +923,6 @@
                                     shader.vertexShader = `
                                         uniform float time;
                                         uniform sampler2D gradientMask;
-                                        
                                         varying vec2 vGradientUv;
                                     \n` + shader.vertexShader;
                                     
@@ -941,12 +933,10 @@
                                     );
                                     
                                     // Добавляем функцию смены тона (Hue shift) в fragment shader
-                                    // === ФРАГМЕНТНЫЙ ШЕЙДЕР (ИСПРАВЛЕН) ===
                                     shader.fragmentShader = `
                                         uniform float time;
                                         uniform sampler2D gradientMask;
                                         varying vec2 vGradientUv;
-                                        
                                         
                                         // Функция для конвертации RGB в HSV
                                         vec3 rgb2hsv(vec3 c) {
@@ -1000,8 +990,8 @@
                                         '#include <dithering_fragment>\nvec4 correctedColor = gl_FragColor;\ncorrectedColor.rgb = applyHueShift(correctedColor.rgb);\ngl_FragColor = correctedColor;'
                                     );
                                     
-                                    // Сохраняем ссылку на uniforms в общий список для всех мешей
-                                    gradientUniformsList.push(shader.uniforms);
+                                    // Сохраняем ссылку на uniforms для обновления
+                                    gradientUniforms = shader.uniforms;
                                 };
                             }
                             

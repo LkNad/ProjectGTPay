@@ -220,7 +220,7 @@
         // Переменные для градиентного эффекта цвета
         let gradientMaskTexture = null;
         let hasGradientMask = false;
-        let gradientUniforms = null;
+        let gradientUniformsList = []; // Храним список uniforms для всех мешей
         let lastCameraAngle = 0;
         let accumulatedAngle = 0;
         
@@ -521,7 +521,7 @@
             if (controls) controls.update();
             
             // Вычисляем угол камеры по оси Y для градиентного эффекта
-            if (hasGradientMask && gradientUniforms && camera && model) {
+            if (hasGradientMask && gradientMaskTexture && camera && model) {
                 // Получаем текущий угол камеры вокруг модели по оси Y
                 const dx = camera.position.x - model.position.x;
                 const dz = camera.position.z - model.position.z;
@@ -546,8 +546,13 @@
                 // Умножаем на HUE_CYCLES_PER_ROTATION для управления скоростью смены цветов
                 const normalizedAngle = Math.abs(Math.sin(accumulatedAngle * 0.5 * HUE_CYCLES_PER_ROTATION));
                 
-                // Передаем полный угол (0..PI) в шейдер
-                gradientUniforms.time.value = normalizedAngle * Math.PI;
+                // Обновляем uniforms во ВСЕХ материалах с градиентным эффектом
+                const timeValue = normalizedAngle * Math.PI;
+                for (let i = 0; i < gradientUniformsList.length; i++) {
+                    if (gradientUniformsList[i]) {
+                        gradientUniformsList[i].time.value = timeValue;
+                    }
+                }
             }
             
             if (model) {
@@ -995,8 +1000,8 @@
                                         '#include <dithering_fragment>\nvec4 correctedColor = gl_FragColor;\ncorrectedColor.rgb = applyHueShift(correctedColor.rgb);\ngl_FragColor = correctedColor;'
                                     );
                                     
-                                    // Сохраняем ссылку на uniforms для обновления
-                                    gradientUniforms = shader.uniforms;
+                                    // Сохраняем ссылку на uniforms в общий список для всех мешей
+                                    gradientUniformsList.push(shader.uniforms);
                                 };
                             }
                             
