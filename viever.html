@@ -220,7 +220,7 @@
         // Переменные для градиентного эффекта цвета
         let gradientMaskTexture = null;
         let hasGradientMask = false;
-        let gradientUniforms = null;
+        let gradientUniformsList = []; // Массив uniforms для всех материалов
         let lastCameraAngle = 0;
         let accumulatedAngle = 0;
         
@@ -516,7 +516,7 @@
             if (controls) controls.update();
             
             // Вычисляем угол камеры по оси Y для градиентного эффекта
-            if (hasGradientMask && gradientUniforms && camera && model) {
+            if (hasGradientMask && gradientUniformsList.length > 0 && camera && model) {
                 // Получаем текущий угол камеры вокруг модели по оси Y
                 const dx = camera.position.x - model.position.x;
                 const dz = camera.position.z - model.position.z;
@@ -526,11 +526,11 @@
                 let angleDiff = currentCameraAngle - lastCameraAngle;
                 
                 // Корректируем переход через границу -PI/PI
-                /*if (angleDiff > Math.PI) {
+                if (angleDiff > Math.PI) {
                     angleDiff -= Math.PI * 2;
                 } else if (angleDiff < -Math.PI) {
                     angleDiff += Math.PI * 2;
-                }*/
+                }
                 
                 // Накопленный угол для плавной анимации
                 accumulatedAngle += angleDiff;
@@ -540,7 +540,10 @@
                 // При вращении на 360*2 градусов (2*PI накопленного) time пройдет путь 0->PI->0
                 const normalizedAngle = Math.abs(Math.sin(accumulatedAngle * 0.25));
                 
-                gradientUniforms.time.value = normalizedAngle * Math.PI;
+                // Обновляем time для всех материалов
+                for (let i = 0; i < gradientUniformsList.length; i++) {
+                    gradientUniformsList[i].time.value = normalizedAngle * Math.PI;
+                }
             }
             
             if (model) {
@@ -752,6 +755,9 @@
                   hasMetalness = !!metalnessUrl, hasAO = !!aoUrl,
                   hasPattern = !!patternUrl, hasMask = !!maskUrl;
             hasGradientMask = !!gradientMaskUrl;
+            
+            // Очищаем массив uniforms перед применением новых текстур
+            gradientUniformsList = [];
             
             if (!(hasAlbedo || hasNormal || hasRoughness || hasMetalness || hasAO)) return;
             
@@ -968,8 +974,8 @@
                                         '#include <dithering_fragment>\nvec4 correctedColor = gl_FragColor;\ncorrectedColor.rgb = applyHueShift(correctedColor.rgb, vGradientUv);\ngl_FragColor = correctedColor;'
                                     );
                                     
-                                    // Сохраняем ссылку на uniforms для обновления
-                                    gradientUniforms = shader.uniforms;
+                                    // Сохраняем ссылку на uniforms для обновления в массиве
+                                    gradientUniformsList.push(shader.uniforms);
                                 };
                             }
                             
@@ -1020,6 +1026,8 @@
             loader.load(url, (gltf) => {
                 if (model) { scene.remove(model); model = null; }
                 if (fallbackPlane) { scene.remove(fallbackPlane); fallbackPlane = null; }
+                // Очищаем массив uniforms при загрузке новой модели
+                gradientUniformsList = [];
                 model = gltf.scene;
                 const box = new THREE.Box3().setFromObject(model);
                 const center = box.getCenter(new THREE.Vector3());
