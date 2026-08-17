@@ -482,12 +482,12 @@
                     angleDiff += Math.PI * 2;
                 }
                 
-                // Накопленный угол для плавной анимации туда-обратно
+                // Накопленный угол для плавной анимации
                 accumulatedAngle += angleDiff;
                 lastCameraAngle = currentCameraAngle;
                 
                 // Преобразуем накопленный угол в диапазон [0, PI] для цикла туда-обратно
-                // Когда угол проходит 180 градусов (PI), начинаем движение обратно
+                // При вращении на 360 градусов (2*PI накопленного) time пройдет путь 0->PI->0
                 const normalizedAngle = Math.abs(Math.sin(accumulatedAngle * 0.5));
                 
                 gradientUniforms.time.value = normalizedAngle * Math.PI;
@@ -838,31 +838,49 @@
                                         'void main() {\nvGradientUv = uv;'
                                     );
 
-                                    // Добавляем функцию в fragment shader
+                                    // Добавляем функцию смены тона (Hue shift) в fragment shader
                                     shader.fragmentShader = `
                                         uniform float time;
                                         uniform sampler2D gradientMask;
                                         varying vec2 vGradientUv;
 
-                                        vec3 applyGradientColor(vec3 originalColor, vec2 uv) {
+                                        // Функция для конвертации RGB в HSV
+                                        vec3 rgb2hsv(vec3 c) {
+                                            vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+                                            vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+                                            vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+                                            float d = q.x - min(q.w, q.y);
+                                            float e = 1.0e-10;
+                                            return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+                                        }
+                                        
+                                        // Функция для конвертации HSV в RGB
+                                        vec3 hsv2rgb(vec3 c) {
+                                            vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+                                            vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+                                            return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+                                        }
+                                        
+                                        vec3 applyHueShift(vec3 originalColor, vec2 uv) {
                                             float maskValue = texture2D(gradientMask, uv).r;
                                             if (maskValue < 0.01) {
                                                 return originalColor;
                                             }
-                                            float angle = time;
-                                            vec3 color1 = vec3(0.25, 0.88, 0.82);
-                                            vec3 color2 = vec3(1.0, 0.42, 0.71);
-                                            vec3 color3 = vec3(0.56, 0.24, 0.86);
-                                            float t1 = sin(angle) * 0.5 + 0.5;
-                                            float t2 = sin(angle + 2.09439510239) * 0.5 + 0.5;
-                                            float t3 = sin(angle + 4.18879020479) * 0.5 + 0.5;
-                                            float total = t1 + t2 + t3;
-                                            t1 = t1 / total;
-                                            t2 = t2 / total;
-                                            t3 = t3 / total;
-                                            vec3 gradientColor = color1 * t1 + color2 * t2 + color3 * t3;
-                                            float blendIntensity = maskValue * 0.7;
-                                            return mix(originalColor, gradientColor, blendIntensity);
+                                            
+                                            // time идет от 0 до PI, нам нужен полный цикл 0..1 за PI
+                                            float hueShift = time / 3.14159265359;
+                                            
+                                            // Конвертируем исходный цвет в HSV
+                                            vec3 hsv = rgb2hsv(originalColor);
+                                            
+                                            // Сдвигаем тон (Hue) на значение hueShift
+                                            // Умножаем на maskValue чтобы чёрные участки маски не менялись
+                                            hsv.x = fract(hsv.x + hueShift * maskValue);
+                                            
+                                            // Возвращаем цвет обратно в RGB
+                                            vec3 shiftedColor = hsv2rgb(hsv);
+                                            
+                                            return shiftedColor;
                                         }
                                     
 ` + shader.fragmentShader;
@@ -870,7 +888,7 @@
                                     // Модифицируем outgoing light
                                     shader.fragmentShader = shader.fragmentShader.replace(
                                         '#include <dithering_fragment>',
-                                        '#include <dithering_fragment>\nvec4 correctedColor = gl_FragColor;\ncorrectedColor.rgb = applyGradientColor(correctedColor.rgb, vGradientUv);\ngl_FragColor = correctedColor;'
+                                        '#include <dithering_fragment>\nvec4 correctedColor = gl_FragColor;\ncorrectedColor.rgb = applyHueShift(correctedColor.rgb, vGradientUv);\ngl_FragColor = correctedColor;'
                                     );
 
                                     // Сохраняем ссылку на uniforms для обновления
