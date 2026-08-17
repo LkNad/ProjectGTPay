@@ -799,7 +799,8 @@
                                         uniform float time;
                                         uniform sampler2D gradientMask;
                                         varying vec2 vGradientUv;
-                                    ` + shader.vertexShader;
+                                    
+` + shader.vertexShader;
 
                                     // Заменяем main() чтобы передать UV
                                     shader.vertexShader = shader.vertexShader.replace(
@@ -825,10 +826,15 @@
                                             float t1 = sin(angle) * 0.5 + 0.5;
                                             float t2 = sin(angle + 2.09439510239) * 0.5 + 0.5;
                                             float t3 = sin(angle + 4.18879020479) * 0.5 + 0.5;
-                                            vec3 gradientColor = normalize(color1 * t1 + color2 * t2 + color3 * t3);
+                                            float total = t1 + t2 + t3;
+                                            t1 = t1 / total;
+                                            t2 = t2 / total;
+                                            t3 = t3 / total;
+                                            vec3 gradientColor = color1 * t1 + color2 * t2 + color3 * t3;
                                             return mix(originalColor, gradientColor, maskValue);
                                         }
-                                    ` + shader.fragmentShader;
+                                    
+` + shader.fragmentShader;
 
                                     // Модифицируем outgoing light
                                     shader.fragmentShader = shader.fragmentShader.replace(
