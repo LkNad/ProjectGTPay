@@ -282,6 +282,13 @@
         let altPressed = false;
         let dragCounter = 0;
         
+        // Переменные для градиентного эффекта цвета
+        let gradientMaskTexture = null;
+        let hasGradientMask = false;
+        let gradientUniforms = null;
+        let lastCameraAngle = 0;
+        let accumulatedAngle = 0;
+        
         let pendingTextureFile = null;
         let bgLogoImage = null;
         
@@ -301,6 +308,7 @@
         
         const patternUrl = urlParams.get('pattern');
         const maskUrl = urlParams.get('mask');
+        const gradientMaskUrl = urlParams.get('gradientMask');
         const patternSeedParam = urlParams.get('patternSeed');
         const currentPatternSeed = patternSeedParam ? parseInt(patternSeedParam, 10) : Math.floor(Math.random() * 1000);
         
@@ -456,6 +464,35 @@
         function animate() {
             requestAnimationFrame(animate);
             if (controls) controls.update();
+            
+            // Вычисляем угол камеры по оси Y для градиентного эффекта
+            if (hasGradientMask && gradientUniforms && camera && model) {
+                // Получаем текущий угол камеры вокруг модели по оси Y
+                const dx = camera.position.x - model.position.x;
+                const dz = camera.position.z - model.position.z;
+                const currentCameraAngle = Math.atan2(dx, dz);
+                
+                // Вычисляем разницу углов с учётом перехода через 360 градусов
+                let angleDiff = currentCameraAngle - lastCameraAngle;
+                
+                // Корректируем переход через границу -PI/PI
+                if (angleDiff > Math.PI) {
+                    angleDiff -= Math.PI * 2;
+                } else if (angleDiff < -Math.PI) {
+                    angleDiff += Math.PI * 2;
+                }
+                
+                // Накопленный угол для плавной анимации
+                accumulatedAngle += angleDiff;
+                lastCameraAngle = currentCameraAngle;
+                
+                // Преобразуем накопленный угол в диапазон [0, PI] для цикла туда-обратно
+                // При вращении на 360 градусов (2*PI накопленного) time пройдет путь 0->PI->0
+                const normalizedAngle = Math.abs(Math.sin(accumulatedAngle * 0.5));
+                
+                gradientUniforms.time.value = normalizedAngle * Math.PI;
+            }
+            
             if (model) {
                 const posX = parseFloat(posXSlider.value), posY = parseFloat(posYSlider.value), posZ = parseFloat(posZSlider.value);
                 const scale = parseFloat(scaleSlider.value);
@@ -634,6 +671,7 @@
             const hasAlbedo = !!albedoUrl, hasNormal = !!normalUrl, hasRoughness = !!roughnessUrl, 
                   hasMetalness = !!metalnessUrl, hasAO = !!aoUrl,
                   hasPattern = !!patternUrl, hasMask = !!maskUrl;
+            hasGradientMask = !!gradientMaskUrl;
             
             if (!(hasAlbedo || hasNormal || hasRoughness || hasMetalness || hasAO)) return;
             
@@ -643,8 +681,21 @@
             let patternReady = !hasPattern, maskReady = !hasMask, albedoReady = !hasAlbedo;
             let isPatternValid = hasPattern && hasMask;
             
+            // Загрузка градиентной маски
+            let gradientMaskReady = !hasGradientMask;
+            if (hasGradientMask) {
+                loadTextureSafely(gradientMaskUrl, (t) => { 
+                    gradientMaskTexture = t; 
+                    gradientMaskReady = true; 
+                    checkPatternPreload(); 
+                }, () => { 
+                    gradientMaskReady = true; 
+                    hasGradientMask = false; 
+                    checkPatternPreload(); 
+                });
+            }
             function checkPatternPreload() {
-                if (patternReady && maskReady && albedoReady) {
+                if (patternReady && maskReady && albedoReady && gradientMaskReady) {
                     applyToAllMaterials();
                     
                     if (hasPattern && hasMask && patternTexture && maskTexture) {
@@ -767,6 +818,83 @@
                             function checkDone() {
                                 if (pendingTasks <= 0) {
                                     child.material = newMat;
+                            // Применяем градиентный эффект если есть маска
+                            if (hasGradientMask && gradientMaskTexture && !isStatTrack) {
+                                newMat.onBeforeCompile = function(shader) {
+                                    shader.uniforms.time = { value: 0 };
+                                    shader.uniforms.gradientMask = { value: gradientMaskTexture };
+
+                                    // Добавляем uniform и varying в vertex shader
+                                    shader.vertexShader = `
+                                        uniform float time;
+                                        uniform sampler2D gradientMask;
+                                        varying vec2 vGradientUv;
+                                    
+` + shader.vertexShader;
+
+                                    // Заменяем main() чтобы передать UV
+                                    shader.vertexShader = shader.vertexShader.replace(
+                                        'void main() {',
+                                        'void main() {\nvGradientUv = uv;'
+                                    );
+
+                                    // Добавляем функцию смены тона (Hue shift) в fragment shader
+                                    shader.fragmentShader = `
+                                        uniform float time;
+                                        uniform sampler2D gradientMask;
+                                        varying vec2 vGradientUv;
+
+                                        // Функция для конвертации RGB в HSV
+                                        vec3 rgb2hsv(vec3 c) {
+                                            vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+                                            vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+                                            vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+                                            float d = q.x - min(q.w, q.y);
+                                            float e = 1.0e-10;
+                                            return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+                                        }
+                                        
+                                        // Функция для конвертации HSV в RGB
+                                        vec3 hsv2rgb(vec3 c) {
+                                            vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+                                            vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+                                            return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+                                        }
+                                        
+                                        vec3 applyHueShift(vec3 originalColor, vec2 uv) {
+                                            float maskValue = texture2D(gradientMask, uv).r;
+                                            if (maskValue < 0.01) {
+                                                return originalColor;
+                                            }
+                                            
+                                            // time идет от 0 до PI, нам нужен полный цикл 0..1 за PI
+                                            float hueShift = time / 3.14159265359;
+                                            
+                                            // Конвертируем исходный цвет в HSV
+                                            vec3 hsv = rgb2hsv(originalColor);
+                                            
+                                            // Сдвигаем тон (Hue) на значение hueShift
+                                            // Умножаем на maskValue чтобы чёрные участки маски не менялись
+                                            hsv.x = fract(hsv.x + hueShift * maskValue);
+                                            
+                                            // Возвращаем цвет обратно в RGB
+                                            vec3 shiftedColor = hsv2rgb(hsv);
+                                            
+                                            return shiftedColor;
+                                        }
+                                    
+` + shader.fragmentShader;
+
+                                    // Модифицируем outgoing light
+                                    shader.fragmentShader = shader.fragmentShader.replace(
+                                        '#include <dithering_fragment>',
+                                        '#include <dithering_fragment>\nvec4 correctedColor = gl_FragColor;\ncorrectedColor.rgb = applyHueShift(correctedColor.rgb, vGradientUv);\ngl_FragColor = correctedColor;'
+                                    );
+
+                                    // Сохраняем ссылку на uniforms для обновления
+                                    gradientUniforms = shader.uniforms;
+                                };
+                            }
                                     processed++;
                                     if (processed >= total) showLoading(false);
                                 }
