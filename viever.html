@@ -880,44 +880,38 @@
                                     shader.uniforms.time = { value: 0 };
                                     shader.uniforms.gradientMask = { value: gradientMaskTexture };
                                     
-                                    // Добавляем uniform в vertex shader
+                                    // Добавляем uniform и varying в vertex shader
                                     shader.vertexShader = `
                                         uniform float time;
                                         uniform sampler2D gradientMask;
-                                        varying vec2 vUv;
+                                        varying vec2 vGradientUv;
                                     ` + shader.vertexShader;
-                                    shader.vertexShader = shader.vertexShader.replace(
-                                        '#include <common>',
-                                        '#include <common>\nvarying vec2 vUv;'
-                                    );
+                                    
+                                    // Заменяем main() чтобы передать UV
                                     shader.vertexShader = shader.vertexShader.replace(
                                         'void main() {',
-                                        'void main() {\nvUv = uv;'
+                                        'void main() {\nvGradientUv = uv;'
                                     );
                                     
                                     // Добавляем функцию в fragment shader
                                     shader.fragmentShader = `
                                         uniform float time;
                                         uniform sampler2D gradientMask;
-                                        varying vec2 vUv;
+                                        varying vec2 vGradientUv;
                                         
                                         vec3 applyGradientColor(vec3 originalColor, vec2 uv) {
                                             float maskValue = texture2D(gradientMask, uv).r;
                                             if (maskValue < 0.01) {
                                                 return originalColor;
                                             }
-                                            float angle = time * 0.5;
+                                            float angle = time;
                                             vec3 color1 = vec3(0.25, 0.88, 0.82);
                                             vec3 color2 = vec3(1.0, 0.42, 0.71);
                                             vec3 color3 = vec3(0.56, 0.24, 0.86);
                                             float t1 = sin(angle) * 0.5 + 0.5;
-                                            float t2 = sin(angle + 2.094) * 0.5 + 0.5;
-                                            float t3 = sin(angle + 4.188) * 0.5 + 0.5;
-                                            float total = t1 + t2 + t3;
-                                            t1 /= total;
-                                            t2 /= total;
-                                            t3 /= total;
-                                            vec3 gradientColor = color1 * t1 + color2 * t2 + color3 * t3;
+                                            float t2 = sin(angle + 2.09439510239) * 0.5 + 0.5;
+                                            float t3 = sin(angle + 4.18879020479) * 0.5 + 0.5;
+                                            vec3 gradientColor = normalize(color1 * t1 + color2 * t2 + color3 * t3);
                                             return mix(originalColor, gradientColor, maskValue);
                                         }
                                     ` + shader.fragmentShader;
@@ -925,7 +919,7 @@
                                     // Модифицируем outgoing light
                                     shader.fragmentShader = shader.fragmentShader.replace(
                                         '#include <dithering_fragment>',
-                                        '#include <dithering_fragment>\nvec4 correctedColor = gl_FragColor;\ncorrectedColor.rgb = applyGradientColor(correctedColor.rgb, vUv);\ngl_FragColor = correctedColor;'
+                                        '#include <dithering_fragment>\nvec4 correctedColor = gl_FragColor;\ncorrectedColor.rgb = applyGradientColor(correctedColor.rgb, vGradientUv);\ngl_FragColor = correctedColor;'
                                     );
                                     
                                     // Сохраняем ссылку на uniforms для обновления
