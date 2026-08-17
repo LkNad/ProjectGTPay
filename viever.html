@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="icon" href="images/icon.png">
+    <title>Advanced 3D Model Viewer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Gold Shreaft', sans-serif !important; }
+        @font-face { font-family: 'Gold Shreaft'; src: url('fonts/gold_shreaft.ttf') format('truetype'); font-weight: normal; font-style: normal; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #000000 0%, #000000 100%) !important; color: white; min-height: 100vh; overflow-x: hidden; }
+        body.fallback-gradient { background: linear-gradient(135deg, #2a2a2a 0%, #4a4a4a 100%) !important; }
+        .app-container { display: flex; min-height: 100vh; gap: 20px; }
+        .scene-container { height: auto; width: auto; flex: 1; overflow: hidden; position: relative; min-width: 400px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); }
+        #viewer-canvas { width: 100%; height: 100%; display: block; }
+        .item-title { position: absolute; top: 20px; left: -10px; background: rgba(0, 0, 0, 0.0); color: white; padding: 8px 16px; border-radius: 8px; font-size: 40px; font-weight: bold; z-index: 10; max-width: 80%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .back-btn { position: absolute; bottom: 15px; left: 15px; background: rgba(50, 50, 50, 0.5); color: #9c9c9c; border: 2px solid #9c9c9c; padding: 12px 60px; border-radius: 1px; cursor: pointer; z-index: 10; font-size: 16px; text-transform: uppercase; }
+        .back-btn:hover { background: rgba(55, 55, 55, 0.5); }
+        
+        /* === СТИЛЬ БЛОКА ПАТТЕРНА === */
+        .pattern-display {
+			transform: translate(-60px, -40px);
+            position: absolute;
+            bottom: 60px;
+            right: 25px;
+            background: rgba(0, 0, 0, 0.2);
+            border: none;
+            border-radius: 12px;
+            padding: 10px 16px;
+            display: none;
+            align-items: center;
+            gap: 12px;
+            z-index: 20;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            backdrop-filter: blur(5px);
+            user-select: none;
+        }
+        .pattern-display:hover {
+            background: rgba(0, 0, 0, 0.5);
+        }
+        .pattern-logo {
+            width: 28px;
+            height: 28px;
+            object-fit: contain;
+            display: block;
+            pointer-events: none;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+        }
+        .pattern-seed {
+            font-size: 26px;
+            font-weight: 800;
+            color: #ffffff;
+            min-width: 55px;
+            text-align: center;
+            font-family: monospace;
+            letter-spacing: 2px;
+            pointer-events: none;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+        }
+        .pattern-display.editing {
+            cursor: default;
+            background: rgba(20, 20, 20, 0.95);
+        }
+        .pattern-display.editing .pattern-seed {
+            color: #667eea;
+            background: transparent;
+            pointer-events: auto;
+        }
+        
+        .loading-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); display: flex; justify-content: center; align-items: center; color: white; font-size: 18px; z-index: 30; display: none; }
+        .spinner { width: 30px; height: 30px; border: 3px solid rgba(255, 255, 255, 0.3); border-radius: 50%; border-top-color: #667eea; animation: spin 1s linear infinite; margin-right: 10px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .drop-zone { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; font-size: 24px; z-index: 15; display: none; border: 3px dashed #667eea; border-radius: 15px; pointer-events: none; }
+        .drop-zone p { margin-top: 20px; font-size: 16px; text-align: center; max-width: 80%; }
+        .controls-panel { width: 420px; background: rgba(25, 25, 45, 0.95); border-radius: 15px; padding: 25px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); backdrop-filter: blur(10px); max-height: calc(100vh - 40px); overflow-y: auto; display: none; }
+        .panel-header { text-align: center; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 2px solid #667eea; display: flex; justify-content: space-between; align-items: center; }
+        .panel-header h2 { font-size: 24px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin: 0; }
+        .toggle-controls-btn { background: none; border: none; color: #667eea; font-size: 20px; cursor: pointer; padding: 5px; }
+        .upload-section { margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+        .upload-section h3 { margin-bottom: 15px; color: #667eea; font-size: 18px; }
+        .upload-btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 12px 20px; border-radius: 10px; cursor: pointer; width: 100%; margin: 8px 0; font-weight: 600; transition: transform 0.2s, box-shadow 0.2s; font-size: 14px; }
+        .upload-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4); }
+        .control-group { margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+        .control-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .control-group h3 { margin-bottom: 15px; color: #667eea; font-size: 18px; }
+        .light-control, .transform-control { margin-bottom: 15px; }
+        .light-control h4, .transform-control h4 { margin-bottom: 8px; font-size: 13px; color: #a0a0ff; font-weight: 500; }
+        .slider-container { display: flex; align-items: center; gap: 10px; }
+        .slider-container input { flex: 1; height: 6px; background: rgba(102, 126, 234, 0.3); border-radius: 3px; outline: none; }
+        .slider-container input::-webkit-slider-thumb { appearance: none; width: 18px; height: 18px; background: #667eea; border-radius: 50%; cursor: pointer; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3); }
+        .slider-value { width: 60px; text-align: right; font-size: 12px; color: #667eea; font-weight: bold; }
+        .action-btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; width: 100%; margin-top: 10px; font-size: 13px; font-weight: 600; transition: transform 0.2s; }
+        .action-btn:hover { transform: translateY(-1px); }
+        .render-btn { background: linear-gradient(135deg, #FF512F 0%, #DD2476 100%); color: white; border: none; padding: 12px 15px; border-radius: 8px; cursor: pointer; width: 100%; margin-top: 10px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 4px 15px rgba(221, 36, 118, 0.4); }
+        .render-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(221, 36, 118, 0.6); }
+        .render-shadow-btn { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; border: none; padding: 12px 15px; border-radius: 8px; cursor: pointer; width: 100%; margin-top: 10px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 4px 15px rgba(56, 239, 125, 0.4); }
+        .render-shadow-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(56, 239, 125, 0.6); }
+        .file-input { display: none; }
+        @media (max-width: 950px) { .app-container { flex-direction: column; } .scene-container { min-width: auto; height: 400px; } .controls-panel { width: 100%; max-height: 500px; } }
+        @media (max-width: 500px) { .scene-container { height: 300px; } .controls-panel { max-height: 400px; } }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="scene-container" id="scene-container">
+            <canvas id="viewer-canvas"></canvas>
+            <div id="item-title" class="item-title" style="display: none;"></div>
+            <button id="back-btn" class="back-btn">назад</button>
+            
+            <!-- === БЛОК ПАТТЕРНА === -->
+            <div id="pattern-display" class="pattern-display">
+                <img src="images/pattern_logo.png" alt="Pattern" class="pattern-logo" id="pattern-logo" onerror="this.style.display='none'">
+                <span class="pattern-seed" id="pattern-seed">000</span>
+            </div>
+            
+            <div id="loading-overlay" class="loading-overlay">
+                <div class="spinner"></div>
+                <span>Loading...</span>
+            </div>
+            <div class="drop-zone" id="drop-zone">
+                <div>Перетащите файл сюда</div>
+                <p>Поддерживаются модели (.glb, .gltf) и текстуры (.jpg, .png, .webp)</p>
+            </div>
+        </div>
+        
+        <div class="controls-panel" id="controls-panel">
+            <div class="panel-header">
+                <h2>Настройки модели</h2>
+                <button class="toggle-controls-btn" id="toggle-controls-btn">×</button>
+            </div>
+            <div class="upload-section">
+                <h3>📁 Загрузить контент</h3>
+                <input type="file" id="model-input" class="file-input" accept=".glb,.gltf">
+                <input type="file" id="texture-input" class="file-input" accept=".jpg,.jpeg,.png,.webp">
+                <button id="load-model-btn" class="upload-btn">Выбрать модель (GLB/GLTF)</button>
+                <button id="load-texture-btn" class="upload-btn">Выбрать текстуру (опционально)</button>
+            </div>
+            <div class="control-group">
+                <h3>🔄 Трансформация модели</h3>
+                <div class="transform-control"><h4>Позиция X</h4><div class="slider-container"><input type="range" id="pos-x" min="-50" max="50" step="0.1" value="0"><span class="slider-value" id="pos-x-value">0.0</span></div></div>
+                <div class="transform-control"><h4>Позиция Y</h4><div class="slider-container"><input type="range" id="pos-y" min="-50" max="50" step="0.1" value="0"><span class="slider-value" id="pos-y-value">0.0</span></div></div>
+                <div class="transform-control"><h4>Позиция Z</h4><div class="slider-container"><input type="range" id="pos-z" min="-50" max="50" step="0.1" value="0"><span class="slider-value" id="pos-z-value">0.0</span></div></div>
+                <div class="transform-control"><h4>Масштаб</h4><div class="slider-container"><input type="range" id="scale" min="0.01" max="20" step="0.01" value="1.0"><span class="slider-value" id="scale-value">1.00</span></div></div>
+                <div class="transform-control"><h4>Вращение X</h4><div class="slider-container"><input type="range" id="rot-x" min="0" max="360" step="1" value="0"><span class="slider-value" id="rot-x-value">0°</span></div></div>
+				<div class="transform-control"><h4>Вращение Y</h4><div class="slider-container"><input type="range" id="rot-y" min="0" max="360" step="1" value="0"><span class="slider-value" id="rot-y-value">0°</span></div></div>
+				<div class="transform-control"><h4>Вращение Z</h4><div class="slider-container"><input type="range" id="rot-z" min="0" max="360" step="1" value="0"><span class="slider-value" id="rot-z-value">0°</span></div></div>
+				<button id="reset-transform-btn" class="action-btn">Сбросить трансформацию</button>
+            </div>
+            <div class="control-group">
+                <h3>💡 Система освещения</h3>
+                <div class="light-control"><h4>Интенсивность основного света</h4><div class="slider-container"><input type="range" id="main-intensity" min="0" max="10" step="0.1" value="4.2"><span class="slider-value" id="main-value">4.2</span></div></div>
+                <div class="light-control"><h4>Интенсивность заполняющего света 1</h4><div class="slider-container"><input type="range" id="fill1-intensity" min="0" max="10" step="0.1" value="4.0"><span class="slider-value" id="fill1-value">4.0</span></div></div>
+                <div class="light-control"><h4>Интенсивность заполняющего света 2</h4><div class="slider-container"><input type="range" id="fill2-intensity" min="0" max="10" step="0.1" value="4.4"><span class="slider-value" id="fill2-value">4.4</span></div></div>
+                <div class="light-control"><h4>Интенсивность заднего света</h4><div class="slider-container"><input type="range" id="back-intensity" min="0" max="10" step="0.1" value="3.5"><span class="slider-value" id="back-value">3.5</span></div></div>
+                <div class="light-control"><h4>Окружающий свет</h4><div class="slider-container"><input type="range" id="ambient-light" min="0" max="10" step="0.1" value="3.8"><span class="slider-value" id="ambient-value">3.8</span></div></div>
+                <button id="reset-lights-btn" class="action-btn">Сбросить освещение</button>
+            </div>
+            <div class="control-group" style="border-bottom: none;">
+                <button id="render-btn" class="render-btn">📷 Рендер (прозрачный)</button>
+                <button id="render-shadow-btn" class="render-shadow-btn">🎨 Рендер с тенью</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM элементы
+        const canvas = document.getElementById('viewer-canvas');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const backBtn = document.getElementById('back-btn');
+        const itemTitle = document.getElementById('item-title');
+        const controlsPanel = document.getElementById('controls-panel');
+        const toggleControlsBtn = document.getElementById('toggle-controls-btn');
+        const modelInput = document.getElementById('model-input');
+        const textureInput = document.getElementById('texture-input');
+        const loadModelBtn = document.getElementById('load-model-btn');
+        const loadTextureBtn = document.getElementById('load-texture-btn');
+        const sceneContainer = document.getElementById('scene-container');
+        const dropZone = document.getElementById('drop-zone');
+        const renderBtn = document.getElementById('render-btn');
+        const renderShadowBtn = document.getElementById('render-shadow-btn');
+        
+        // Элементы паттерна
+        const patternDisplay = document.getElementById('pattern-display');
+        const patternSeedEl = document.getElementById('pattern-seed');
+        const patternLogoEl = document.getElementById('pattern-logo');
+        
+        // Слайдеры трансформации
+        const posXSlider = document.getElementById('pos-x'), posXValue = document.getElementById('pos-x-value');
+        const posYSlider = document.getElementById('pos-y'), posYValue = document.getElementById('pos-y-value');
+        const posZSlider = document.getElementById('pos-z'), posZValue = document.getElementById('pos-z-value');
+        const scaleSlider = document.getElementById('scale'), scaleValue = document.getElementById('scale-value');
+        const rotXSlider = document.getElementById('rot-x'), rotXValue = document.getElementById('rot-x-value');
+        const rotYSlider = document.getElementById('rot-y'), rotYValue = document.getElementById('rot-y-value');
+        const rotZSlider = document.getElementById('rot-z'), rotZValue = document.getElementById('rot-z-value');
+        const resetTransformBtn = document.getElementById('reset-transform-btn');
+        
+        // Слайдеры освещения
+        const mainIntensitySlider = document.getElementById('main-intensity'), mainValue = document.getElementById('main-value');
+        const fill1IntensitySlider = document.getElementById('fill1-intensity'), fill1Value = document.getElementById('fill1-value');
+        const fill2IntensitySlider = document.getElementById('fill2-intensity'), fill2Value = document.getElementById('fill2-value');
+        const backIntensitySlider = document.getElementById('back-intensity'), backValue = document.getElementById('back-value');
+        const ambientLightSlider = document.getElementById('ambient-light'), ambientValue = document.getElementById('ambient-value');
+        const resetLightsBtn = document.getElementById('reset-lights-btn');
+        
+        // Three.js переменные
+        let scene, camera, renderer, model, controls;
+        let mainLight, fillLight1, fillLight2, backLight, ambientLightObj;
+        let originalModelPosition = new THREE.Vector3();
+        let originalModelScale = new THREE.Vector3(1, 1, 1);
+        let textureLoader = new THREE.TextureLoader();
+        let fallbackPlane = null;
+        let isModelLoaded = false;
+        let altPressed = false;
+        let dragCounter = 0;
+        
+        // URL параметры
+        const urlParams = new URLSearchParams(window.location.search);
+        const modelUrl = urlParams.get('model');
+        const bgUrl = urlParams.get('bg');
+        const rarity = urlParams.get('rarity');
+        const backUrl = urlParams.get('backUrl');
+        const titleText = urlParams.get('title');
+        const collectionText = urlParams.get('collection');
+        const albedoUrl = urlParams.get('albedo');
+        const normalUrl = urlParams.get('normal');
+        const roughnessUrl = urlParams.get('roughness');
+        const metalnessUrl = urlParams.get('metalness');
+        const aoUrl = urlParams.get('ao');
+        // === ПАТТЕРНЫ ===
+        const patternUrl = urlParams.get('pattern');
+        const maskUrl = urlParams.get('mask');
+        // === СИД ПАТТЕРНА ===
+        const patternSeedParam = urlParams.get('patternSeed');
+        const currentPatternSeed = patternSeedParam ? parseInt(patternSeedParam, 10) : Math.floor(Math.random() * 1000);
+        
+        // === НОВАЯ ЛОГИКА ГЕНЕРАЦИИ ПАРАМЕТРОВ ИЗ СИДА ===
+        // Используем сид как зерно для детерминированной "случайности"
+        // Функция pseudo-random generator на основе сида
+        function seededRandom(seed) {
+            var x = Math.sin(seed++) * 10000;
+            return x - Math.floor(x);
+        }
+
+        // Генерируем уникальные параметры для текущего сида
+        // Смещение по X: от -1000 до +1000 пикселей
+        const randomOffsetX = (seededRandom(currentPatternSeed) * 2000) - 1000;
+        // Смещение по Y: от -1000 до +1000 пикселей
+        const randomOffsetY = (seededRandom(currentPatternSeed + 1) * 2000) - 1000;
+        // Вращение: от 0 до 360 градусов (в радианах)
+        const randomRotation = seededRandom(currentPatternSeed + 2) * Math.PI * 2;
+        
+        // Кнопка "Назад"
+        if (backUrl) {
+            backBtn.style.display = 'block';
+            backBtn.onclick = () => {
+                if (window.opener) { window.opener.focus(); } 
+                else { window.open(backUrl, '_mainSite'); }
+                window.close();
+            };
+        }
+        
+        // Инициализация UI паттерна
+        function initPatternDisplay() {
+            patternSeedEl.textContent = String(currentPatternSeed).padStart(3, '0');
+            patternDisplay.addEventListener('click', handlePatternSeedClick);
+        }
+        
+        function handlePatternSeedClick(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (patternDisplay.classList.contains('editing')) return;
+            
+            const currentSeed = patternSeedEl.textContent;
+            patternDisplay.classList.add('editing');
+            
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.min = '0';
+            input.max = '999';
+            input.value = currentSeed;
+            input.style.cssText = `
+                background: transparent;
+                border: none;
+                color: #667eea;
+                font-size: 24px;
+                font-weight: bold;
+                font-family: monospace;
+                text-align: center;
+                width: 60px;
+                outline: none;
+            `;
+            
+            patternSeedEl.textContent = '';
+            patternSeedEl.appendChild(input);
+            input.focus();
+            input.select();
+            
+            const finishEdit = (newSeed) => {
+                patternDisplay.classList.remove('editing');
+                patternSeedEl.textContent = String(newSeed).padStart(3, '0');
+                const newUrl = new URL(window.location.href);
+                newUrl.searchParams.set('patternSeed', String(newSeed));
+                window.location.href = newUrl.toString();
+            };
+            
+            input.addEventListener('blur', () => {
+                let val = parseInt(input.value, 10);
+                if (isNaN(val) || val < 0) val = 0;
+                if (val > 999) val = 999;
+                finishEdit(val);
+            });
+            
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    let val = parseInt(input.value, 10);
+                    if (isNaN(val) || val < 0) val = 0;
+                    if (val > 999) val = 999;
+                    finishEdit(val);
+                }
+                if (e.key === 'Escape') {
+                    patternDisplay.classList.remove('editing');
+                    patternSeedEl.textContent = currentSeed;
+                }
+            });
+        }
+        
+        // Заголовок
+        if (titleText || rarity || collectionText) {
+            itemTitle.style.display = 'block';
+            itemTitle.innerHTML = '';
+            const mainRow = document.createElement('div');
+            mainRow.style.display = 'flex';
+            mainRow.style.alignItems = 'flex-start';
+            mainRow.style.gap = '5px';
+            const logoUrl = urlParams.get('logo');
+            if (logoUrl && logoUrl !== 'undefined') {
+                const logoImg = document.createElement('img');
+                logoImg.src = logoUrl;
+                logoImg.style.height = '100px';
+                logoImg.style.width = 'auto';
+                logoImg.style.objectFit = 'contain';
+                logoImg.style.display = 'block';
+                logoImg.style.alignSelf = 'flex-start';
+                logoImg.onerror = () => { if (logoImg.parentNode) logoImg.parentNode.removeChild(logoImg); };
+                mainRow.appendChild(logoImg);
+            }
+            const textColumn = document.createElement('div');
+            textColumn.style.display = 'flex';
+            textColumn.style.flexDirection = 'column';
+            textColumn.style.justifyContent = 'center';
+            textColumn.style.transform = 'translate(2px, 5px)';
+            const titleRarityRow = document.createElement('div');
+            titleRarityRow.style.display = 'flex';
+            titleRarityRow.style.alignItems = 'center';
+            titleRarityRow.style.gap = '12px';
+            if (titleText) {
+                const upperTitle = titleText.toUpperCase();
+                const statTrackIndex = upperTitle.indexOf('STATTRACK');
+                if (statTrackIndex !== -1) {
+                    const statTrackSpan = document.createElement('span');
+                    statTrackSpan.textContent = upperTitle.substring(statTrackIndex, statTrackIndex + 9) + '*';
+                    statTrackSpan.style.fontWeight = 'bold';
+                    statTrackSpan.style.fontSize = '38px';
+                    statTrackSpan.style.color = '#e8c945';
+                    titleRarityRow.appendChild(statTrackSpan);
+                    if (statTrackIndex > 0) {
+                        const beforeSpan = document.createElement('span');
+                        beforeSpan.textContent = upperTitle.substring(0, statTrackIndex);
+                        beforeSpan.style.fontWeight = 'bold';
+                        beforeSpan.style.fontSize = '40px';
+                        beforeSpan.style.color = 'white';
+                        beforeSpan.style.transform = 'translateX(-6px)';
+                        titleRarityRow.appendChild(beforeSpan);
+                    }
+                    const afterIndex = statTrackIndex + 9;
+                    if (afterIndex < upperTitle.length) {
+                        const afterSpan = document.createElement('span');
+                        afterSpan.textContent = upperTitle.substring(afterIndex);
+                        afterSpan.style.fontWeight = 'bold';
+                        afterSpan.style.fontSize = '40px';
+                        afterSpan.style.color = 'white';
+                        afterSpan.style.transform = 'translateX(-14px)';
+                        titleRarityRow.appendChild(afterSpan);
+                    }
+                } else {
+                    const titleSpan = document.createElement('span');
+                    titleSpan.textContent = upperTitle;
+                    titleSpan.style.fontWeight = 'bold';
+                    titleSpan.style.fontSize = '40px';
+                    titleSpan.style.color = 'white';
+                    titleRarityRow.appendChild(titleSpan);
+                }
+            }
+            let hasRarity = rarity && rarity.toLowerCase() !== 'none';
+            if (hasRarity) {
+                const rarityNameMap = { 'none-rarity': 'None', 'gold-none': 'None', 'case-none': 'None', 'box-none': 'None', 'common': 'Common', 'uncommon': 'Uncommon', 'rare': 'Rare', 'epic': 'Epic', 'legendary': 'Legendary', 'arcane': 'Arcane', 'nameless': 'Nameless' };
+                const displayName = rarityNameMap[rarity.toLowerCase()] || rarity;
+                const rarityBox = document.createElement('span');
+                rarityBox.textContent = displayName.toUpperCase();
+                rarityBox.style.fontSize = '18px';
+                rarityBox.style.color = '#ffffff';
+                rarityBox.style.fontWeight = 'bold';
+                rarityBox.style.padding = '6px 14px';
+                rarityBox.style.borderRadius = '1px';
+                rarityBox.style.display = 'inline-block';
+                const rarityColors = { 'none-rarity': '#c2c2c2', 'gold-none': '#d39e19', 'case-none': '#d39e19', 'box-none': '#c2c2c2', 'common': '#a5a5a5', 'uncommon': '#0eb2d3', 'rare': '#5555ff', 'epic': '#aa55ff', 'legendary': '#ab27ab', 'arcane': '#d10000', 'nameless': '#d39e19' };
+                const key = rarity.toLowerCase();
+                const fillColor = rarityColors[key] || 'white';
+                rarityBox.style.backgroundColor = fillColor;
+                rarityBox.style.border = '1px solid ' + fillColor;
+                titleRarityRow.appendChild(rarityBox);
+            }
+            if (titleText || hasRarity) { textColumn.appendChild(titleRarityRow); }
+            if (collectionText) {
+                const collectionSpan = document.createElement('div');
+                collectionSpan.style.fontSize = '22px';
+                collectionSpan.style.fontWeight = 'normal';
+                collectionSpan.style.marginTop = '8px';
+                const collectionLabel = document.createElement('span');
+                collectionLabel.textContent = 'Коллекция: '.toUpperCase();
+                collectionLabel.style.color = '#cccccc';
+                const collectionName = document.createElement('span');
+                collectionName.textContent = collectionText.toUpperCase();
+                collectionName.style.color = '#ffffff';
+                collectionName.style.fontWeight = 'bold';
+                collectionSpan.appendChild(collectionLabel);
+                collectionSpan.appendChild(collectionName);
+                textColumn.appendChild(collectionSpan);
+            }
+            mainRow.appendChild(textColumn);
+            itemTitle.appendChild(mainRow);
+        }
+        
+        // Инициализация сцены
+        function initScene() {
+            scene = new THREE.Scene();
+            const container = canvas.parentElement;
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000);
+            camera.position.set(0, 0, 20);
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true, preserveDrawingBuffer: true, powerPreference: "high-performance" });
+            renderer.setSize(width, height);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.LinearToneMapping;
+            renderer.outputEncoding = THREE.sRGBEncoding;
+            renderer.physicallyCorrectLights = false;
+            createLights();
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.08;
+            controls.screenSpacePanning = true;
+            controls.enableZoom = true;
+            controls.zoomSpeed = 1.5;
+            controls.minDistance = 0.01;
+            controls.maxDistance = 500;
+            controls.enablePan = true;
+            controls.autoRotate = false;
+            controls.autoRotateSpeed = 1.0;
+            controls.enableKeys = true;
+            window.addEventListener('resize', onWindowResize);
+            animate();
+        }
+        
+        function createLights() {
+            ambientLightObj = new THREE.AmbientLight(0xffffff, parseFloat(ambientLightSlider.value));
+            scene.add(ambientLightObj);
+            mainLight = new THREE.DirectionalLight(0xffffff, parseFloat(mainIntensitySlider.value));
+            mainLight.position.set(20, 20, 20);
+            mainLight.castShadow = true;
+            mainLight.shadow.mapSize.width = 2048;
+            mainLight.shadow.mapSize.height = 2048;
+            mainLight.shadow.camera.near = 0.5;
+            mainLight.shadow.camera.far = 50;
+            mainLight.shadow.camera.left = -20;
+            mainLight.shadow.camera.right = 20;
+            mainLight.shadow.camera.top = 20;
+            mainLight.shadow.camera.bottom = -20;
+            scene.add(mainLight);
+            fillLight1 = new THREE.DirectionalLight(0xffffff, parseFloat(fill1IntensitySlider.value));
+            fillLight1.position.set(-15, 10, -15);
+            scene.add(fillLight1);
+            fillLight2 = new THREE.DirectionalLight(0xffffff, parseFloat(fill2IntensitySlider.value));
+            fillLight2.position.set(10, -15, 10);
+            scene.add(fillLight2);
+            backLight = new THREE.DirectionalLight(0xffffff, parseFloat(backIntensitySlider.value));
+            backLight.position.set(0, 0, -25);
+            scene.add(backLight);
+        }
+        
+        function onWindowResize() {
+            const container = canvas.parentElement;
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            if (controls) controls.update();
+            if (model) {
+                const posX = parseFloat(posXSlider.value), posY = parseFloat(posYSlider.value), posZ = parseFloat(posZSlider.value);
+                const scale = parseFloat(scaleSlider.value);
+                const rotXDeg = parseFloat(rotXSlider.value), rotYDeg = parseFloat(rotYSlider.value), rotZDeg = parseFloat(rotZSlider.value);
+                const rotX = rotXDeg * Math.PI / 180;
+                const rotY = rotYDeg * Math.PI / 180;
+                const rotZ = rotZDeg * Math.PI / 180;
+                model.position.x = originalModelPosition.x + posX;
+                model.position.y = originalModelPosition.y + posY;
+                model.position.z = originalModelPosition.z + posZ;
+                model.scale.set(originalModelScale.x * scale, originalModelScale.y * scale, originalModelScale.z * scale);
+                model.rotation.set(rotX, rotY, rotZ);
+            }
+            renderer.render(scene, camera);
+        }
+        
+        function loadTextureSafely(url, onSuccess, onError, isColor = true) {
+            if (!url) { onError?.(); return; }
+            textureLoader.load(
+                url,
+                (tex) => {
+                    tex.wrapS = THREE.RepeatWrapping;
+                    tex.wrapT = THREE.RepeatWrapping;
+                    tex.minFilter = THREE.LinearMipmapLinearFilter;
+                    tex.magFilter = THREE.LinearFilter;
+                    tex.flipY = false;
+                    if (isColor) tex.encoding = THREE.sRGBEncoding;
+                    onSuccess(tex);
+                },
+                undefined,
+                (err) => {
+                    console.warn('Не удалось загрузить текстуру:', url);
+                    onError?.();
+                }
+            );
+        }
+        
+        // === ОБНОВЛЕННАЯ ФУНКЦИЯ ПРИМЕНЕНИЯ ПАТТЕРНА С ВРАЩЕНИЕМ ===
+        function applyPatternWithMask(albedoTexture, patternTexture, maskTexture, callback) {
+            if (!albedoTexture?.image) { callback(albedoTexture); return; }
+            if (!patternTexture?.image || !maskTexture?.image) { callback(albedoTexture); return; }
+            
+            const cvs = document.createElement('canvas');
+            const ctx = cvs.getContext('2d', { willReadFrequently: true });
+            
+            const width = albedoTexture.image.width || 1024;
+            const height = albedoTexture.image.height || 1024;
+            cvs.width = width; cvs.height = height;
+            
+            // 1. Рисуем базовую Albedo текстуру
+            ctx.drawImage(albedoTexture.image, 0, 0, width, height);
+            const baseData = ctx.getImageData(0, 0, width, height);
+            
+            // 2. Создаем БЕСШОВНЫЙ тайл (Seamless Tile)
+            // Используем метод "Offset + Feather": сдвигаем изображение на 50% и смягчаем центр
+            const patImg = patternTexture.image;
+            const tileSize = Math.min(patImg.width, patImg.height);
+            
+            const tileCvs = document.createElement('canvas');
+            tileCvs.width = tileSize;
+            tileCvs.height = tileSize;
+            const tCtx = tileCvs.getContext('2d', { willReadFrequently: true });
+            
+            // А) Рисуем оригинал по центру
+            tCtx.drawImage(patImg, 0, 0, tileSize, tileSize, 0, 0, tileSize, tileSize);
+            
+            // Б) Рисуем сдвинутую копию (Offset by 50%) поверх с мягким градиентом
+            // Это "склеивает" противоположные края в центре
+            tCtx.save();
+            tCtx.globalCompositeOperation = 'source-over';
+            
+            // Создаем радиальный градиент для маскирования сдвинутой копии
+            // Центр градиента - центр холста. 
+            // Внутренний круг прозрачный (чтобы не перекрывать центр оригинала слишком сильно), внешний - непрозрачный
+            const gradient = tCtx.createRadialGradient(tileSize/2, tileSize/2, tileSize * 0.25, tileSize/2, tileSize/2, tileSize * 0.7);
+            gradient.addColorStop(0, 'rgba(0,0,0,0)');
+            gradient.addColorStop(1, 'rgba(0,0,0,1)');
+            
+            tCtx.fillStyle = gradient;
+            
+            // Сдвигаем контекст на 50%
+            tCtx.translate(tileSize / 2, tileSize / 2);
+            
+            // Рисуем маску
+            tCtx.fillRect(-tileSize/2, -tileSize/2, tileSize, tileSize);
+            
+            // Рисуем саму текстуру (сдвинутую) под маской
+            // Важно: мы рисуем её так, чтобы она легла поверх краев оригинала
+            tCtx.globalCompositeOperation = 'source-in'; // Оставляем пиксели только там, где градиент
+            tCtx.drawImage(patImg, -tileSize/2, -tileSize/2, tileSize, tileSize);
+            
+            tCtx.restore();
+            
+            // Теперь tileCvs содержит текстуру, у которой края идеально совпадают друг с другом
+            
+            // 3. Подготовка к финальному рендеру с вращением
+            const rotatedCvs = document.createElement('canvas');
+            // Диагональ для безопасного вращения без черных углов
+            const diag = Math.ceil(Math.sqrt(width*width + height*height));
+            rotatedCvs.width = diag;
+            rotatedCvs.height = diag;
+            const rCtx = rotatedCvs.getContext('2d');
+            
+            // Создаем паттерн из нашего сглаженного тайла
+            const seamlessPattern = rCtx.createPattern(tileCvs, 'repeat');
+            
+            rCtx.save();
+            rCtx.translate(diag/2, diag/2);
+            rCtx.rotate(randomRotation); // Вращение из сида
+            rCtx.translate(-diag/2, -diag/2);
+            
+            // Смещение из сида
+            const offsetX = randomOffsetX % tileSize;
+            const offsetY = randomOffsetY % tileSize;
+            
+            rCtx.save();
+            rCtx.translate(offsetX, offsetY); 
+            rCtx.fillStyle = seamlessPattern;
+            // Заполняем с запасом
+            rCtx.fillRect(-tileSize, -tileSize, diag + tileSize*2, diag + tileSize*2);
+            rCtx.restore();
+            
+            rCtx.restore();
+            
+            // 4. Вырезаем итоговый кусок и накладываем маску
+            ctx.drawImage(rotatedCvs, (diag - width)/2, (diag - height)/2, width, height, 0, 0, width, height);
+            const patternData = ctx.getImageData(0, 0, width, height);
+            
+            // Маска
+            ctx.drawImage(maskTexture.image, 0, 0, width, height);
+            const maskImageData = ctx.getImageData(0, 0, width, height);
+            
+            // Композитинг
+            const result = ctx.createImageData(width, height);
+            for (let i = 0; i < baseData.data.length; i += 4) {
+                const maskLuminance = (maskImageData.data[i] + maskImageData.data[i+1] + maskImageData.data[i+2]) / 3;
+                const maskFactor = maskLuminance / 255;
+                
+                result.data[i] = baseData.data[i] * (1 - maskFactor) + patternData.data[i] * maskFactor;
+                result.data[i+1] = baseData.data[i+1] * (1 - maskFactor) + patternData.data[i+1] * maskFactor;
+                result.data[i+2] = baseData.data[i+2] * (1 - maskFactor) + patternData.data[i+2] * maskFactor;
+                result.data[i+3] = 255;
+            }
+            ctx.putImageData(result, 0, 0);
+            
+            const resultTexture = new THREE.CanvasTexture(cvs);
+            resultTexture.wrapS = albedoTexture.wrapS;
+            resultTexture.wrapT = albedoTexture.wrapT;
+            resultTexture.minFilter = albedoTexture.minFilter;
+            resultTexture.magFilter = albedoTexture.magFilter;
+            resultTexture.encoding = albedoTexture.encoding;
+            resultTexture.flipY = false;
+            resultTexture.needsUpdate = true;
+            
+            callback(resultTexture);
+        }
+        
+        function applyTexturesToModel() {
+            if (!model) return;
+            
+            const hasAlbedo = !!albedoUrl, hasNormal = !!normalUrl, hasRoughness = !!roughnessUrl, 
+                  hasMetalness = !!metalnessUrl, hasAO = !!aoUrl,
+                  hasPattern = !!patternUrl, hasMask = !!maskUrl;
+            
+            if (!(hasAlbedo || hasNormal || hasRoughness || hasMetalness || hasAO)) return;
+            
+            showLoading(true);
+            
+            let patternTexture = null, maskTexture = null, albedoForPattern = null;
+            let patternReady = !hasPattern, maskReady = !hasMask, albedoReady = !hasAlbedo;
+            let isPatternValid = hasPattern && hasMask;
+            
+            function checkPatternPreload() {
+                if (patternReady && maskReady && albedoReady) {
+                    applyToAllMaterials();
+                    
+                    // Управление видимостью блока паттерна
+                    if (hasPattern && hasMask && patternTexture && maskTexture) {
+                        patternDisplay.style.display = 'flex';
+                    } else {
+                        patternDisplay.style.display = 'none';
+                    }
+                }
+            }
+            
+            if (hasAlbedo) {
+                loadTextureSafely(albedoUrl, (t) => { albedoForPattern = t; albedoReady = true; checkPatternPreload(); }, () => { albedoReady = true; isPatternValid = false; checkPatternPreload(); });
+            } else { checkPatternPreload(); }
+            
+            if (hasPattern) {
+                loadTextureSafely(patternUrl, (t) => { patternTexture = t; patternReady = true; checkPatternPreload(); }, () => { patternReady = true; isPatternValid = false; checkPatternPreload(); });
+            } else { checkPatternPreload(); }
+            
+            if (hasMask) {
+                loadTextureSafely(maskUrl, (t) => { maskTexture = t; maskReady = true; checkPatternPreload(); }, () => { maskReady = true; isPatternValid = false; checkPatternPreload(); });
+            } else { checkPatternPreload(); }
+            
+            function applyToAllMaterials() {
+                let processed = 0, total = 0;
+                
+                model.traverse((child) => {
+                    if (child.isMesh && child.material) {
+                        const mats = Array.isArray(child.material) ? child.material : [child.material];
+                        total += mats.length;
+                    }
+                });
+                
+                if (total === 0) { showLoading(false); return; }
+                
+                model.traverse((child) => {
+                    if (child.isMesh && child.material) {
+                        const materials = Array.isArray(child.material) ? child.material : [child.material];
+                        
+                        materials.forEach(originalMat => {
+                            if (!(originalMat.isMeshStandardMaterial || originalMat.isMeshPhysicalMaterial)) {
+                                processed++; if (processed >= total) showLoading(false);
+                                return;
+                            }
+                            
+                            const isStatTrack = (child.name?.includes('StatTrack')) || (originalMat.name?.includes('StatTrack'));
+                            const newMat = originalMat.clone();
+                            
+                            const origProps = {
+                                metalness: originalMat.metalness,
+                                roughness: originalMat.roughness,
+                                normalScale: originalMat.normalScale?.clone() || new THREE.Vector2(1, 1),
+                                aoMapIntensity: originalMat.aoMapIntensity ?? 1.0
+                            };
+                            
+                            let pendingTasks = 0;
+
+                            if (hasAlbedo && !isStatTrack) {
+                                const usePattern = isPatternValid && patternTexture && maskTexture && albedoForPattern;
+                                pendingTasks++;
+                                
+                                if (usePattern) {
+                                    applyPatternWithMask(albedoForPattern, patternTexture, maskTexture, (finalAlbedo) => {
+                                        newMat.map = finalAlbedo;
+                                        processOtherMaps(newMat, isStatTrack, origProps, hasNormal, hasAO, hasMetalness, hasRoughness);
+                                        pendingTasks--; checkDone();
+                                    });
+                                } else {
+                                    loadTextureSafely(albedoUrl, (tex) => { 
+                                        newMat.map = tex; 
+                                        pendingTasks--; checkDone(); 
+                                    }, () => { pendingTasks--; checkDone(); });
+                                    processOtherMaps(newMat, isStatTrack, origProps, hasNormal, hasAO, hasMetalness, hasRoughness);
+                                }
+                            } else if (isStatTrack) {
+                                pendingTasks++;
+                                loadTextureSafely('materials/StatTrack_A.png', (tex) => {
+                                    tex.flipY = false; tex.encoding = THREE.sRGBEncoding;
+                                    newMat.map = tex; pendingTasks--; checkDone();
+                                }, () => { pendingTasks--; checkDone(); });
+                                processOtherMaps(newMat, isStatTrack, origProps, hasNormal, hasAO, hasMetalness, hasRoughness);
+                            } else {
+                                processOtherMaps(newMat, isStatTrack, origProps, hasNormal, hasAO, hasMetalness, hasRoughness);
+                            }
+
+                            function processOtherMaps(mat, isST, props, hNorm, hAO, hMet, hRough) {
+                                if (hNorm && !isST) {
+                                    pendingTasks++;
+                                    loadTextureSafely(normalUrl, (tex) => {
+                                        mat.normalMap = tex;
+                                        mat.normalScale = props.normalScale;
+                                        pendingTasks--; checkDone();
+                                    }, () => { pendingTasks--; checkDone(); }, false);
+                                }
+                                if (hAO && !isST) {
+                                    pendingTasks++;
+                                    loadTextureSafely(aoUrl, (tex) => {
+                                        mat.aoMap = tex;
+                                        mat.aoMapIntensity = props.aoMapIntensity;
+                                        pendingTasks--; checkDone();
+                                    }, () => { pendingTasks--; checkDone(); }, false);
+                                }
+                                if (hMet && !isST) {
+                                    pendingTasks++;
+                                    loadTextureSafely(metalnessUrl, (metalTex) => {
+                                        mat.metalnessMap = metalTex;
+                                        mat.metalness = props.metalness;
+                                        if (hRough) {
+                                            pendingTasks++;
+                                            loadTextureSafely(roughnessUrl, (roughTex) => {
+                                                mat.roughnessMap = roughTex;
+                                                mat.roughness = props.roughness;
+                                                pendingTasks--; checkDone();
+                                            }, () => { pendingTasks--; checkDone(); }, false);
+                                        }
+                                        pendingTasks--; checkDone();
+                                    }, () => { pendingTasks--; checkDone(); }, false);
+                                }
+                            }
+                            
+                            function checkDone() {
+                                if (pendingTasks <= 0) {
+                                    child.material = newMat;
+                                    processed++;
+                                    if (processed >= total) showLoading(false);
+                                }
+                            }
+                            if (pendingTasks === 0) checkDone();
+                        });
+                    }
+                });
+            }
+        }
+        
+        function createFallbackPlane(textureUrl = null) {
+            if (fallbackPlane) { scene.remove(fallbackPlane); }
+            const geometry = new THREE.PlaneGeometry(10, 10);
+            if (textureUrl) {
+                textureLoader.load(textureUrl, (texture) => {
+                    texture.flipY = false; texture.encoding = THREE.sRGBEncoding;
+                    fallbackPlane = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ map: texture, side: THREE.DoubleSide }));
+                    fallbackPlane.rotation.x = -Math.PI / 2;
+                    scene.add(fallbackPlane);
+                }, undefined, () => createPinkPlane());
+            } else createPinkPlane();
+        }
+        
+        function createPinkPlane() {
+            const geometry = new THREE.PlaneGeometry(10, 10);
+            fallbackPlane = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: 0xff69b4, side: THREE.DoubleSide }));
+            fallbackPlane.rotation.x = -Math.PI / 2;
+            scene.add(fallbackPlane);
+        }
+        
+        function isPlaneModel(fileName) {
+            if (!fileName) return false;
+            const lowerName = fileName.toLowerCase();
+            return lowerName === 'plane.glb' || lowerName === 'plane.gltf';
+        }
+        
+        function loadModelFromUrl(url) {
+            showLoading(true);
+            const fileName = url.split('/').pop().split('?')[0];
+            const loader = new THREE.GLTFLoader();
+            loader.load(url, (gltf) => {
+                if (model) { scene.remove(model); model = null; }
+                if (fallbackPlane) { scene.remove(fallbackPlane); fallbackPlane = null; }
+                model = gltf.scene;
+                const box = new THREE.Box3().setFromObject(model);
+                const center = box.getCenter(new THREE.Vector3());
+                const size = box.getSize(new THREE.Vector3());
+                model.position.sub(center);
+                originalModelPosition.copy(model.position);
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const scale = 15 / maxDim;
+                model.scale.set(scale, scale, scale);
+                originalModelScale.set(scale, scale, scale);
+                scene.add(model);
+                isModelLoaded = true;
+                applyTexturesToModel();
+                if (controls) { controls.reset(); camera.position.set(0, 0, 20 * scale); controls.update(); }
+                resetTransformSliders();
+                if (isPlaneModel(fileName)) planeLighting(); else resetLighting();
+                if (!(albedoUrl || normalUrl || roughnessUrl || metalnessUrl || aoUrl || patternUrl)) showLoading(false);
+            }, undefined, (error) => {
+                console.error('Ошибка загрузки модели:', error);
+                showLoading(false);
+                createFallbackPlane(albedoUrl);
+                isModelLoaded = false;
+            });
+        }
+        
+        async function loadBackgroundAndRarity(bgUrl, rarity) {
+            let bgTexture = null, hasBg = false;
+            if (bgUrl) {
+                try {
+                    bgTexture = await new Promise((resolve, reject) => textureLoader.load(bgUrl, resolve, undefined, reject));
+                    hasBg = true;
+                } catch (e) { console.warn('Не удалось загрузить bg:', bgUrl); }
+            }
+            if (!hasBg) {
+                try {
+                    bgTexture = await new Promise((resolve, reject) => textureLoader.load('background.png', resolve, undefined, reject));
+                    hasBg = true;
+                } catch (e) { console.warn('Не удалось загрузить background.png'); }
+            }
+            const cvs = document.createElement('canvas');
+            cvs.width = 512; cvs.height = 512;
+            const ctx = cvs.getContext('2d', { willReadFrequently: true });
+            if (hasBg && bgTexture.image) ctx.drawImage(bgTexture.image, 0, 0, 512, 512);
+            else {
+                const fallbackGrd = ctx.createLinearGradient(0, 0, 512, 512);
+                fallbackGrd.addColorStop(0, '#2a2a2a'); fallbackGrd.addColorStop(1, '#4a4a4a');
+                ctx.fillStyle = fallbackGrd; ctx.fillRect(0, 0, 512, 512);
+                document.body.classList.add('fallback-gradient');
+            }
+            if (rarity && rarity.toLowerCase() !== 'none') {
+                const colors = { 'case-none': ['#d28c19', '#0d1217'], 'box-none': ['#89949b', '#0d1217'], 'none-rarity': ['#cfd1d2', '#0d1217'], 'gold-none': ['#d28c19', '#0d1217'], 'common': ['#89949b', '#0d1217'], 'uncommon': ['#288bbb', '#0d1217'], 'rare': ['#01349b', '#0d1217'], 'epic': ['#7d02a9', '#0d1217'], 'legendary': ['#b90f80', '#0d1217'], 'arcane': ['#c1101e', '#0d1217'], 'nameless': ['#d28c19', '#0d1217'] };
+                const key = rarity.toLowerCase();
+                if (colors[key]) {
+                    const [start, end] = colors[key];
+                    const gradient = ctx.createLinearGradient(0, 0, 230, 230);
+                    gradient.addColorStop(0, start); gradient.addColorStop(1, end);
+                    ctx.globalAlpha = 0.4; ctx.fillStyle = gradient; ctx.fillRect(0, 0, 512, 512);
+                    ctx.globalAlpha = 1.0;
+                }
+            }
+            const brightness = 1.75;
+            if (brightness !== 1.0) {
+                const imageData = ctx.getImageData(0, 0, 512, 512);
+                const data = imageData.data;
+                for (let i = 0; i < data.length; i += 4) {
+                    data[i] = Math.min(255, data[i] * brightness);
+                    data[i + 1] = Math.min(255, data[i + 1] * brightness);
+                    data[i + 2] = Math.min(255, data[i + 2] * brightness);
+                }
+                ctx.putImageData(new ImageData(data, 512, 512), 0, 0);
+            }
+            const finalTexture = new THREE.CanvasTexture(cvs);
+            finalTexture.encoding = THREE.sRGBEncoding;
+            scene.background = finalTexture;
+            document.body.classList.remove('fallback-gradient');
+        }
+        
+        function showLoading(show) { loadingOverlay.style.display = show ? 'flex' : 'none'; }
+        
+        function loadCustomModel(file) {
+            if (!file) return;
+            if (!file.type.includes('gltf') && !file.type.includes('glb') && !file.name.endsWith('.glb') && !file.name.endsWith('.gltf')) { alert('Пожалуйста, выберите файл модели GLB или GLTF.'); return; }
+            showLoading(true);
+            const loader = new THREE.GLTFLoader();
+            const url = URL.createObjectURL(file);
+            loader.load(url, (gltf) => {
+                if (model) { scene.remove(model); model = null; }
+                if (fallbackPlane) { scene.remove(fallbackPlane); fallbackPlane = null; }
+                model = gltf.scene;
+                const box = new THREE.Box3().setFromObject(model);
+                const center = box.getCenter(new THREE.Vector3());
+                const size = box.getSize(new THREE.Vector3());
+                model.position.sub(center);
+                originalModelPosition.copy(model.position);
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const scale = 15 / maxDim;
+                model.scale.set(scale, scale, scale);
+                originalModelScale.set(scale, scale, scale);
+                scene.add(model);
+                isModelLoaded = true;
+                resetTransformSliders();
+                if (isPlaneModel(file.name)) planeLighting(); else resetLighting();
+                showLoading(false);
+            }, undefined, (error) => { console.error('Ошибка загрузки модели:', error); alert('Не удалось загрузить модель.'); showLoading(false); });
+        }
+        
+        function loadCustomTexture(file) {
+            if (!file) return;
+            if (!file.type.startsWith('image/')) { alert('Пожалуйста, выберите изображение.'); return; }
+            if (!model && !fallbackPlane) { alert('Сначала загрузите модель или плоскость.'); return; }
+            showLoading(true);
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const target = model || fallbackPlane;
+                target.traverse((child) => {
+                    if (child.isMesh && child.material) {
+                        const material = child.material;
+                        const materials = Array.isArray(material) ? material : [material];
+                        materials.forEach(mat => {
+                            if (mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial) {
+                                const newMat = mat.clone();
+                                const texture = new THREE.Texture();
+                                const img = new Image();
+                                img.onload = () => {
+                                    texture.image = img; texture.flipY = false;
+                                    texture.encoding = THREE.sRGBEncoding;
+                                    texture.wrapS = THREE.RepeatWrapping; texture.wrapT = THREE.RepeatWrapping;
+                                    texture.minFilter = THREE.LinearMipmapLinearFilter; texture.magFilter = THREE.LinearFilter;
+                                    texture.needsUpdate = true; newMat.map = texture; newMat.needsUpdate = true;
+                                    child.material = newMat; showLoading(false);
+                                };
+                                img.src = e.target.result;
+                            }
+                        });
+                    }
+                });
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        function resetTransformSliders() {
+            posXSlider.value = 0; posYSlider.value = 0; posZSlider.value = 0;
+            scaleSlider.value = 1.0; rotXSlider.value = 0; rotYSlider.value = 0; rotZSlider.value = 0;
+            updateTransformDisplay();
+        }
+        
+        function updateTransformDisplay() {
+            posXValue.textContent = parseFloat(posXSlider.value).toFixed(1);
+            posYValue.textContent = parseFloat(posYSlider.value).toFixed(1);
+            posZValue.textContent = parseFloat(posZSlider.value).toFixed(1);
+            scaleValue.textContent = parseFloat(scaleSlider.value).toFixed(2);
+            rotXValue.textContent = Math.round(parseFloat(rotXSlider.value)) + '°';
+            rotYValue.textContent = Math.round(parseFloat(rotYSlider.value)) + '°';
+            rotZValue.textContent = Math.round(parseFloat(rotZSlider.value)) + '°';
+        }
+        
+        function updateLighting() {
+            if (mainLight) mainLight.intensity = parseFloat(mainIntensitySlider.value);
+            if (fillLight1) fillLight1.intensity = parseFloat(fill1IntensitySlider.value);
+            if (fillLight2) fillLight2.intensity = parseFloat(fill2IntensitySlider.value);
+            if (backLight) backLight.intensity = parseFloat(backIntensitySlider.value);
+            if (ambientLightObj) ambientLightObj.intensity = parseFloat(ambientLightSlider.value);
+            mainValue.textContent = parseFloat(mainIntensitySlider.value).toFixed(1);
+            fill1Value.textContent = parseFloat(fill1IntensitySlider.value).toFixed(1);
+            fill2Value.textContent = parseFloat(fill2IntensitySlider.value).toFixed(1);
+            backValue.textContent = parseFloat(backIntensitySlider.value).toFixed(1);
+            ambientValue.textContent = parseFloat(ambientLightSlider.value).toFixed(1);
+        }
+        
+        function resetLighting() {
+            mainIntensitySlider.value = 4.2; fill1IntensitySlider.value = 4.0;
+            fill2IntensitySlider.value = 4.4; backIntensitySlider.value = 3.5;
+            ambientLightSlider.value = 3.8; updateLighting();
+        }
+        
+        function planeLighting() {
+            mainIntensitySlider.value = 0.0; fill1IntensitySlider.value = 0.0;
+            fill2IntensitySlider.value = 0.0; backIntensitySlider.value = 0.0;
+            ambientLightSlider.value = 1.0; updateLighting();
+        }
+        
+        function toggleControlsPanel() {
+            controlsPanel.style.display = (controlsPanel.style.display === 'none' || controlsPanel.style.display === '') ? 'block' : 'none';
+        }
+        
+        function handleKeyDown(event) {
+            if (event.key === 'Alt' || event.key === 'AltGraph') altPressed = true;
+            if (altPressed && (event.key === 'a' || event.key === 'A' || event.key === 'ф' || event.key === 'Ф')) {
+                event.preventDefault(); toggleControlsPanel();
+            }
+        }
+        function handleKeyUp(event) { if (event.key === 'Alt' || event.key === 'AltGraph') altPressed = false; }
+
+        function captureRender() {
+            if (!renderer || !model) { alert('Сначала загрузите модель!'); return; }
+            const oldBg = scene.background;
+            const oldWidth = renderer.domElement.width;
+            const oldHeight = renderer.domElement.height;
+            const oldAspect = camera.aspect;
+            const container = canvas.parentElement;
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            const scale = 2;
+            renderer.setSize(width * scale, height * scale, false);
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            scene.background = null;
+            renderer.render(scene, camera);
+            const dataURL = renderer.domElement.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.download = 'render_' + Date.now() + '.png';
+            link.href = dataURL;
+            link.click();
+            scene.background = oldBg;
+            renderer.setSize(oldWidth, oldHeight, false);
+            camera.aspect = oldAspect;
+            camera.updateProjectionMatrix();
+        }
+
+        function captureRenderWithShadow() {
+            if (!renderer || !model) { alert('Сначала загрузите модель!'); return; }
+            const shadowOffsetX = -40, shadowOffsetY = 40, shadowBlur = 6, shadowOpacity = 0.7;
+            const oldBg = scene.background;
+            const oldWidth = renderer.domElement.width;
+            const oldHeight = renderer.domElement.height;
+            const oldAspect = camera.aspect;
+            const container = canvas.parentElement;
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            const scale = 2;
+            renderer.setSize(width * scale, height * scale, false);
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            scene.background = null;
+            renderer.render(scene, camera);
+            const modelDataUrl = renderer.domElement.toDataURL('image/png');
+            const compCanvas = document.createElement('canvas');
+            compCanvas.width = width * scale; compCanvas.height = height * scale;
+            const ctx = compCanvas.getContext('2d', { willReadFrequently: true });
+            const modelImg = new Image();
+            modelImg.onload = function() {
+                const sCvs = document.createElement('canvas');
+                sCvs.width = width * scale; sCvs.height = height * scale;
+                const sCtx = sCvs.getContext('2d', { willReadFrequently: true });
+                sCtx.drawImage(modelImg, 0, 0);
+                const imgData = sCtx.getImageData(0, 0, sCvs.width, sCvs.height);
+                const d = imgData.data;
+                for (let i = 0; i < d.length; i += 4) {
+                    if (d[i+3] > 0) { d[i] = 0; d[i+1] = 0; d[i+2] = 0; d[i+3] = Math.round(255 * shadowOpacity); }
+                }
+                sCtx.putImageData(imgData, 0, 0);
+                ctx.filter = `blur(${shadowBlur * scale}px)`; 
+                ctx.drawImage(sCvs, shadowOffsetX * scale, shadowOffsetY * scale);
+                ctx.filter = 'none';
+                ctx.drawImage(modelImg, 0, 0);
+                const link = document.createElement('a');
+                link.download = 'render_shadow_' + Date.now() + '.png';
+                link.href = compCanvas.toDataURL('image/png');
+                link.click();
+                scene.background = oldBg;
+                renderer.setSize(oldWidth, oldHeight, false);
+                camera.aspect = oldAspect;
+                camera.updateProjectionMatrix();
+            };
+            modelImg.src = modelDataUrl;
+        }
+        
+        function setupDragAndDrop() {
+            document.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); });
+            document.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); });
+            sceneContainer.addEventListener('dragenter', e => { e.preventDefault(); e.stopPropagation(); dragCounter++; dropZone.style.display = 'flex'; dropZone.style.pointerEvents = 'none'; });
+            sceneContainer.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); });
+            sceneContainer.addEventListener('dragleave', e => { e.preventDefault(); e.stopPropagation(); dragCounter--; if (dragCounter <= 0) { dropZone.style.display = 'none'; dragCounter = 0; } });
+            sceneContainer.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); dropZone.style.display = 'none'; dragCounter = 0; const files = e.dataTransfer.files; if (files.length === 0) return; const file = files[0], fileName = file.name.toLowerCase(); if (fileName.endsWith('.glb') || fileName.endsWith('.gltf')) loadCustomModel(file); else if (fileName.match(/\.(jpg|jpeg|png|webp)$/)) loadCustomTextureWithStatTrack(file); else alert('Поддерживаются только .glb, .gltf, .jpg, .png, .webp'); });
+        }
+
+        function loadCustomTextureWithStatTrack(file) {
+            if (!model) { alert('Сначала загрузите модель!'); return; }
+            const url = URL.createObjectURL(file); showLoading(true);
+            let taskCount = 0, completedTasks = 0;
+            function onTaskComplete() { completedTasks++; if (completedTasks >= taskCount) showLoading(false); }
+            model.traverse((child) => { if (child.isMesh && child.material) { const materials = Array.isArray(child.material) ? child.material : [child.material]; taskCount += materials.length; } });
+            if (taskCount === 0) { showLoading(false); return; }
+            model.traverse((child) => {
+                if (child.isMesh && child.material) {
+                    const materials = Array.isArray(child.material) ? child.material : [child.material];
+                    materials.forEach(mat => {
+                        if (mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial) {
+                            const isStatTrack = (child.name && child.name.includes('StatTrack')) || (mat.name && mat.name.includes('StatTrack'));
+                            const newMat = mat.clone();
+                            if (isStatTrack) {
+                                textureLoader.load('materials/StatTrack_A.png', (texture) => { texture.flipY = false; texture.encoding = THREE.sRGBEncoding; texture.wrapS = THREE.RepeatWrapping; texture.wrapT = THREE.RepeatWrapping; texture.minFilter = THREE.LinearMipmapLinearFilter; texture.magFilter = THREE.LinearFilter; newMat.map = texture; newMat.needsUpdate = true; onTaskComplete(); }, undefined, onTaskComplete);
+                            } else {
+                                textureLoader.load(url, (texture) => { texture.flipY = false; texture.encoding = THREE.sRGBEncoding; texture.wrapS = THREE.RepeatWrapping; texture.wrapT = THREE.RepeatWrapping; texture.minFilter = THREE.LinearMipmapLinearFilter; texture.magFilter = THREE.LinearFilter; newMat.map = texture; newMat.needsUpdate = true; onTaskComplete(); }, undefined, onTaskComplete);
+                            }
+                            child.material = newMat;
+                        } else onTaskComplete();
+                    });
+                }
+            });
+        }
+        
+        // Инициализация
+        initScene();
+        initPatternDisplay();
+        setupDragAndDrop();
+        loadBackgroundAndRarity(bgUrl, rarity).catch(err => console.error('Ошибка при загрузке фона/редкости:', err));
+        if (modelUrl) loadModelFromUrl(modelUrl);
+        
+        // Обработчики
+        loadModelBtn.addEventListener('click', () => modelInput.click());
+        loadTextureBtn.addEventListener('click', () => textureInput.click());
+        modelInput.addEventListener('change', (e) => { if (e.target.files[0]) loadCustomModel(e.target.files[0]); });
+        textureInput.addEventListener('change', (e) => { if (e.target.files[0]) loadCustomTexture(e.target.files[0]); });
+        toggleControlsBtn.addEventListener('click', toggleControlsPanel);
+        resetTransformBtn.addEventListener('click', resetTransformSliders);
+        resetLightsBtn.addEventListener('click', resetLighting);
+        renderBtn.addEventListener('click', captureRender);
+        renderShadowBtn.addEventListener('click', captureRenderWithShadow);
+        [posXSlider, posYSlider, posZSlider, scaleSlider, rotXSlider, rotYSlider, rotZSlider].forEach(s => s.addEventListener('input', updateTransformDisplay));
+        [mainIntensitySlider, fill1IntensitySlider, fill2IntensitySlider, backIntensitySlider, ambientLightSlider].forEach(s => s.addEventListener('input', updateLighting));
+        document.addEventListener('keydown', handleKeyDown);
+        document.addEventListener('keyup', handleKeyUp);
+        updateTransformDisplay();
+        updateLighting();
+    </script>
+</body>
+</html>
