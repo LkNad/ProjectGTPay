@@ -220,9 +220,13 @@
         // Переменные для градиентного эффекта цвета
         let gradientMaskTexture = null;
         let hasGradientMask = false;
-        let gradientUniforms = null;
+        let gradientUniformsArray = []; // Массив uniforms для всех материалов
         let lastCameraAngle = 0;
         let accumulatedAngle = 0;
+        
+        // === ПАРАМЕТР СКОРОСТИ СМЕНЫ ЦВЕТА (для разработки) ===
+        // Количество полных оборотов цветового круга (1 = 1 полный цикл за 180° вращения камеры)
+        const COLOR_ROTATION_SPEED = 1; // По умолчанию 1 оборот
         
         // URL параметры
         const urlParams = new URLSearchParams(window.location.search);
@@ -516,7 +520,7 @@
             if (controls) controls.update();
             
             // Вычисляем угол камеры по оси Y для градиентного эффекта
-            if (hasGradientMask && gradientUniforms && camera && model) {
+            if (hasGradientMask && gradientUniformsArray.length > 0 && camera && model) {
                 // Получаем текущий угол камеры вокруг модели по оси Y
                 const dx = camera.position.x - model.position.x;
                 const dz = camera.position.z - model.position.z;
@@ -536,11 +540,14 @@
                 accumulatedAngle += angleDiff;
                 lastCameraAngle = currentCameraAngle;
                 
-                // Преобразуем накопленный угол в диапазон [0, PI] для цикла туда-обратно
-                // При вращении на 360 градусов (2*PI накопленного) time пройдет путь 0->PI->0
-                const normalizedAngle = Math.abs(Math.sin(accumulatedAngle * 0.5));
+                // Преобразуем накопленный угол в диапазон [0, 2*PI] для полного цикла
+                // COLOR_ROTATION_SPEED определяет сколько полных цветовых циклов произойдет за 360° вращения
+                const normalizedAngle = (accumulatedAngle / (Math.PI * 2)) % 1;
                 
-                gradientUniforms.time.value = normalizedAngle * Math.PI;
+                // Обновляем time uniform во всех материалах
+                for (const uniforms of gradientUniformsArray) {
+                    uniforms.time.value = normalizedAngle * Math.PI * 2 * COLOR_ROTATION_SPEED;
+                }
             }
             
             if (model) {
@@ -945,14 +952,13 @@
                                                 return originalColor;
                                             }
                                             
-                                            // time идет от 0 до PI, нам нужен полный цикл 0..1 за PI
-                                            float hueShift = time / 3.14159265359;
+                                            // time идет от 0 до 2*PI, COLOR_ROTATION_SPEED определяет количество оборотов
+                                            float hueShift = (time / (Math.PI * 2)) * ${COLOR_ROTATION_SPEED};
                                             
                                             // Конвертируем исходный цвет в HSV
                                             vec3 hsv = rgb2hsv(originalColor);
                                             
                                             // Сдвигаем тон (Hue) на значение hueShift
-                                            // Умножаем на maskValue чтобы чёрные участки маски не менялись
                                             hsv.x = fract(hsv.x + hueShift * maskValue);
                                             
                                             // Возвращаем цвет обратно в RGB
@@ -968,8 +974,8 @@
                                         '#include <dithering_fragment>\nvec4 correctedColor = gl_FragColor;\ncorrectedColor.rgb = applyHueShift(correctedColor.rgb, vGradientUv);\ngl_FragColor = correctedColor;'
                                     );
                                     
-                                    // Сохраняем ссылку на uniforms для обновления
-                                    gradientUniforms = shader.uniforms;
+                                    // Сохраняем ссылку на uniforms для обновления (добавляем в массив)
+                                    gradientUniformsArray.push(shader.uniforms);
                                 };
                             }
                             
@@ -1020,6 +1026,8 @@
             loader.load(url, (gltf) => {
                 if (model) { scene.remove(model); model = null; }
                 if (fallbackPlane) { scene.remove(fallbackPlane); fallbackPlane = null; }
+                // Сбрасываем массив uniforms при загрузке новой модели
+                gradientUniformsArray = [];
                 model = gltf.scene;
                 const box = new THREE.Box3().setFromObject(model);
                 const center = box.getCenter(new THREE.Vector3());
@@ -1108,6 +1116,8 @@
             loader.load(url, (gltf) => {
                 if (model) { scene.remove(model); model = null; }
                 if (fallbackPlane) { scene.remove(fallbackPlane); fallbackPlane = null; }
+                // Сбрасываем массив uniforms при загрузке новой модели
+                gradientUniformsArray = [];
                 model = gltf.scene;
                 const box = new THREE.Box3().setFromObject(model);
                 const center = box.getCenter(new THREE.Vector3());
