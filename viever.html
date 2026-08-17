@@ -955,8 +955,8 @@
                                             return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
                                         }
                                         
-                                        vec3 applyHueShift(vec3 originalColor, vec2 uv) {
-                                            float maskValue = texture2D(gradientMask, uv).r;
+                                        vec3 applyHueShift(vec3 originalColor) {
+                                            float maskValue = texture2D(gradientMask, vGradientUv).r;
                                             if (maskValue < 0.01) {
                                                 return originalColor;
                                             }
@@ -987,7 +987,7 @@
                                     // Модифицируем outgoing light
                                     shader.fragmentShader = shader.fragmentShader.replace(
                                         '#include <dithering_fragment>',
-                                        '#include <dithering_fragment>\nvec4 correctedColor = gl_FragColor;\ncorrectedColor.rgb = applyHueShift(correctedColor.rgb, vGradientUv);\ngl_FragColor = correctedColor;'
+                                        '#include <dithering_fragment>\nvec4 correctedColor = gl_FragColor;\ncorrectedColor.rgb = applyHueShift(correctedColor.rgb);\ngl_FragColor = correctedColor;'
                                     );
                                     
                                     // Сохраняем ссылку на uniforms для обновления
