@@ -217,6 +217,12 @@
         let altPressed = false;
         let dragCounter = 0;
         
+        // Переменные для градиентного эффекта цвета
+        let gradientMaskTexture = null;
+        let hasGradientMask = false;
+        let gradientUniforms = null;
+        let modelRotationForGradient = 0;
+        
         // URL параметры
         const urlParams = new URLSearchParams(window.location.search);
         const modelUrl = urlParams.get('model');
@@ -233,6 +239,7 @@
         // === ПАТТЕРНЫ ===
         const patternUrl = urlParams.get('pattern');
         const maskUrl = urlParams.get('mask');
+        const gradientMaskUrl = urlParams.get('gradientMask');
         // === СИД ПАТТЕРНА ===
         const patternSeedParam = urlParams.get('patternSeed');
         const currentPatternSeed = patternSeedParam ? parseInt(patternSeedParam, 10) : Math.floor(Math.random() * 1000);
@@ -506,6 +513,16 @@
         function animate() {
             requestAnimationFrame(animate);
             if (controls) controls.update();
+            
+            // Обновляем время для градиентного эффекта
+            if (hasGradientMask && gradientUniforms) {
+                modelRotationForGradient += 0.01;
+                if (modelRotationForGradient >= Math.PI * 2) {
+                    modelRotationForGradient -= Math.PI * 2;
+                }
+                gradientUniforms.time.value = modelRotationForGradient;
+            }
+            
             if (model) {
                 const posX = parseFloat(posXSlider.value), posY = parseFloat(posYSlider.value), posZ = parseFloat(posZSlider.value);
                 const scale = parseFloat(scaleSlider.value);
@@ -663,12 +680,55 @@
             callback(resultTexture);
         }
         
+        // Шейдер для градиентного эффекта цвета
+        const gradientShaderChunk = `
+            uniform float time;
+            uniform sampler2D gradientMask;
+            varying vec2 vUv;
+            
+            vec3 applyGradientColor(vec3 originalColor, vec2 uv) {
+                // Получаем значение маски (0-1)
+                float maskValue = texture2D(gradientMask, uv).r;
+                
+                // Если маска чёрная (0), возвращаем оригинальный цвет без изменений
+                if (maskValue < 0.01) {
+                    return originalColor;
+                }
+                
+                // Вычисляем угол вращения модели для анимации
+                float angle = time * 0.5;
+                
+                // Создаём три цвета для градиента: бирюзовый, розовый, фиолетовый
+                vec3 color1 = vec3(0.25, 0.88, 0.82); // бирюзовый
+                vec3 color2 = vec3(1.0, 0.42, 0.71);  // розовый
+                vec3 color3 = vec3(0.56, 0.24, 0.86); // фиолетовый
+                
+                // Анимация через sin/cos для плавного цикла
+                float t1 = sin(angle) * 0.5 + 0.5;
+                float t2 = sin(angle + 2.094) * 0.5 + 0.5; // +120 градусов
+                float t3 = sin(angle + 4.188) * 0.5 + 0.5; // +240 градусов
+                
+                // Нормализуем веса
+                float total = t1 + t2 + t3;
+                t1 /= total;
+                t2 /= total;
+                t3 /= total;
+                
+                // Смешиваем цвета
+                vec3 gradientColor = color1 * t1 + color2 * t2 + color3 * t3;
+                
+                // Маска определяет интенсивность эффекта (где белее - там активнее)
+                return mix(originalColor, gradientColor, maskValue);
+            }
+        `;
+
         function applyTexturesToModel() {
             if (!model) return;
             
             const hasAlbedo = !!albedoUrl, hasNormal = !!normalUrl, hasRoughness = !!roughnessUrl, 
                   hasMetalness = !!metalnessUrl, hasAO = !!aoUrl,
                   hasPattern = !!patternUrl, hasMask = !!maskUrl;
+            hasGradientMask = !!gradientMaskUrl;
             
             if (!(hasAlbedo || hasNormal || hasRoughness || hasMetalness || hasAO)) return;
             
@@ -678,8 +738,22 @@
             let patternReady = !hasPattern, maskReady = !hasMask, albedoReady = !hasAlbedo;
             let isPatternValid = hasPattern && hasMask;
             
+            // Загрузка градиентной маски
+            let gradientMaskReady = !hasGradientMask;
+            if (hasGradientMask) {
+                loadTextureSafely(gradientMaskUrl, (t) => { 
+                    gradientMaskTexture = t; 
+                    gradientMaskReady = true; 
+                    checkPatternPreload(); 
+                }, () => { 
+                    gradientMaskReady = true; 
+                    hasGradientMask = false; 
+                    checkPatternPreload(); 
+                });
+            }
+            
             function checkPatternPreload() {
-                if (patternReady && maskReady && albedoReady) {
+                if (patternReady && maskReady && albedoReady && gradientMaskReady) {
                     applyToAllMaterials();
                     
                     // Управление видимостью блока паттерна
@@ -798,6 +872,65 @@
                                         pendingTasks--; checkDone();
                                     }, () => { pendingTasks--; checkDone(); }, false);
                                 }
+                            }
+                            
+                            // Применяем градиентный эффект если есть маска
+                            if (hasGradientMask && gradientMaskTexture && !isStatTrack) {
+                                newMat.onBeforeCompile = function(shader) {
+                                    shader.uniforms.time = { value: 0 };
+                                    shader.uniforms.gradientMask = { value: gradientMaskTexture };
+                                    
+                                    // Добавляем uniform в vertex shader
+                                    shader.vertexShader = `
+                                        uniform float time;
+                                        uniform sampler2D gradientMask;
+                                        varying vec2 vUv;
+                                    ` + shader.vertexShader;
+                                    shader.vertexShader = shader.vertexShader.replace(
+                                        '#include <common>',
+                                        '#include <common>\nvarying vec2 vUv;'
+                                    );
+                                    shader.vertexShader = shader.vertexShader.replace(
+                                        'void main() {',
+                                        'void main() {\nvUv = uv;'
+                                    );
+                                    
+                                    // Добавляем функцию в fragment shader
+                                    shader.fragmentShader = `
+                                        uniform float time;
+                                        uniform sampler2D gradientMask;
+                                        varying vec2 vUv;
+                                        
+                                        vec3 applyGradientColor(vec3 originalColor, vec2 uv) {
+                                            float maskValue = texture2D(gradientMask, uv).r;
+                                            if (maskValue < 0.01) {
+                                                return originalColor;
+                                            }
+                                            float angle = time * 0.5;
+                                            vec3 color1 = vec3(0.25, 0.88, 0.82);
+                                            vec3 color2 = vec3(1.0, 0.42, 0.71);
+                                            vec3 color3 = vec3(0.56, 0.24, 0.86);
+                                            float t1 = sin(angle) * 0.5 + 0.5;
+                                            float t2 = sin(angle + 2.094) * 0.5 + 0.5;
+                                            float t3 = sin(angle + 4.188) * 0.5 + 0.5;
+                                            float total = t1 + t2 + t3;
+                                            t1 /= total;
+                                            t2 /= total;
+                                            t3 /= total;
+                                            vec3 gradientColor = color1 * t1 + color2 * t2 + color3 * t3;
+                                            return mix(originalColor, gradientColor, maskValue);
+                                        }
+                                    ` + shader.fragmentShader;
+                                    
+                                    // Модифицируем outgoing light
+                                    shader.fragmentShader = shader.fragmentShader.replace(
+                                        '#include <dithering_fragment>',
+                                        '#include <dithering_fragment>\nvec4 correctedColor = gl_FragColor;\ncorrectedColor.rgb = applyGradientColor(correctedColor.rgb, vUv);\ngl_FragColor = correctedColor;'
+                                    );
+                                    
+                                    // Сохраняем ссылку на uniforms для обновления
+                                    gradientUniforms = shader.uniforms;
+                                };
                             }
                             
                             function checkDone() {

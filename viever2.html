@@ -282,6 +282,12 @@
         let altPressed = false;
         let dragCounter = 0;
         
+        // Переменные для градиентного эффекта цвета
+        let gradientMaskTexture = null;
+        let hasGradientMask = false;
+        let gradientUniforms = null;
+        let modelRotationForGradient = 0;
+        
         let pendingTextureFile = null;
         let bgLogoImage = null;
         
@@ -301,6 +307,7 @@
         
         const patternUrl = urlParams.get('pattern');
         const maskUrl = urlParams.get('mask');
+        const gradientMaskUrl = urlParams.get('gradientMask');
         const patternSeedParam = urlParams.get('patternSeed');
         const currentPatternSeed = patternSeedParam ? parseInt(patternSeedParam, 10) : Math.floor(Math.random() * 1000);
         
