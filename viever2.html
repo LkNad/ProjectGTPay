@@ -294,6 +294,7 @@
         // Измените это значение чтобы ускорить/замедлить смену цвета
         const COLOR_ROTATION_SPEED = 1; // По умолчанию 1 оборот
         const COLOR_ROTATION_CYCLES = 2; // Количество полных циклов смены цвета за один оборот камеры (разработка)
+        const COLOR_ROTATION_MULTIPLIER = COLOR_ROTATION_SPEED * COLOR_ROTATION_CYCLES; // Общий множитель скорости
         
         let pendingTextureFile = null;
         let bgLogoImage = null;
@@ -499,7 +500,7 @@
                 
                 // Обновляем time uniform во всех материалах
                 for (const uniforms of gradientUniformsArray) {
-                    uniforms.time.value = normalizedAngle * Math.PI * 2 * COLOR_ROTATION_SPEED * COLOR_ROTATION_CYCLES;
+                    uniforms.time.value = accumulatedAngle * COLOR_ROTATION_MULTIPLIER;
                 }
             }
             
@@ -740,6 +741,9 @@
                 
                 if (total === 0) { showLoading(false); return; }
                 
+                // Сбрасываем массив uniforms перед обработкой новых материалов
+                gradientUniformsArray = [];
+                
                 model.traverse((child) => {
                     if (child.isMesh && child.material) {
                         const materials = Array.isArray(child.material) ? child.material : [child.material];
@@ -827,7 +831,6 @@
                             
                             function checkDone() {
                                 if (pendingTasks <= 0) {
-                                    child.material = newMat;
                                     // Применяем градиентный эффект если есть маска
                                     if (hasGradientMask && gradientMaskTexture && !isStatTrack) {
                                         newMat.onBeforeCompile = function(shader) {
@@ -877,9 +880,8 @@
                                                         return originalColor;
                                                     }
                                                     
-                                                    // time идет от 0 до 2*PI, COLOR_ROTATION_SPEED определяет количество оборотов
-                                                    // COLOR_ROTATION_CYCLES добавляет дополнительные циклы (только для разработки)
-                                                    float hueShift = (time / (Math.PI * 2)) * ${COLOR_ROTATION_SPEED} * ${COLOR_ROTATION_CYCLES};
+                                                    // time идет от 0 до 2*PI, COLOR_ROTATION_MULTIPLIER определяет количество оборотов цвета
+                                                    float hueShift = (time / (Math.PI * 2)) * ${COLOR_ROTATION_MULTIPLIER};
                                                     
                                                     // Конвертируем исходный цвет в HSV
                                                     vec3 hsv = rgb2hsv(originalColor);
