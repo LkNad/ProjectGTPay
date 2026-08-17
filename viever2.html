@@ -286,7 +286,8 @@
         let gradientMaskTexture = null;
         let hasGradientMask = false;
         let gradientUniforms = null;
-        let modelRotationForGradient = 0;
+        let lastCameraAngle = 0;
+        let accumulatedAngle = 0;
         
         let pendingTextureFile = null;
         let bgLogoImage = null;
@@ -463,6 +464,35 @@
         function animate() {
             requestAnimationFrame(animate);
             if (controls) controls.update();
+            
+            // Вычисляем угол камеры по оси Y для градиентного эффекта
+            if (hasGradientMask && gradientUniforms && camera && model) {
+                // Получаем текущий угол камеры вокруг модели по оси Y
+                const dx = camera.position.x - model.position.x;
+                const dz = camera.position.z - model.position.z;
+                const currentCameraAngle = Math.atan2(dx, dz);
+                
+                // Вычисляем разницу углов с учётом перехода через 360 градусов
+                let angleDiff = currentCameraAngle - lastCameraAngle;
+                
+                // Корректируем переход через границу -PI/PI
+                if (angleDiff > Math.PI) {
+                    angleDiff -= Math.PI * 2;
+                } else if (angleDiff < -Math.PI) {
+                    angleDiff += Math.PI * 2;
+                }
+                
+                // Накопленный угол для плавной анимации туда-обратно
+                accumulatedAngle += angleDiff;
+                lastCameraAngle = currentCameraAngle;
+                
+                // Преобразуем накопленный угол в диапазон [0, PI] для цикла туда-обратно
+                // Когда угол проходит 180 градусов (PI), начинаем движение обратно
+                const normalizedAngle = Math.abs(Math.sin(accumulatedAngle * 0.5));
+                
+                gradientUniforms.time.value = normalizedAngle * Math.PI;
+            }
+            
             if (model) {
                 const posX = parseFloat(posXSlider.value), posY = parseFloat(posYSlider.value), posZ = parseFloat(posZSlider.value);
                 const scale = parseFloat(scaleSlider.value);
@@ -831,7 +861,8 @@
                                             t2 = t2 / total;
                                             t3 = t3 / total;
                                             vec3 gradientColor = color1 * t1 + color2 * t2 + color3 * t3;
-                                            return mix(originalColor, gradientColor, maskValue);
+                                            float blendIntensity = maskValue * 0.7;
+                                            return mix(originalColor, gradientColor, blendIntensity);
                                         }
                                     
 ` + shader.fragmentShader;

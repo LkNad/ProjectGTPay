@@ -221,7 +221,8 @@
         let gradientMaskTexture = null;
         let hasGradientMask = false;
         let gradientUniforms = null;
-        let modelRotationForGradient = 0;
+        let lastCameraAngle = 0;
+        let accumulatedAngle = 0;
         
         // URL параметры
         const urlParams = new URLSearchParams(window.location.search);
@@ -514,13 +515,32 @@
             requestAnimationFrame(animate);
             if (controls) controls.update();
             
-            // Обновляем время для градиентного эффекта
-            if (hasGradientMask && gradientUniforms) {
-                modelRotationForGradient += 0.01;
-                if (modelRotationForGradient >= Math.PI * 2) {
-                    modelRotationForGradient -= Math.PI * 2;
+            // Вычисляем угол камеры по оси Y для градиентного эффекта
+            if (hasGradientMask && gradientUniforms && camera) {
+                // Получаем текущий угол камеры вокруг модели по оси Y
+                const dx = camera.position.x - (model ? model.position.x : 0);
+                const dz = camera.position.z - (model ? model.position.z : 0);
+                const currentCameraAngle = Math.atan2(dx, dz);
+                
+                // Вычисляем разницу углов с учётом перехода через 360 градусов
+                let angleDiff = currentCameraAngle - lastCameraAngle;
+                
+                // Корректируем переход через границу -PI/PI
+                if (angleDiff > Math.PI) {
+                    angleDiff -= Math.PI * 2;
+                } else if (angleDiff < -Math.PI) {
+                    angleDiff += Math.PI * 2;
                 }
-                gradientUniforms.time.value = modelRotationForGradient;
+                
+                // Накопленный угол для плавной анимации туда-обратно
+                accumulatedAngle += angleDiff;
+                lastCameraAngle = currentCameraAngle;
+                
+                // Преобразуем накопленный угол в диапазон [0, PI] для цикла туда-обратно
+                // Когда угол проходит 180 градусов (PI), начинаем движение обратно
+                const normalizedAngle = Math.abs(Math.sin(accumulatedAngle * 0.5));
+                
+                gradientUniforms.time.value = normalizedAngle * Math.PI;
             }
             
             if (model) {
@@ -695,15 +715,16 @@
                     return originalColor;
                 }
                 
-                // Вычисляем угол вращения модели для анимации
-                float angle = time * 0.5;
+                // Вычисляем угол вращения камеры для анимации (время приходит от JS)
+                // Анимация идёт туда-обратно: 0 -> PI -> 0
+                float angle = time;
                 
                 // Создаём три цвета для градиента: бирюзовый, розовый, фиолетовый
                 vec3 color1 = vec3(0.25, 0.88, 0.82); // бирюзовый
                 vec3 color2 = vec3(1.0, 0.42, 0.71);  // розовый
                 vec3 color3 = vec3(0.56, 0.24, 0.86); // фиолетовый
                 
-                // Анимация через sin/cos для плавного цикла
+                // Анимация через sin/cos для плавного цикла туда-обратно
                 float t1 = sin(angle) * 0.5 + 0.5;
                 float t2 = sin(angle + 2.094) * 0.5 + 0.5; // +120 градусов
                 float t3 = sin(angle + 4.188) * 0.5 + 0.5; // +240 градусов
@@ -718,7 +739,9 @@
                 vec3 gradientColor = color1 * t1 + color2 * t2 + color3 * t3;
                 
                 // Маска определяет интенсивность эффекта (где белее - там активнее)
-                return mix(originalColor, gradientColor, maskValue);
+                // Но не перекрашиваем полностью, а меняем тон
+                float blendIntensity = maskValue * 0.7; // Ограничиваем максимальную интенсивность
+                return mix(originalColor, gradientColor, blendIntensity);
             }
         `;
 
@@ -916,7 +939,8 @@
                                             t2 = t2 / total;
                                             t3 = t3 / total;
                                             vec3 gradientColor = color1 * t1 + color2 * t2 + color3 * t3;
-                                            return mix(originalColor, gradientColor, maskValue);
+                                            float blendIntensity = maskValue * 0.7;
+                                            return mix(originalColor, gradientColor, blendIntensity);
                                         }
                                     \n` + shader.fragmentShader;
                                     
