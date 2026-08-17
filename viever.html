@@ -224,6 +224,11 @@
         let lastCameraAngle = 0;
         let accumulatedAngle = 0;
         
+        // === ПАРАМЕТР ДЛЯ РАЗРАБОТКИ: количество полных циклов смены цвета за один оборот на 360° ===
+        // По умолчанию 1.0 (все цвета от красного до фиолетового за 360°)
+        // Установите 2.0, чтобы цвета сменились дважды за один оборот и т.д.
+        const HUE_CYCLES_PER_ROTATION = 1.0;
+        
         // URL параметры
         const urlParams = new URLSearchParams(window.location.search);
         const modelUrl = urlParams.get('model');
@@ -537,8 +542,8 @@
                 lastCameraAngle = currentCameraAngle;
                 
                 // Преобразуем накопленный угол в диапазон [0, PI] для цикла туда-обратно
-                // При вращении на 360 градусов (2*PI накопленного) time пройдет путь 0->PI->0
-                const normalizedAngle = Math.abs(Math.sin(accumulatedAngle * 0.5));
+                // Умножаем на HUE_CYCLES_PER_ROTATION для управления скоростью смены цветов
+                const normalizedAngle = Math.abs(Math.sin(accumulatedAngle * 0.5 * HUE_CYCLES_PER_ROTATION));
                 
                 gradientUniforms.time.value = normalizedAngle * Math.PI;
             }
@@ -706,6 +711,21 @@
             uniform sampler2D gradientMask;
             varying vec2 vUv;
             
+            vec3 rgb2hsv(vec3 c) {
+                vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+                vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+                vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+                float d = q.x - min(q.w, q.y);
+                float e = 1.0e-10;
+                return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+            }
+            
+            vec3 hsv2rgb(vec3 c) {
+                vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+                vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+                return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+            }
+            
             vec3 applyGradientColor(vec3 originalColor, vec2 uv) {
                 // Получаем значение маски (0-1)
                 float maskValue = texture2D(gradientMask, uv).r;
@@ -719,29 +739,25 @@
                 // Анимация идёт туда-обратно: 0 -> PI -> 0
                 float angle = time;
                 
-                // Создаём три цвета для градиента: бирюзовый, розовый, фиолетовый
-                vec3 color1 = vec3(0.25, 0.88, 0.82); // бирюзовый
-                vec3 color2 = vec3(1.0, 0.42, 0.71);  // розовый
-                vec3 color3 = vec3(0.56, 0.24, 0.86); // фиолетовый
+                // Преобразуем оригинальный цвет в HSV
+                vec3 hsv = rgb2hsv(originalColor);
                 
-                // Анимация через sin/cos для плавного цикла туда-обратно
-                float t1 = sin(angle) * 0.5 + 0.5;
-                float t2 = sin(angle + 2.094) * 0.5 + 0.5; // +120 градусов
-                float t3 = sin(angle + 4.188) * 0.5 + 0.5; // +240 градусов
+                // Сдвигаем тон (hue) на основе угла
+                // За один полный цикл (0 -> PI -> 0) тон проходит весь спектр
+                // hue идет от 0 (красный) через оранжевый, жёлтый, зелёный, голубой, синий, фиолетовый и обратно
+                float hueShift = angle / 3.14159; // Нормализуем к [0, 1]
+                hsv.x = fract(hsv.x + hueShift); // Циклически сдвигаем тон
                 
-                // Нормализуем веса
-                float total = t1 + t2 + t3;
-                t1 /= total;
-                t2 /= total;
-                t3 /= total;
+                // Повышаем насыщенность для более ярких цветов
+                hsv.y = min(hsv.y * 1.3, 1.0);
                 
-                // Смешиваем цвета
-                vec3 gradientColor = color1 * t1 + color2 * t2 + color3 * t3;
+                // Преобразуем обратно в RGB
+                vec3 shiftedColor = hsv2rgb(hsv);
                 
                 // Маска определяет интенсивность эффекта (где белее - там активнее)
-                // Но не перекрашиваем полностью, а меняем тон
-                float blendIntensity = maskValue * 0.7; // Ограничиваем максимальную интенсивность
-                return mix(originalColor, gradientColor, blendIntensity);
+                // Но не перекрашиваем полностью, а меняем только тон
+                float blendIntensity = maskValue * 0.8; // Ограничиваем максимальную интенсивность
+                return mix(originalColor, shiftedColor, blendIntensity);
             }
         `;
 
@@ -946,19 +962,25 @@
                                             }
                                             
                                             // time идет от 0 до PI, нам нужен полный цикл 0..1 за PI
-                                            float hueShift = time / 3.14159265359;
+                                            // Умножаем на HUE_CYCLES_PER_ROTATION для управления скоростью смены цветов
+                                            float hueShift = (time / 3.14159265359) * HUE_CYCLES_PER_ROTATION;
                                             
                                             // Конвертируем исходный цвет в HSV
                                             vec3 hsv = rgb2hsv(originalColor);
                                             
                                             // Сдвигаем тон (Hue) на значение hueShift
-                                            // Умножаем на maskValue чтобы чёрные участки маски не менялись
-                                            hsv.x = fract(hsv.x + hueShift * maskValue);
+                                            hsv.x = fract(hsv.x + hueShift);
+                                            
+                                            // Повышаем насыщенность для более ярких цветов
+                                            hsv.y = min(hsv.y * 1.3, 1.0);
                                             
                                             // Возвращаем цвет обратно в RGB
                                             vec3 shiftedColor = hsv2rgb(hsv);
                                             
-                                            return shiftedColor;
+                                            // Маска определяет интенсивность эффекта (где белее - там активнее)
+                                            // Но не перекрашиваем полностью, а меняем только тон
+                                            float blendIntensity = maskValue * 0.8;
+                                            return mix(originalColor, shiftedColor, blendIntensity);
                                         }
                                     \n` + shader.fragmentShader;
                                     
