@@ -756,14 +756,14 @@
                 hsv.x = fract(hsv.x + hueShift); // Циклически сдвигаем тон
                 
                 // Повышаем насыщенность для более ярких цветов
-                hsv.y = min(hsv.y * 1.3, 1.0);
+                hsv.y = min(hsv.y * 1.5, 1.0);
                 
                 // Преобразуем обратно в RGB
                 vec3 shiftedColor = hsv2rgb(hsv);
                 
                 // Маска определяет интенсивность эффекта (где белее - там активнее)
                 // Но не перекрашиваем полностью, а меняем только тон
-                float blendIntensity = maskValue * 0.8; // Ограничиваем максимальную интенсивность
+                float blendIntensity = maskValue * 0.85; // Ограничиваем максимальную интенсивность
                 return mix(originalColor, shiftedColor, blendIntensity);
             }
         `;
@@ -982,14 +982,14 @@
                                             hsv.x = fract(hsv.x + hueShift);
                                             
                                             // Повышаем насыщенность для более ярких цветов
-                                            hsv.y = min(hsv.y * 1.3, 1.0);
+                                            hsv.y = min(hsv.y * 1.5, 1.0);
                                             
                                             // Возвращаем цвет обратно в RGB
                                             vec3 shiftedColor = hsv2rgb(hsv);
                                             
                                             // Маска определяет интенсивность эффекта (где белее - там активнее)
                                             // Но не перекрашиваем полностью, а меняем только тон
-                                            float blendIntensity = maskValue * 0.8;
+                                            float blendIntensity = maskValue * 0.85;
                                             return mix(originalColor, shiftedColor, blendIntensity);
                                         }
                                     \n` + shader.fragmentShader;
