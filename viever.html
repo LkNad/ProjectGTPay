@@ -223,6 +223,7 @@
         let gradientUniformsList = []; // Массив uniforms для всех материалов
         let lastCameraAngle = 0;
         let accumulatedAngle = 0;
+        let gradientPhase = 0; // накопленная фаза градиента (плавно следует за углом камеры)
         
         // URL параметры
         const urlParams = new URLSearchParams(window.location.search);
@@ -536,13 +537,14 @@
                 accumulatedAngle += angleDiff;
                 lastCameraAngle = currentCameraAngle;
                 
-                // Преобразуем накопленный угол в диапазон [0, PI] для цикла туда-обратно
-                // При вращении на 360*2 градусов (2*PI накопленного) time пройдет путь 0->PI->0
-                const normalizedAngle = Math.abs(Math.sin(accumulatedAngle * 0.5));
+                // Фаза градиента плавно (с инерцией) следует за накопленным углом камеры.
+                // Градиент "переливается волнами" при вращении модели.
+                const targetPhase = accumulatedAngle * 0.5;
+                gradientPhase += (targetPhase - gradientPhase) * 0.08;
                 
                 // Обновляем time для всех материалов
                 for (let i = 0; i < gradientUniformsList.length; i++) {
-                    gradientUniformsList[i].time.value = normalizedAngle * Math.PI;
+                    gradientUniformsList[i].time.value = gradientPhase;
                 }
             }
             
@@ -703,11 +705,26 @@
             callback(resultTexture);
         }
         
-        // Шейдер для градиентного эффекта цвета
+        // Шейдер для градиентного эффекта цвета (наложение градиента волнами)
         const gradientShaderChunk = `
             uniform float time;
             uniform sampler2D gradientMask;
             varying vec2 vUv;
+            
+            vec3 rgb2hsv(vec3 c) {
+                vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+                vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+                vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+                float d = q.x - min(q.w, q.y);
+                float e = 1.0e-10;
+                return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+            }
+            
+            vec3 hsv2rgb(vec3 c) {
+                vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+                vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+                return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+            }
             
             vec3 applyGradientColor(vec3 originalColor, vec2 uv) {
                 // Получаем значение маски (0-1)
@@ -718,33 +735,42 @@
                     return originalColor;
                 }
                 
-                // Вычисляем угол вращения камеры для анимации (время приходит от JS)
-                // Анимация идёт туда-обратно: 0 -> PI -> 0
-                float angle = time;
+                // Фаза приходит из JS (зависит от угла вращения камеры)
+                float lum = dot(originalColor, vec3(0.299, 0.587, 0.114));
+                float origSat = rgb2hsv(originalColor).y;
+                
+                // Плавная волна по UV + фаза вращения
+                float wave = sin(uv.x * 6.28318 * 2.0 + uv.y * 6.28318 * 1.0 + time * 2.0) * 0.5 + 0.5;
                 
                 // Создаём три цвета для градиента: бирюзовый, розовый, фиолетовый
                 vec3 color1 = vec3(0.25, 0.88, 0.82); // бирюзовый
                 vec3 color2 = vec3(1.0, 0.42, 0.71);  // розовый
                 vec3 color3 = vec3(0.56, 0.24, 0.86); // фиолетовый
                 
-                // Анимация через sin/cos для плавного цикла туда-обратно
-                float t1 = sin(angle) * 0.5 + 0.5;
-                float t2 = sin(angle + 2.094) * 0.5 + 0.5; // +120 градусов
-                float t3 = sin(angle + 4.188) * 0.5 + 0.5; // +240 градусов
+                // Волновые веса цветов — плавно бегут при вращении
+                float t1 = sin(time + wave * 3.14159) * 0.5 + 0.5;
+                float t2 = sin(time + wave * 3.14159 + 2.094) * 0.5 + 0.5; // +120 градусов
+                float t3 = sin(time + wave * 3.14159 + 4.188) * 0.5 + 0.5; // +240 градусов
                 
                 // Нормализуем веса
-                float total = t1 + t2 + t3;
+                float total = t1 + t2 + t3 + 0.0001;
                 t1 /= total;
                 t2 /= total;
                 t3 /= total;
                 
-                // Смешиваем цвета
+                // Смешиваем цвета — получаем градиент вместо исходного цвета
                 vec3 gradientColor = color1 * t1 + color2 * t2 + color3 * t3;
                 
-                // Маска определяет интенсивность эффекта (где белее - там активнее)
-                // Но не перекрашиваем полностью, а меняем тон
-                float blendIntensity = maskValue * 0.7; // Ограничиваем максимальную интенсивность
-                return mix(originalColor, gradientColor, blendIntensity);
+                // Плавно меняем тон уже самого градиента (волны)
+                vec3 gHsv = rgb2hsv(gradientColor);
+                gHsv.x = fract(gHsv.x + wave * 0.15 + time * 0.05);
+                gHsv.y = mix(origSat, max(gHsv.y, 0.6), maskValue);
+                gHsv.z = clamp(lum * (1.0 + 0.35 * maskValue) + 0.05 * maskValue, 0.0, 1.0);
+                vec3 gradientShaded = hsv2rgb(gHsv);
+                
+                // Маска определяет силу наложения градиента
+                float blendIntensity = maskValue * 0.9;
+                return mix(originalColor, gradientShaded, blendIntensity);
             }
         `;
 
@@ -922,7 +948,7 @@
                                         'void main() {\nvGradientUv = uv;'
                                     );
                                     
-                                    // Добавляем функцию смены тона (Hue shift) в fragment shader
+                                    // Добавляем функцию наложения градиента (волны) в fragment shader
                                     shader.fragmentShader = `
                                         uniform float time;
                                         uniform sampler2D gradientMask;
@@ -945,33 +971,60 @@
                                             return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
                                         }
                                         
-                                        vec3 applyHueShift(vec3 originalColor, vec2 uv) {
+                                        // Вместо цвета текстуры накладываем градиент,
+                                        // тон которого плавно переливается волнами при вращении.
+                                        vec3 applyGradientWaves(vec3 originalColor, vec2 uv) {
                                             float maskValue = texture2D(gradientMask, uv).r;
                                             if (maskValue < 0.01) {
                                                 return originalColor;
                                             }
                                             
-                                            // time идет от 0 до PI, нам нужен полный цикл 0..1 за PI
-                                            float hueShift = time / 3.14159265359;
+                                            // Сохраняем яркость (V) исходного пикселя,
+                                            // чтобы не терять детали и свет модели
+                                            float lum = dot(originalColor, vec3(0.299, 0.587, 0.114));
+                                            float origSat = rgb2hsv(originalColor).y;
                                             
-                                            // Конвертируем исходный цвет в HSV
-                                            vec3 hsv = rgb2hsv(originalColor);
+                                            // Плавная волна по UV-координатам + фаза от угла камеры (time)
+                                            float wave = sin(uv.x * 6.28318 * 2.0 + uv.y * 6.28318 * 1.0 + time * 2.0) * 0.5 + 0.5;
                                             
-                                            // Сдвигаем тон (Hue) на значение hueShift
-                                            // Умножаем на maskValue чтобы чёрные участки маски не менялись
-                                            hsv.x = fract(hsv.x + hueShift * maskValue);
+                                            // Три цвета градиента: бирюзовый, розовый, фиолетовый
+                                            vec3 color1 = vec3(0.25, 0.88, 0.82); // бирюзовый
+                                            vec3 color2 = vec3(1.0, 0.42, 0.71);  // розовый
+                                            vec3 color3 = vec3(0.56, 0.24, 0.86); // фиолетовый
                                             
-                                            // Возвращаем цвет обратно в RGB
-                                            vec3 shiftedColor = hsv2rgb(hsv);
+                                            // Плавные веса цветов — волны, бегущие при вращении
+                                            float t1 = sin(time + wave * 3.14159) * 0.5 + 0.5;
+                                            float t2 = sin(time + wave * 3.14159 + 2.094) * 0.5 + 0.5; // +120 градусов
+                                            float t3 = sin(time + wave * 3.14159 + 4.189) * 0.5 + 0.5; // +240 градусов
                                             
-                                            return shiftedColor;
+                                            float total = t1 + t2 + t3 + 0.0001;
+                                            t1 /= total;
+                                            t2 /= total;
+                                            t3 /= total;
+                                            
+                                            // Сам градиентный цвет (смешение трёх волн)
+                                            vec3 gradientColor = color1 * t1 + color2 * t2 + color3 * t3;
+                                            
+                                            // Плавно меняем тон уже самого градиента в зависимости от волны
+                                            vec3 gHsv = rgb2hsv(gradientColor);
+                                            gHsv.x = fract(gHsv.x + wave * 0.15 + time * 0.05);
+                                            // Насыщенность между градиентом и оригиналом — чем темнее пиксель,
+                                            // тем менее "окрашен" градиент, сохраняем объём
+                                            gHsv.y = mix(origSat, max(gHsv.y, 0.6), maskValue);
+                                            // Яркость берём от исходного пикселя с лёгким boosts от градиента
+                                            gHsv.z = clamp(lum * (1.0 + 0.35 * maskValue) + 0.05 * maskValue, 0.0, 1.0);
+                                            vec3 gradientShaded = hsv2rgb(gHsv);
+                                            
+                                            // Маска определяет силу наложения градиента (вместо цвета — градиент)
+                                            float blendIntensity = maskValue * 0.9;
+                                            return mix(originalColor, gradientShaded, blendIntensity);
                                         }
                                     \n` + shader.fragmentShader;
                                     
                                     // Модифицируем outgoing light
                                     shader.fragmentShader = shader.fragmentShader.replace(
                                         '#include <dithering_fragment>',
-                                        '#include <dithering_fragment>\nvec4 correctedColor = gl_FragColor;\ncorrectedColor.rgb = applyHueShift(correctedColor.rgb, vGradientUv);\ngl_FragColor = correctedColor;'
+                                        '#include <dithering_fragment>\nvec4 correctedColor = gl_FragColor;\ncorrectedColor.rgb = applyGradientWaves(correctedColor.rgb, vGradientUv);\ngl_FragColor = correctedColor;'
                                     );
                                     
                                     // Сохраняем ссылку на uniforms для обновления в массиве
