@@ -476,12 +476,14 @@
                 // Вычисляем разницу углов с учётом перехода через 360 градусов
                 let angleDiff = currentCameraAngle - lastCameraAngle;
                 
-                // Корректируем переход через границу -PI/PI
-                /*if (angleDiff > Math.PI) {
+                // Обязательно корректируем переход через границу -PI/PI,
+                // иначе при пересечении границы angleDiff "прыгает" на ±2π
+                // и градиент застывает, пока lerp догоняет этот скачок.
+                if (angleDiff > Math.PI) {
                     angleDiff -= Math.PI * 2;
                 } else if (angleDiff < -Math.PI) {
                     angleDiff += Math.PI * 2;
-                }*/
+                }
                 
                 // Накопленный угол для плавной анимации
                 accumulatedAngle += angleDiff;
@@ -489,8 +491,8 @@
                 
                 // Фаза градиента плавно (с инерцией) следует за накопленным углом камеры.
                 // Градиент "переливается волнами" при вращении модели.
-                const targetPhase = accumulatedAngle * 0.5;
-                gradientPhase += (targetPhase - gradientPhase) * 0.08;
+                const targetPhase = accumulatedAngle;
+                gradientPhase += (targetPhase - gradientPhase) * 0.15;
                 
                 // Обновляем time для всех материалов
                 for (let i = 0; i < gradientUniformsList.length; i++) {
@@ -874,51 +876,47 @@
                                             return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
                                         }
                                         
-                                        // Вместо цвета текстуры накладываем градиент,
-                                        // тон которого плавно переливается волнами при вращении.
+                                                                                // Вместо цвета модели плавно накладываем градиент,
+                                        // а затем уже тон самого градиента плавно переливается волнами.
                                         vec3 applyGradientWaves(vec3 originalColor, vec2 uv) {
                                             float maskValue = texture2D(gradientMask, uv).r;
                                             if (maskValue < 0.01) {
                                                 return originalColor;
                                             }
-                                            
-                                            // Сохраняем яркость исходного пикселя,
-                                            // чтобы не терять детали и свет модели
+
+                                            // Яркость исходного пикселя — сохраняем свет и объём модели
                                             float lum = dot(originalColor, vec3(0.299, 0.587, 0.114));
-                                            float origSat = rgb2hsv(originalColor).y;
-                                            
-                                            // Плавная волна по UV-координатам + фаза от угла камеры (time)
-                                            float wave = sin(uv.x * 6.28318 * 2.0 + uv.y * 6.28318 * 1.0 + time * 2.0) * 0.5 + 0.5;
-                                            
-                                            // Три цвета градиента: бирюзовый, розовый, фиолетовый
+
+                                            // Базовый градиент: непрерывная полоса трёх цветов по UV-координате.
+                                            // position.x здесь НЕТ намеренно — иначе градиент "приклеивается"
+                                            // к экрану, при развороте на 180° сдвиг компенсируется и всё застывает.
+                                            float g = fract(uv.x + uv.y * 0.5);
                                             vec3 color1 = vec3(0.25, 0.88, 0.82); // бирюзовый
                                             vec3 color2 = vec3(1.0, 0.42, 0.71);  // розовый
                                             vec3 color3 = vec3(0.56, 0.24, 0.86); // фиолетовый
-                                            
-                                            // Плавные веса цветов — волны, бегущие при вращении
-                                            float t1 = sin(time + wave * 3.14159) * 0.5 + 0.5;
-                                            float t2 = sin(time + wave * 3.14159 + 2.094) * 0.5 + 0.5; // +120 градусов
-                                            float t3 = sin(time + wave * 3.14159 + 4.189) * 0.5 + 0.5; // +240 градусов
-                                            
-                                            float total = t1 + t2 + t3 + 0.0001;
-                                            t1 /= total;
-                                            t2 /= total;
-                                            t3 /= total;
-                                            
-                                            // Сам градиентный цвет (смешение трёх волн)
-                                            vec3 gradientColor = color1 * t1 + color2 * t2 + color3 * t3;
-                                            
-                                            // Плавно меняем тон уже самого градиента в зависимости от волны
+                                            vec3 gradientColor;
+                                            if (g < 0.3333) {
+                                                gradientColor = mix(color1, color2, smoothstep(0.0, 0.3333, g));
+                                            } else if (g < 0.6666) {
+                                                gradientColor = mix(color2, color3, smoothstep(0.3333, 0.6666, g));
+                                            } else {
+                                                gradientColor = mix(color3, color1, smoothstep(0.6666, 1.0, g));
+                                            }
+
+                                            // Плавно меняем ТОН уже самого градиента: бегущие волны + фаза вращения.
+                                            // time накоплен в JS из непрерывного угла камеры — без скачков и пауз.
                                             vec3 gHsv = rgb2hsv(gradientColor);
-                                            gHsv.x = fract(gHsv.x + wave * 0.15 + time * 0.05);
-                                            // Насыщенность между градиентом и оригиналом — сохраняем объём
-                                            gHsv.y = mix(origSat, max(gHsv.y, 0.6), maskValue);
-                                            // Яркость берём от исходного пикселя с лёгким бустом от градиента
+                                            float wave = sin(g * 6.28318 * 3.0 + time * 1.5) * 0.5 + 0.5;
+                                            gHsv.x = fract(gHsv.x + time * 0.12 + wave * 0.1);
+                                            // Лёгкая волновая модуляция насыщенности — эффект переливающихся волн
+                                            gHsv.y = clamp(gHsv.y * (0.8 + 0.4 * wave), 0.3, 1.0);
+                                            // Яркость берём от исходного пикселя с лёгким бустом от маски
                                             gHsv.z = clamp(lum * (1.0 + 0.35 * maskValue) + 0.05 * maskValue, 0.0, 1.0);
                                             vec3 gradientShaded = hsv2rgb(gHsv);
-                                            
-                                            // Маска определяет силу наложения градиента (вместо цвета — градиент)
-                                            float blendIntensity = maskValue * 0.9;
+
+                                            // Маска определяет силу наложения: чем белее маска, тем сильнее
+                                            // градиент полностью заменяет цвет модели (плавный переход 0..1)
+                                            float blendIntensity = smoothstep(0.0, 0.5, maskValue) * 0.95;
                                             return mix(originalColor, gradientShaded, blendIntensity);
                                         }
                                     
