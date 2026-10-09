@@ -834,17 +834,13 @@
                                         uniform float time;
                                         uniform sampler2D gradientMask;
                                         varying vec2 vGradientUv;
-                                        varying vec3 vGradientNormalW;
                                     
 ` + shader.vertexShader;
 
-                                    // Заменяем main() чтобы передать UV и мировую нормаль
-                                    // (мировая нормаль нужна, чтобы волны «следовали» по нормали:
-                                    // ориентация волн остаётся привязанной к поверхности модели
-                                    // при вращении камеры/модели)
+                                    // Заменяем main() чтобы передать UV (волны идут по UV только)
                                     shader.vertexShader = shader.vertexShader.replace(
                                         'void main() {',
-                                        'void main() {\nvGradientUv = uv;\nvGradientNormalW = normalize(mat3(modelMatrix) * normal);'
+                                        'void main() {\nvGradientUv = uv;'
                                     );
 
                                     // Добавляем функцию смены тона (Hue shift) в fragment shader
@@ -852,7 +848,6 @@
                                         uniform float time;
                                         uniform sampler2D gradientMask;
                                         varying vec2 vGradientUv;
-                                        varying vec3 vGradientNormalW;
 
                                         // Функция для конвертации RGB в HSV
                                         vec3 rgb2hsv(vec3 c) {
@@ -885,7 +880,7 @@
                                             return s / 25.0;
                                         }
                                         
-                                        vec3 applyHueShift(vec3 originalColor, vec2 uv, vec3 normalW) {
+                                        vec3 applyHueShift(vec3 originalColor, vec2 uv) {
                                             vec2 texel = vec2(1.0 / 512.0, 1.0 / 512.0);
                                             float maskRaw = texture2D(gradientMask, uv).r;
                                             float maskValue = smoothMask(gradientMask, uv, texel);
@@ -909,19 +904,10 @@
                                             // без расходящегося поля, которое давало артефакты в центре
                                             vec2 waveDir = gradLen > 0.002 ? (gradDir / gradLen) : vec2(0.7071, 0.7071);
                                             
-                                            // Волны следуют по UV: фаза вдоль направления перелива маски
-                                            float uvPhase = dot(uv, waveDir) * 6.0;
-                                            
-                                            // Волны следуют по нормали: нормаль поверхности (в мировых координатах)
-                                            // даёт свою фазу — разные стороны/участки модели с разной нормалью
-                                            // переливаются в свой момент, а ориентация волн «прилипает» к поверхности
-                                            vec3 n = normalize(normalW);
-                                            float normalPhase = (n.x * 0.42 + n.y * 0.31 + n.z * 0.27) * 8.0;
-                                            
-                                            // Итоговая фаза — комбинация UV и нормали: крупные волны
-                                            // (множитель 6.0 у UV) плавно перетекают по поверхности,
-                                            // следуя за её изгибами
-                                            float wave = sin(uvPhase + normalPhase - time * 2.0) * 0.5 + 0.5;
+                                            // Волны идут по UV только: фаза вдоль направления перелива маски
+                                            // (без нормали — убраны артефакты от интерполяции нормалей)
+                                            float waveCoord = dot(uv, waveDir);
+                                            float wave = sin(waveCoord * 6.0 - time * 2.0) * 0.5 + 0.5;
                                             
                                             // Усиливаем амплитуду, чтобы перелив был заметнее
                                             float hueShift = (wave - 0.5) * 0.6;
@@ -944,7 +930,7 @@
                                     // Модифицируем outgoing light
                                     shader.fragmentShader = shader.fragmentShader.replace(
                                         '#include <dithering_fragment>',
-                                        '#include <dithering_fragment>\nvec4 correctedColor = gl_FragColor;\ncorrectedColor.rgb = applyHueShift(correctedColor.rgb, vGradientUv, vGradientNormalW);\ngl_FragColor = correctedColor;'
+                                        '#include <dithering_fragment>\nvec4 correctedColor = gl_FragColor;\ncorrectedColor.rgb = applyHueShift(correctedColor.rgb, vGradientUv);\ngl_FragColor = correctedColor;'
                                     );
 
                                     // Сохраняем ссылку на uniforms для обновления в массиве
