@@ -943,47 +943,24 @@
                                             return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
                                         }
                                         
-                                        // Сглаживание маски box-фильтром 5x5: убирает шумные
-                                        // отдельные пиксели (артефакты), которые раньше давали
-                                        // рваные направления градиента и «одинокие» пиксели цвета
-                                        float smoothMask(sampler2D tex, vec2 co, vec2 texel) {
-                                            vec2 tc = clamp(co, vec2(0.001), vec2(0.999));
-                                            float s = 0.0;
-                                            for (int y = -2; y <= 2; y++) {
-                                                for (int x = -2; x <= 2; x++) {
-                                                    s += texture2D(tex, tc + vec2(float(x), float(y)) * texel).r;
-                                                }
-                                            }
-                                            return s / 25.0;
-                                        }
-                                        
                                         vec3 applyHueShift(vec3 originalColor, vec2 uv) {
-                                            vec2 texel = vec2(1.0 / 512.0, 1.0 / 512.0);
-                                            float maskRaw = texture2D(gradientMask, uv).r;
-                                            float maskValue = smoothMask(gradientMask, uv, texel);
-                                            if (maskRaw < 0.01 && maskValue < 0.01) {
+                                            // Значение маски берём напрямую (без box-сглаживания): оно зависит
+                                            // только от UV, поэтому одинаково на всех гранях, использующих область маски
+                                            float maskValue = texture2D(gradientMask, uv).r;
+                                            if (maskValue < 0.01) {
                                                 return originalColor;
                                             }
                                             
                                             // time — накопленный угол вращения камеры (непрерывный)
                                             
-                                            // Направление перелива считаем по СОСРЕДТОЧЕННОЙ маске в окрестности
-                                            // ~7 пикселей текстуры (центральные разности): это стабилизирует
-                                            // направление и защищает от одиночных пикселей-выбросов
-                                            vec2 wideTexel = texel * 3.5;
-                                            float mR = smoothMask(gradientMask, uv + vec2(wideTexel.x, 0.0), texel);
-                                            float mL = smoothMask(gradientMask, uv - vec2(wideTexel.x, 0.0), texel);
-                                            float mU = smoothMask(gradientMask, uv + vec2(0.0, wideTexel.y), texel);
-                                            float mD = smoothMask(gradientMask, uv - vec2(0.0, wideTexel.y), texel);
-                                            vec2 gradDir = vec2(mR - mL, mU - mD);
-                                            float gradLen = length(gradDir);
-                                            // Если локально маска плоская — направление фиксированное (по диагонали),
-                                            // без расходящегося поля, которое давало артефакты в центре
-                                            vec2 waveDir = gradLen > 0.002 ? (gradDir / gradLen) : vec2(0.7071, 0.7071);
-                                            
-                                            // Волны идут по UV только: фаза вдоль направления перелива маски
-                                            // (без нормали — убраны артефакты от интерполяции нормалей)
-                                            float waveCoord = dot(uv, waveDir);
+                                            // ВАЖНО: никаких производных/градиентов маски!
+                                            // Локальное направление волны раньше считалось по градиенту маски —
+                                            // на швах UV-развёртки (края граней) градиент скакал между соседними
+                                            // островками unwrap'а, и одна грань получала свою фазу волн («меняется
+                                            // отдельно» = артефакт на краях граней). Теперь фаза зависит ТОЛЬКО от
+                                            // глобальных UV: две грани, использующие одну область маски, получают
+                                            // идентичный цвет — швы не видны.
+                                            float waveCoord = uv.x + uv.y;
                                             float wave = sin(waveCoord * 6.0 - time * 2.0) * 0.5 + 0.5;
                                             
                                             // Усиливаем амплитуду, чтобы перелив был заметнее
