@@ -289,6 +289,8 @@
         let lastCameraAngle = 0;
         let accumulatedAngle = 0;
         let gradientPhase = 0; // накопленная фаза градиента (плавно следует за углом камеры)
+        let waveTime = 0;      // непрерывное время волн (сек) — волны бегут и без вращения
+        let lastFrameTime = performance.now();
         
         let pendingTextureFile = null;
         let bgLogoImage = null;
@@ -494,10 +496,18 @@
                 const targetPhase = accumulatedAngle;
                 gradientPhase += (targetPhase - gradientPhase) * 0.15;
                 
+                // Непрерывное время волн: волны бегут всегда, даже когда камеру не вращают.
+                const now = performance.now();
+                waveTime += Math.min((now - lastFrameTime) / 1000, 0.1); // сек, с защитой от больших пауз
+                lastFrameTime = now;
+
                 // Обновляем time для всех материалов
                 for (let i = 0; i < gradientUniformsList.length; i++) {
                     gradientUniformsList[i].time.value = gradientPhase;
+                    gradientUniformsList[i].waveTime.value = waveTime;
                 }
+            } else {
+                lastFrameTime = performance.now();
             }
             
             if (model) {
@@ -837,11 +847,13 @@
                             if (hasGradientMask && gradientMaskTexture && !isStatTrack) {
                                 newMat.onBeforeCompile = function(shader) {
                                     shader.uniforms.time = { value: 0 };
+                                    shader.uniforms.waveTime = { value: 0 };
                                     shader.uniforms.gradientMask = { value: gradientMaskTexture };
 
                                     // Добавляем uniform и varying в vertex shader
                                     shader.vertexShader = `
                                         uniform float time;
+                                        uniform float waveTime;
                                         uniform sampler2D gradientMask;
                                         varying vec2 vGradientUv;
                                     
@@ -856,6 +868,7 @@
                                     // Добавляем функцию наложения градиента (волны) в fragment shader
                                     shader.fragmentShader = `
                                         uniform float time;
+                                        uniform float waveTime;
                                         uniform sampler2D gradientMask;
                                         varying vec2 vGradientUv;
 
@@ -876,62 +889,57 @@
                                             return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
                                         }
                                         
-                                                                                // Вместо цвета модели плавно накладываем градиент,
-                                        // а затем уже тон самого градиента плавно переливается волнами.
+                                        // Градиент НЕ накладывается поверх цвета целиком: часть пикселей
+                                        // меняет оттенок СРАЗУ (гребень волны), а соседние зоны остаются
+                                        // исходным цветом и «догоняют» позже — бегущая волна изменения цвета.
                                         vec3 applyGradientWaves(vec3 originalColor, vec2 uv) {
                                             float maskValue = texture2D(gradientMask, uv).r;
                                             if (maskValue < 0.01) {
                                                 return originalColor;
                                             }
 
-                                            // HSV исходного цвета — он определяет, КАК будет наложен градиент:
-                                            // тон смещает полосу градиента, насыщенность — силу наложения и перелив,
-                                            // яркость — контраст волн
+                                            // HSV исходного цвета — он определяет, КАК пойдёт волна:
+                                            // тон задаёт базовое смещение и направление сдвига,
+                                            // насыщенность — силу и скорость, яркость — контраст гребней
                                             vec3 oHsv = rgb2hsv(clamp(originalColor, 0.0, 1.0));
                                             float origHue = oHsv.x;
                                             float origSat = oHsv.y;
                                             float origVal = oHsv.z;
 
-                                            // Яркость исходного пикселя — сохраняем свет и объём модели
-                                            float lum = dot(originalColor, vec3(0.299, 0.587, 0.114));
+                                            // Непрерывная полоса по UV: её положение зависит от исходного цвета —
+                                            // разные цвета получают свой сдвиг волны
+                                            float g = fract(uv.x + uv.y * 0.5 + origHue * 0.6 + origVal * 0.2);
 
-                                            // Базовый градиент: непрерывная полоса трёх цветов по UV-координате.
-                                            // position.x здесь НЕТ намеренно — иначе градиент "приклеивается"
-                                            // к экрану, при развороте на 180° сдвиг компенсируется и всё застывает.
-                                            // Смещение полосы зависит от исходного цвета: hue*0.6 + lum*0.2 —
-                                            // разные цвета модели получают разный сдвиг градиента
-                                            float g = fract(uv.x + uv.y * 0.5 + origHue * 0.6 + lum * 0.2);
-                                            vec3 color1 = vec3(0.25, 0.88, 0.82); // бирюзовый
-                                            vec3 color2 = vec3(1.0, 0.42, 0.71);  // розовый
-                                            vec3 color3 = vec3(0.56, 0.24, 0.86); // фиолетовый
-                                            vec3 gradientColor;
-                                            if (g < 0.3333) {
-                                                gradientColor = mix(color1, color2, smoothstep(0.0, 0.3333, g));
-                                            } else if (g < 0.6666) {
-                                                gradientColor = mix(color2, color3, smoothstep(0.3333, 0.6666, g));
-                                            } else {
-                                                gradientColor = mix(color3, color1, smoothstep(0.6666, 1.0, g));
-                                            }
+                                            // Бегущая волна: waveTime — непрерывное время (волны идут и без
+                                            // вращения), time — инерционная фаза камеры (усиливает перелив при повороте).
+                                            // phase растёт бесконечно — никаких скачков/застываний на 180°.
+                                            float speed = 1.0 + origSat * 1.5;
+                                            float phase = g * 6.28318 * 2.0 + waveTime * speed + time * 0.5;
+                                            float w = sin(phase) * 0.5 + 0.5;
 
-                                            // Плавно меняем ТОН уже самого градиента: бегущие волны + фаза вращения.
-                                            // time накоплен в JS из непрерывного угла камеры — без скачков и пауз.
-                                            // Скорость и амплитуда перелива зависят от насыщенности исходного цвета
-                                            vec3 gHsv = rgb2hsv(gradientColor);
-                                            float wave = sin(g * 6.28318 * 3.0 + time * (1.0 + origSat * 1.5)) * 0.5 + 0.5;
-                                            gHsv.x = fract(gHsv.x + time * 0.12 + wave * (0.05 + origSat * 0.15) + origHue * 0.15);
-                                            // Волновая модуляция насыщенности + лёгкая подмесь исходной насыщенности
-                                            gHsv.y = clamp(gHsv.y * (0.8 + 0.4 * wave) + origSat * 0.15, 0.3, 1.0);
-                                            // Яркость от исходного пикселя: чем темнее исходный цвет, тем глубже контраст волн
-                                            float waveContrast = 1.0 + 0.35 * maskValue * (0.6 + (1.0 - origVal) * 0.8);
-                                            gHsv.z = clamp(lum * waveContrast + 0.05 * maskValue, 0.0, 1.0);
-                                            vec3 gradientShaded = hsv2rgb(gHsv);
+                                            // Профиль «полосы»: узкий плавно-полярный фронт.
+                                            // Только вершины волны замещаются цветом, всё остальное — исходный цвет.
+                                            float band = smoothstep(0.55, 1.0, w);
 
-                                            // Сила наложения зависит от маски И от насыщенности исходного цвета:
-                                            // насыщенные цвета почти полностью замещаются градиентом,
-                                            // блёклые/серые — градиент накладывается лишь частично, оставляя исходный оттенок
-                                            float satFactor = 0.55 + 0.45 * smoothstep(0.0, 0.8, origSat);
-                                            float blendIntensity = smoothstep(0.0, 0.5, maskValue) * 0.95 * satFactor;
-                                            return mix(originalColor, gradientShaded, blendIntensity);
+                                            // Смещение тона на гребне волны: умеренное (≈±40°), волной по поверхности.
+                                            // Ориентация сдвига зависит от исходного тона — от него и «отталкивается» цвет.
+                                            float dir = sign(origHue - 0.5);
+                                            if (dir == 0.0) dir = 1.0;
+                                            float hueShift = dir * (0.10 + 0.12 * origSat) * band;
+
+                                            // Часть цвета меняется сразу (band=1), часть — чуть позже:
+                                            // мягкие края полосы дают постепенное «догоняющее» изменение
+                                            float changeAmount = band * maskValue;
+
+                                            vec3 mHsv = oHsv;
+                                            mHsv.x = fract(mHsv.x + hueShift);
+                                            // Гребень слегка насыщеннее и светлее — волна читается как блик,
+                                            // величина подмеса зависит от исходного цвета
+                                            mHsv.y = clamp(mHsv.y + 0.15 * band * (0.4 + origSat), 0.0, 1.0);
+                                            mHsv.z = clamp(mHsv.z * (1.0 + 0.18 * band * (0.5 + (1.0 - origVal))), 0.0, 1.0);
+                                            vec3 shiftedColor = hsv2rgb(mHsv);
+
+                                            return mix(originalColor, shiftedColor, changeAmount);
                                         }
                                     
 ` + shader.fragmentShader;
