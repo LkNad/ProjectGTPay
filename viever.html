@@ -223,6 +223,7 @@
         let gradientUniformsList = []; // Массив uniforms для всех материалов
         let lastCameraAngle = 0;
         let accumulatedAngle = 0;
+        let lastGradientTotalRot = null; // сумма предыдущих кадров: угол камеры + поворот модели
         
         // Переменные для авто-возврата вращения к 0
         let autoReturnActive = false;      // идёт ли сейчас авто-возврат
@@ -234,6 +235,9 @@
         let lastSphTheta = null;           // последний азимут камеры (для отслеживания вращения пользователем)
         let lastSphPhi = null;             // последний полярный угол камеры
         let returnCheckPending = null;     // id rAF-замера остановки инерции
+        let lastOrbitTheta = null;         // предыдущий азимут камеры (накопление ручного поворота)
+        let accumulatedOrbitRotY = 0;      // накопленный ручной поворот камеры вокруг Y (в градусах)
+        let camAppliedDeg = 0;             // сколько градусов возврата камеры уже применено
         
         // URL параметры
         const urlParams = new URLSearchParams(window.location.search);
@@ -485,7 +489,12 @@
             controls.enableKeys = true;
             
             // Отслеживание вращения модели пользователем (через OrbitControls)
-            controls.addEventListener('start', () => { isUserInteracting = true; });
+            controls.addEventListener('start', () => {
+                isUserInteracting = true;
+                // Начинаем новый замер ручного вращения — сбрасываем накопление
+                lastOrbitTheta = null;
+                accumulatedOrbitRotY = 0;
+            });
             controls.addEventListener('end', () => {
                 isUserInteracting = false;
                 // Если пользователь остановил вращение с инерцией — дождёмся её окончания
@@ -535,8 +544,10 @@
         
         // Запуск плавного возврата всех вращений модели к 0
         function startAutoReturnToZero() {
+            // Учитываем и поворот модели слайдерами, и ручное вращение камеры:
+            // суммарный угол по Y возвращается к 0 (часть — орбитой камеры)
             autoReturnStart.x = parseFloat(rotXSlider.value);
-            autoReturnStart.y = normalizeAngle(parseFloat(rotYSlider.value));
+            autoReturnStart.y = normalizeAngle(parseFloat(rotYSlider.value) + accumulatedOrbitRotY);
             autoReturnStart.z = parseFloat(rotZSlider.value);
             // Если уже на нуле — ничего анимировать не нужно
             if (Math.abs(autoReturnStart.x) < 0.5 && Math.abs(autoReturnStart.y) < 0.5 && Math.abs(autoReturnStart.z) < 0.5) {
@@ -545,6 +556,7 @@
                 autoReturnActive = false;
                 return;
             }
+            camAppliedDeg = 0;
             autoReturnStartTime = performance.now();
             autoReturnActive = true;
         }
@@ -569,6 +581,9 @@
             autoReturnStart.x = 0;
             autoReturnStart.y = INITIAL_ROT_Y_DEG;
             autoReturnStart.z = 0;
+            camAppliedDeg = 0;
+            accumulatedOrbitRotY = 0;
+            lastOrbitTheta = null;
             autoReturnStartTime = performance.now();
             autoReturnActive = true;
         }
@@ -611,26 +626,47 @@
         function animate() {
             requestAnimationFrame(animate);
             if (controls) controls.update();
+
+            // Непрерывно накапливаем ручной поворот камеры вокруг модели (по оси Y),
+            // чтобы после отпускания знать, на сколько градусов нужно вернуться к 0
+            if (controls && camera) {
+                const sphNow = new THREE.Spherical().setFromVector3(
+                    camera.position.clone().sub(controls.target)
+                );
+                if (lastOrbitTheta !== null) {
+                    let dTheta = sphNow.theta - lastOrbitTheta;
+                    if (dTheta > Math.PI) dTheta -= Math.PI * 2;
+                    else if (dTheta < -Math.PI) dTheta += Math.PI * 2;
+                    accumulatedOrbitRotY += dTheta * 180 / Math.PI;
+                }
+                lastOrbitTheta = sphNow.theta;
+            }
             
-            // Вычисляем угол камеры по оси Y для градиентного эффекта
-            if (hasGradientMask && gradientUniformsList.length > 0 && camera && model) {
+            // Вычисляем угол для градиентного эффекта: учитываем и вращение камеры,
+            // и поворот самой модели (стартовая анимация / авто-возврат / слайдеры),
+            // чтобы градиент менялся при любом относительном вращении
+            if (hasGradientMask && gradientUniformsList.length > 0 && camera) {
                 // Получаем текущий угол камеры вокруг модели по оси Y
-                const dx = camera.position.x - model.position.x;
-                const dz = camera.position.z - model.position.z;
+                const dx = camera.position.x - (model ? model.position.x : 0);
+                const dz = camera.position.z - (model ? model.position.z : 0);
                 const currentCameraAngle = Math.atan2(dx, dz);
-                
-                // Вычисляем разницу углов с учётом перехода через 360 градусов
-                let angleDiff = currentCameraAngle - lastCameraAngle;
-                
-                // Корректируем переход через границу -PI/PI
-                /*if (angleDiff > Math.PI) {
-                    angleDiff -= Math.PI * 2;
-                } else if (angleDiff < -Math.PI) {
-                    angleDiff += Math.PI * 2;
-                }*/
-                
-                // Накопленный угол для плавной анимации
-                accumulatedAngle += angleDiff;
+
+                // Полный относительный угол: камера + текущий поворот модели вокруг Y
+                const modelRotY = model ? model.rotation.y : 0;
+                const totalRot = currentCameraAngle + modelRotY;
+
+                if (lastGradientTotalRot !== null) {
+                    let angleDiff = totalRot - lastGradientTotalRot;
+                    // Корректируем переход через границу -PI/PI
+                    if (angleDiff > Math.PI) {
+                        angleDiff -= Math.PI * 2;
+                    } else if (angleDiff < -Math.PI) {
+                        angleDiff += Math.PI * 2;
+                    }
+                    // Накопленный угол для плавной анимации
+                    accumulatedAngle += angleDiff;
+                }
+                lastGradientTotalRot = totalRot;
                 lastCameraAngle = currentCameraAngle;
                 
                 // Накопленный угол напрямую передаём в шейдер (без нормализации):
@@ -644,32 +680,44 @@
             if (model) {
                 const scale = parseFloat(scaleSlider.value);
                 
-                // Авто-возврат вращений модели к 0 (плавная анимация)
+// Авто-возврат вращений к 0 (плавная анимация).
+                // Если пользователь снова начал вращать — приостанавливаем возврат;
+                // он продолжится автоматически после отпускания (scheduleReturnAfterInertia)
+                if (autoReturnActive && isUserInteracting) {
+                    autoReturnActive = false;
+                }
                 if (autoReturnActive) {
-                    if (isUserInteracting) {
-                        // Пользователь начал вращать — приостанавливаем авто-возврат,
-                        // сохранив текущие углы как новые стартовые
-                        autoReturnStart.x = parseFloat(rotXSlider.value);
-                        autoReturnStart.y = normalizeAngle(parseFloat(rotYSlider.value));
-                        autoReturnStart.z = parseFloat(rotZSlider.value);
+                    const elapsed = performance.now() - autoReturnStartTime;
+                    const t = Math.min(elapsed / AUTO_RETURN_DURATION, 1);
+                    const e = easeInOutCubic(t);
+                    const curX = autoReturnStart.x * (1 - e);
+                    const curY = autoReturnStart.y * (1 - e);
+                    const curZ = autoReturnStart.z * (1 - e);
+                    // Часть возврата по Y обеспечивает камера: разворачиваем её вокруг
+                    // модели на накопленный ручной поворот (с тем же easing)
+                    const camTargetDeg = normalizeAngle(accumulatedOrbitRotY);
+                    const camCurDeg = camTargetDeg * (1 - e);
+                    const camDeltaRad = (camCurDeg - camAppliedDeg) * Math.PI / 180;
+                    if (Math.abs(camDeltaRad) > 1e-9) {
+                        const off = camera.position.clone().sub(controls.target);
+                        off.applyAxisAngle(new THREE.Vector3(0, 1, 0), camDeltaRad);
+                        camera.position.copy(controls.target.clone().add(off));
+                        camAppliedDeg = camCurDeg;
+                    }
+                    // Оставшаяся часть — через поворот самой модели (слайдеры)
+                    const modelY = curY - camCurDeg;
+                    // Слайдеры имеют диапазон [0, 360] — переводим отрицательные углы
+                    rotXSlider.value = ((curX % 360) + 360) % 360;
+                    rotYSlider.value = ((modelY % 360) + 360) % 360;
+                    rotZSlider.value = ((curZ % 360) + 360) % 360;
+                    updateTransformDisplay();
+                    if (t >= 1) {
                         autoReturnActive = false;
-                    } else {
-                        const elapsed = performance.now() - autoReturnStartTime;
-                        const t = Math.min(elapsed / AUTO_RETURN_DURATION, 1);
-                        const e = easeInOutCubic(t);
-                        const curX = autoReturnStart.x * (1 - e);
-                        let curY = autoReturnStart.y * (1 - e);
-                        const curZ = autoReturnStart.z * (1 - e);
-                        // Слайдеры имеют диапазон [0, 360] — переводим отрицательные углы
-                        rotXSlider.value = ((curX % 360) + 360) % 360;
-                        rotYSlider.value = ((curY % 360) + 360) % 360;
-                        rotZSlider.value = ((curZ % 360) + 360) % 360;
+                        rotXSlider.value = 0; rotYSlider.value = 0; rotZSlider.value = 0;
+                        accumulatedOrbitRotY = 0;
+                        lastOrbitTheta = null;
+                        camAppliedDeg = 0;
                         updateTransformDisplay();
-                        if (t >= 1) {
-                            autoReturnActive = false;
-                            rotXSlider.value = 0; rotYSlider.value = 0; rotZSlider.value = 0;
-                            updateTransformDisplay();
-                        }
                     }
                 }
                 
@@ -1499,7 +1547,13 @@
         [posXSlider, posYSlider, posZSlider, scaleSlider, rotXSlider, rotYSlider, rotZSlider].forEach(s => s.addEventListener('input', updateTransformDisplay));
         // Если пользователь вручную двигает слайдеры вращения — отменяем авто-возврат,
         // чтобы он не конфликтовал с ручными настройками
-        [rotXSlider, rotYSlider, rotZSlider].forEach(s => s.addEventListener('input', () => { autoReturnActive = false; }));
+        [rotXSlider, rotYSlider, rotZSlider].forEach(s => s.addEventListener('input', () => {
+            // Ручная настройка слайдерами отменяет авто-возврат и накопленный ручной поворот камеры
+            autoReturnActive = false;
+            if (returnCheckPending) { cancelAnimationFrame(returnCheckPending); returnCheckPending = null; }
+            accumulatedOrbitRotY = 0;
+            lastOrbitTheta = null;
+        }));
         [mainIntensitySlider, fill1IntensitySlider, fill2IntensitySlider, backIntensitySlider, ambientLightSlider].forEach(s => s.addEventListener('input', updateLighting));
         document.addEventListener('keydown', handleKeyDown);
         document.addEventListener('keyup', handleKeyUp);
