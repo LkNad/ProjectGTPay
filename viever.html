@@ -536,13 +536,11 @@
                 accumulatedAngle += angleDiff;
                 lastCameraAngle = currentCameraAngle;
                 
-                // Преобразуем накопленный угол в диапазон [0, PI] для цикла туда-обратно
-                // При вращении на 360*2 градусов (2*PI накопленного) time пройдет путь 0->PI->0
-                const normalizedAngle = Math.abs(Math.sin(accumulatedAngle * 0.5));
-                
-                // Обновляем time для всех материалов
+                // Накопленный угол напрямую передаём в шейдер (без нормализации):
+                // волна градиента проходит по маске плавно, цвет каждого пикселя
+                // зависит и от времени вращения, и от его положения в маске
                 for (let i = 0; i < gradientUniformsList.length; i++) {
-                    gradientUniformsList[i].time.value = normalizedAngle * Math.PI;
+                    gradientUniformsList[i].time.value = accumulatedAngle;
                 }
             }
             
@@ -916,7 +914,7 @@
                                         varying vec2 vGradientUv;
                                     \n` + shader.vertexShader;
                                     
-                                    // Заменяем main() чтобы передать UV
+                                    // Заменяем main() чтобы передать UV (волны идут по UV только)
                                     shader.vertexShader = shader.vertexShader.replace(
                                         'void main() {',
                                         'void main() {\nvGradientUv = uv;'
@@ -946,25 +944,46 @@
                                         }
                                         
                                         vec3 applyHueShift(vec3 originalColor, vec2 uv) {
+                                            // Значение маски берём напрямую (один семпл, функция только от UV —
+                                            // одинаково на всех гранях, использующих одну область маски)
                                             float maskValue = texture2D(gradientMask, uv).r;
                                             if (maskValue < 0.01) {
                                                 return originalColor;
                                             }
                                             
-                                            // time идет от 0 до PI, нам нужен полный цикл 0..1 за PI
-                                            float hueShift = time / 3.14159265359;
+                                            // time — накопленный угол вращения камеры (непрерывный)
                                             
-                                            // Конвертируем исходный цвет в HSV
+                                            // ВАЖНО: никаких производных/градиентов маски!
+                                            // Локальное направление волны раньше считалось по градиенту маски —
+                                            // на швах UV-развёртки (края граней) градиент скакал между соседними
+                                            // островками unwrap'а, и одна грань получала свою фазу волн («меняется
+                                            // отдельно» = артефакт на краях граней). Теперь фаза зависит ТОЛЬКО от
+                                            // глобальных UV: две грани, использующие одну область маски, получают
+                                            // идентичный цвет — швы не видны.
+                                            float waveCoord = uv.x + uv.y;
+                                            float wave = sin(waveCoord * 6.0 - time * 2.0) * 0.5 + 0.5;
+                                            
+                                            // Усиливаем амплитуду, чтобы перелив был заметнее
+                                            float hueShift = (wave - 0.5) * 0.6;
+                                            
+                                            // ПЛАВНЫЙ МАСКИРОВЩИК вместо жёсткого порога и линейного maskValue:
+                                            // раньше эффект убывал пропорционально яркости маски, а в тёмных
+                                            // зонах (< 0.01) обрывался скачком — на переходах маска
+                                            // белый->чёрный это выглядело как рваные границы/артефакты.
+                                            // smoothstep(0.0, 0.35, ...) даёт плавное затухание перелива
+                                            // точно вдоль границ маски — без видимого шва на переходе.
+                                            float maskW = smoothstep(0.0, 0.35, maskValue);
+                                            
+                                            // Смешиваем сдвинутый по тону цвет с исходным (ЛИНЕАРНЫЙ BLEND),
+                                            // а не крутим hue целиком через maskValue. Так в тёмных участках
+                                            // маски цвет плавно возвращается к оригиналу, вместо резкого
+                                            // «домножения» тона до нуля (fract(hue + shift*m) при m->0
+                                            // прыгал обратно к исходному тону отдельной полосой).
                                             vec3 hsv = rgb2hsv(originalColor);
-                                            
-                                            // Сдвигаем тон (Hue) на значение hueShift
-                                            // Умножаем на maskValue чтобы чёрные участки маски не менялись
-                                            hsv.x = fract(hsv.x + hueShift * maskValue);
-                                            
-                                            // Возвращаем цвет обратно в RGB
+                                            hsv.x = fract(hsv.x + hueShift);
                                             vec3 shiftedColor = hsv2rgb(hsv);
                                             
-                                            return shiftedColor;
+                                            return mix(originalColor, shiftedColor, maskW);
                                         }
                                     \n` + shader.fragmentShader;
                                     
