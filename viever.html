@@ -224,6 +224,17 @@
         let lastCameraAngle = 0;
         let accumulatedAngle = 0;
         
+        // Переменные для авто-возврата вращения к 0
+        let autoReturnActive = false;      // идёт ли сейчас авто-возврат
+        let isUserInteracting = false;     // вращает ли модель пользователь прямо сейчас
+        let autoReturnStart = {x: 0, y: 0, z: 0}; // углы (в градусах), с которых начался возврат
+        let autoReturnStartTime = 0;       // время начала анимации возврата
+        const AUTO_RETURN_DURATION = 1500; // длительность плавного возврата, мс
+        const INITIAL_ROT_Y_DEG = 40;      // начальный поворот модели по Y при открытии
+        let lastSphTheta = null;           // последний азимут камеры (для отслеживания вращения пользователем)
+        let lastSphPhi = null;             // последний полярный угол камеры
+        let returnCheckPending = null;     // id rAF-замера остановки инерции
+        
         // URL параметры
         const urlParams = new URLSearchParams(window.location.search);
         const modelUrl = urlParams.get('model');
@@ -472,8 +483,94 @@
             controls.autoRotate = false;
             controls.autoRotateSpeed = 1.0;
             controls.enableKeys = true;
+            
+            // Отслеживание вращения модели пользователем (через OrbitControls)
+            controls.addEventListener('start', () => { isUserInteracting = true; });
+            controls.addEventListener('end', () => {
+                isUserInteracting = false;
+                // Если пользователь остановил вращение с инерцией — дождёмся её окончания
+                scheduleReturnAfterInertia();
+            });
+            renderer.domElement.addEventListener('wheel', () => {
+                // Зум не влияет на вращение, но сбрасываем состояние взаимодействия
+                if (!isUserInteracting) scheduleReturnAfterInertia();
+            }, { passive: true });
+            
             window.addEventListener('resize', onWindowResize);
             animate();
+        }
+        
+        // Запускает плавный возврат вращения к 0 после остановки инерции OrbitControls
+        function scheduleReturnAfterInertia() {
+            if (!controls || !model) return;
+            if (returnCheckPending) cancelAnimationFrame(returnCheckPending);
+            const check = () => {
+                returnCheckPending = null;
+                if (isUserInteracting) return; // пользователь снова начал вращать
+                if (isOrbitSettled()) {
+                    startAutoReturnToZero();
+                } else {
+                    returnCheckPending = requestAnimationFrame(check);
+                }
+            };
+            returnCheckPending = requestAnimationFrame(check);
+        }
+        
+        // Проверяет, что камера/инерция OrbitControls уже остановились
+        function isOrbitSettled() {
+            const sph = new THREE.Spherical().setFromVector3(
+                camera.position.clone().sub(controls.target)
+            );
+            if (lastSphTheta === null) {
+                lastSphTheta = sph.theta;
+                lastSphPhi = sph.phi;
+                return false;
+            }
+            const settled = Math.abs(sph.theta - lastSphTheta) < 0.0005 &&
+                            Math.abs(sph.phi - lastSphPhi) < 0.0005;
+            lastSphTheta = sph.theta;
+            lastSphPhi = sph.phi;
+            return settled;
+        }
+        
+        // Запуск плавного возврата всех вращений модели к 0
+        function startAutoReturnToZero() {
+            autoReturnStart.x = parseFloat(rotXSlider.value);
+            autoReturnStart.y = normalizeAngle(parseFloat(rotYSlider.value));
+            autoReturnStart.z = parseFloat(rotZSlider.value);
+            // Если уже на нуле — ничего анимировать не нужно
+            if (Math.abs(autoReturnStart.x) < 0.5 && Math.abs(autoReturnStart.y) < 0.5 && Math.abs(autoReturnStart.z) < 0.5) {
+                rotXSlider.value = 0; rotYSlider.value = 0; rotZSlider.value = 0;
+                updateTransformDisplay();
+                autoReturnActive = false;
+                return;
+            }
+            autoReturnStartTime = performance.now();
+            autoReturnActive = true;
+        }
+        
+        // Приводит угол из диапазона [0, 360] к [-180, 180] для возврата кратчайшей дорогой
+        function normalizeAngle(deg) {
+            let a = deg % 360;
+            if (a > 180) a -= 360;
+            if (a < -180) a += 360;
+            return a;
+        }
+        
+        // Плавная функция сглаживания (ease-in-out cubic)
+        function easeInOutCubic(t) {
+            return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        }
+        
+        // Начальное появление модели: поворот по Y на 40° и плавный возврат к 0
+        function startInitialRotationAnimation() {
+            rotXSlider.value = 0; rotYSlider.value = INITIAL_ROT_Y_DEG; rotZSlider.value = 0;
+            updateTransformDisplay();
+            autoReturnStart.x = 0;
+            autoReturnStart.y = INITIAL_ROT_Y_DEG;
+            autoReturnStart.z = 0;
+            autoReturnStartTime = performance.now();
+            autoReturnActive = true;
         }
         
         function createLights() {
@@ -545,12 +642,42 @@
             }
             
             if (model) {
-                const posX = parseFloat(posXSlider.value), posY = parseFloat(posYSlider.value), posZ = parseFloat(posZSlider.value);
                 const scale = parseFloat(scaleSlider.value);
+                
+                // Авто-возврат вращений модели к 0 (плавная анимация)
+                if (autoReturnActive) {
+                    if (isUserInteracting) {
+                        // Пользователь начал вращать — приостанавливаем авто-возврат,
+                        // сохранив текущие углы как новые стартовые
+                        autoReturnStart.x = parseFloat(rotXSlider.value);
+                        autoReturnStart.y = normalizeAngle(parseFloat(rotYSlider.value));
+                        autoReturnStart.z = parseFloat(rotZSlider.value);
+                        autoReturnActive = false;
+                    } else {
+                        const elapsed = performance.now() - autoReturnStartTime;
+                        const t = Math.min(elapsed / AUTO_RETURN_DURATION, 1);
+                        const e = easeInOutCubic(t);
+                        const curX = autoReturnStart.x * (1 - e);
+                        let curY = autoReturnStart.y * (1 - e);
+                        const curZ = autoReturnStart.z * (1 - e);
+                        // Слайдеры имеют диапазон [0, 360] — переводим отрицательные углы
+                        rotXSlider.value = ((curX % 360) + 360) % 360;
+                        rotYSlider.value = ((curY % 360) + 360) % 360;
+                        rotZSlider.value = ((curZ % 360) + 360) % 360;
+                        updateTransformDisplay();
+                        if (t >= 1) {
+                            autoReturnActive = false;
+                            rotXSlider.value = 0; rotYSlider.value = 0; rotZSlider.value = 0;
+                            updateTransformDisplay();
+                        }
+                    }
+                }
+                
                 const rotXDeg = parseFloat(rotXSlider.value), rotYDeg = parseFloat(rotYSlider.value), rotZDeg = parseFloat(rotZSlider.value);
                 const rotX = rotXDeg * Math.PI / 180;
                 const rotY = rotYDeg * Math.PI / 180;
                 const rotZ = rotZDeg * Math.PI / 180;
+                const posX = parseFloat(posXSlider.value), posY = parseFloat(posYSlider.value), posZ = parseFloat(posZSlider.value);
                 model.position.x = originalModelPosition.x + posX;
                 model.position.y = originalModelPosition.y + posY;
                 model.position.z = originalModelPosition.z + posZ;
@@ -1062,6 +1189,7 @@
                 applyTexturesToModel();
                 if (controls) { controls.reset(); camera.position.set(0, 0, 20 * scale); controls.update(); }
                 resetTransformSliders();
+                startInitialRotationAnimation();
                 if (isPlaneModel(fileName)) planeLighting(); else resetLighting();
                 if (!(albedoUrl || normalUrl || roughnessUrl || metalnessUrl || aoUrl || patternUrl)) showLoading(false);
             }, undefined, (error) => {
@@ -1148,6 +1276,7 @@
                 scene.add(model);
                 isModelLoaded = true;
                 resetTransformSliders();
+                startInitialRotationAnimation();
                 if (isPlaneModel(file.name)) planeLighting(); else resetLighting();
                 showLoading(false);
             }, undefined, (error) => { console.error('Ошибка загрузки модели:', error); alert('Не удалось загрузить модель.'); showLoading(false); });
@@ -1188,6 +1317,7 @@
         }
         
         function resetTransformSliders() {
+            autoReturnActive = false; // отменяем идущую анимацию авто-возврата
             posXSlider.value = 0; posYSlider.value = 0; posZSlider.value = 0;
             scaleSlider.value = 1.0; rotXSlider.value = 0; rotYSlider.value = 0; rotZSlider.value = 0;
             updateTransformDisplay();
@@ -1367,6 +1497,9 @@
         renderBtn.addEventListener('click', captureRender);
         renderShadowBtn.addEventListener('click', captureRenderWithShadow);
         [posXSlider, posYSlider, posZSlider, scaleSlider, rotXSlider, rotYSlider, rotZSlider].forEach(s => s.addEventListener('input', updateTransformDisplay));
+        // Если пользователь вручную двигает слайдеры вращения — отменяем авто-возврат,
+        // чтобы он не конфликтовал с ручными настройками
+        [rotXSlider, rotYSlider, rotZSlider].forEach(s => s.addEventListener('input', () => { autoReturnActive = false; }));
         [mainIntensitySlider, fill1IntensitySlider, fill2IntensitySlider, backIntensitySlider, ambientLightSlider].forEach(s => s.addEventListener('input', updateLighting));
         document.addEventListener('keydown', handleKeyDown);
         document.addEventListener('keyup', handleKeyUp);
