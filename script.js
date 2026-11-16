@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', function() {
-	const defoltMenuLogo = 'images/fon/8years.png';
-	const version = '0.34.12F';
+	const defoltMenuLogo = 'images/fon/main1.png';
+	const version = '0.35.0';
 
 
 	function createOverlayModal() {
@@ -61,7 +61,8 @@ document.addEventListener('DOMContentLoaded', function() {
 	let currentMarket = 'normal'; // 'normal' или 'rental'
 	
 	document.getElementById('normal-market-btn').addEventListener('click', function() {
-		if (currentMarket !== 'normal') {
+		const wasOnline = omMode; if (wasOnline) omLeaveOnline();
+		if (currentMarket !== 'normal' || wasOnline) {
 			currentMarket = 'normal';
 			this.classList.add('active');
 			document.getElementById('rental-market-btn').classList.remove('active');
@@ -70,7 +71,8 @@ document.addEventListener('DOMContentLoaded', function() {
 	});
 
 	document.getElementById('rental-market-btn').addEventListener('click', function() {
-		if (currentMarket !== 'rental') {
+		const wasOnline = omMode; if (wasOnline) omLeaveOnline();
+		if (currentMarket !== 'rental' || wasOnline) {
 			currentMarket = 'rental';
 			this.classList.add('active');
 			document.getElementById('normal-market-btn').classList.remove('active');
@@ -220,7 +222,7 @@ document.addEventListener('DOMContentLoaded', function() {
 			return;
 		}
 
-		let modelFile = '', albedoFile = '', metalnessFile = '', patternFile = '', patternMask = '';
+		let modelFile = '', albedoFile = '', metalnessFile = '', patternFile = '', patternMask = '', gradientMask = '';
 		let StatTrackFlag = false;
 
 		const displayNameOld = item.name;
@@ -246,6 +248,7 @@ document.addEventListener('DOMContentLoaded', function() {
 			albedoFile = `${baseName}_${variantNoSpaces}_A.png`;
 			metalnessFile = `${baseName}_${variantNoSpaces}_M.png`;
 			patternMask = `${baseName}_${variantNoSpaces}_P.png`;
+			gradientMask = `${baseName}_${variantNoSpaces}_gr.png`;
 			patternFile = variantNoSpaces + '.png';
 			modelFile = StatTrackFlag ? `${baseName}_st.glb` : `${baseName}.glb`;
 			flagContainers = baseName; // Используем baseName для дальнейших проверок
@@ -254,6 +257,7 @@ document.addEventListener('DOMContentLoaded', function() {
 			albedoFile = `${baseName}_A.png`;
 			metalnessFile = `${baseName}_M.png`;
 			patternMask = `${baseName}_P.png`;
+			gradientMask = `${baseName}_gr.png`;
 			patternFile = baseName + '.png';
 			modelFile = `${baseName}.glb`;
 			flagContainers = baseName;
@@ -261,6 +265,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 		patternFile = "patterns/" + patternFile;
 		patternMask = "materials_p/" + patternMask;
+		gradientMask = "materials_gr/" + gradientMask;
 		modelFile = "models/" + modelFile;
 		albedoFile = "materials/" + albedoFile;
 		metalnessFile = "materials_m/" + metalnessFile;
@@ -293,7 +298,7 @@ document.addEventListener('DOMContentLoaded', function() {
 			albedoFile = logo;
 		}
 
-		const viewerUrl = `viever.html?model=${encodeURIComponent(modelFile)}&rarity=${rar}&logo=${encodeURIComponent(logo)}&collection=${encodeURIComponent(collectionName)}&albedo=${encodeURIComponent(albedoFile)}&metalness=${encodeURIComponent(metalnessFile)}&pattern=${encodeURIComponent(patternFile)}&mask=${encodeURIComponent(patternMask)}&roughness=${encodeURIComponent(roughnessFile)}&bg=${encodeURIComponent(background + '.png')}&title=${encodeURIComponent(item.name)}&backUrl=${backUrl}`;
+		const viewerUrl = `viever.html?model=${encodeURIComponent(modelFile)}&rarity=${rar}&logo=${encodeURIComponent(logo)}&collection=${encodeURIComponent(collectionName)}&albedo=${encodeURIComponent(albedoFile)}&metalness=${encodeURIComponent(metalnessFile)}&pattern=${encodeURIComponent(patternFile)}&mask=${encodeURIComponent(patternMask)}&gradientMask=${encodeURIComponent(gradientMask)}&roughness=${encodeURIComponent(roughnessFile)}&bg=${encodeURIComponent(background + '.png')}&title=${encodeURIComponent(item.name)}&backUrl=${backUrl}`;
 
 		imgContainer.style.cursor = 'pointer';
 		imgContainer.style.display = 'inline-block';
@@ -1447,11 +1452,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
 				<!-- ПРАВАЯ ЧАСТЬ: ID, Имя, Верификация -->
 				<div style="transform: translate(-30px, 20px);display:flex;flex-direction:column;justify-content:center;gap:15px;min-width:250px;">
+					<!-- отображение 16 символов для id, clanTag, name -->
+					<style>.text-truncate {
+							max-width: 16ch;
+							overflow: hidden;
+							text-overflow: ellipsis;
+							white-space: nowrap;
+							display: inline-block;
+							vertical-align: bottom;
+						}</style>
 					
 					<!-- Блок ID -->
 					<div style="display:flex;align-items:center;gap:6px;">
 						<span style="font-size:16px;color:#aaa;">ID</span>
-						<span id="display-player-id" style="font-size:16px;color:#aaa;">${pId}</span>
+						<span id="display-player-id" class="text-truncate" style="font-size:16px;color:#aaa;">${pId}</span>
 						<button id="edit-player-id-btn" title="Изменить ID" style="background:none;border:none;cursor:pointer;padding:2px;opacity:0.6;">
 							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#aaaaaa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
 						</button>
@@ -1459,8 +1473,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 					<!-- Блок Имя + Значок -->
 					<div style="display:flex;align-items:center;gap:8px;">
-						<span style="font-size:18px;color:#aaa;font-weight:bold;">${clTag}</span>
-						<span id="display-player-name" style="font-size:18px;color:white;font-weight:bold;">${pName}</span>
+						<span class="text-truncate" style="font-size:18px;color:#aaa;font-weight:bold;">${clTag}</span>
+						<span id="display-player-name" class="text-truncate" style="font-size:18px;color:white;font-weight:bold;">${pName}</span>
 						<img src="${getVerificationImage(pVerify)}" alt="Mark" style="height:20px;width:auto;" title="${getVerificationStatus(pVerify)}">
 						<button id="edit-player-name-btn" title="Изменить имя" style="background:none;border:none;cursor:pointer;padding:2px;opacity:0.6;">
 							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#aaaaaa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
@@ -1560,7 +1574,7 @@ document.addEventListener('DOMContentLoaded', function() {
 			subModal.innerHTML = `
 			<div style="background:#282828;padding:25px;border-radius:10px;width:350px;text-align:center;color:white;box-shadow:0 0 20px rgba(0,0,0,0.5);">
 				<h3 style="margin:0 0 20px;">Изменить ID</h3>
-				<input type="text" id="edit-id-input" value="${currentId}" style="width:100%;padding:10px;background:#333;color:white;border:1px solid #555;border-radius:4px;margin-bottom:20px;font-family:monospace;">
+				<input type="text" id="edit-id-input" value="${currentId}" style="transform:translateX(-10px);width:100%;padding:10px;background:#333;color:white;border:1px solid #555;border-radius:4px;margin-bottom:20px;font-family:monospace;">
 				<div style="display:flex;gap:10px;justify-content:center;">
 					<button id="save-id-btn" style="padding:10px 20px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer;">Сохранить</button>
 					<button id="cancel-id-btn" style="padding:10px 20px;background:#555;color:white;border:none;border-radius:4px;cursor:pointer;">Отмена</button>
@@ -1595,7 +1609,7 @@ document.addEventListener('DOMContentLoaded', function() {
 			subModal.innerHTML = `
 			<div style="background:#282828;padding:25px;border-radius:10px;width:350px;text-align:center;color:white;box-shadow:0 0 20px rgba(0,0,0,0.5);">
 				<h3 style="margin:0 0 20px;">Изменить Имя</h3>
-				<input type="text" id="edit-name-input" value="${currentName}" style="width:100%;padding:10px;background:#333;color:white;border:1px solid #555;border-radius:4px;margin-bottom:20px;">
+				<input type="text" id="edit-name-input" value="${currentName}" style="transform:translateX(-10px);width:100%;padding:10px;background:#333;color:white;border:1px solid #555;border-radius:4px;margin-bottom:20px;">
 				<div style="display:flex;gap:10px;justify-content:center;">
 					<button id="save-name-btn" style="padding:10px 20px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer;">Сохранить</button>
 					<button id="cancel-name-btn" style="padding:10px 20px;background:#555;color:white;border:none;border-radius:4px;cursor:pointer;">Отмена</button>
@@ -2042,6 +2056,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 		document.getElementById('confirm-reset').onclick = () => {
 			localStorage.clear();
+
 			balance = 0; inventory = [];
 			const candidates = itemsDatabase.filter(i => i.rarity === 'box-none');
 			if (candidates.length) inventory.push({...candidates[Math.floor(Math.random() * candidates.length)]});
@@ -2062,6 +2077,7 @@ document.addEventListener('DOMContentLoaded', function() {
 			if(typeof showToast === 'function') showToast("Сохранение сброшено");
 			modal.remove();
 			location.reload();
+			localStorage.setItem('onlineMarketState', 'null');
 		};
 		document.getElementById('cancel-reset').onclick = () => modal.remove();
 		modal.onclick = (e) => { if(e.target === modal) modal.remove(); };
@@ -3787,6 +3803,7 @@ document.addEventListener('DOMContentLoaded', function() {
 	
 	function updateItemPriceInUI(item) {
 	  item = itemsDatabase.find(a => a.id === item.id);
+	  if (omReady) omBeforePriceUI(item);
 	  const itemElement = document.getElementById(item.id);
 	  const rentalItemId = item.id + '_rental';
 	  const rentalItem = itemsDatabase.find(a => a.id === rentalItemId);
@@ -4042,8 +4059,8 @@ document.addEventListener('DOMContentLoaded', function() {
 	let selectedItems = [];
 	
 	const rarities = {
-		'box-none': {name: 'none', color: 'box-none', order: 0, next: null, ColorHex: '#adadad', craftsFrom: null},
-		'case-none': {name: 'none', color: 'case-none', order: 1, next: null, ColorHex: '#ffc500', craftsFrom: null},
+		'box-none': {name: 'box', color: 'box-none', order: 0, next: null, colorHex: '#adadad', craftsFrom: null},
+		'case-none': {name: 'case', color: 'case-none', order: 1, next: null, colorHex: '#ffc500', craftsFrom: null},
 		'common': { name: 'Common', color: 'common', order: 2, next: 'uncommon', colorHex: '#a5a5a5', craftsFrom: null},
 		'uncommon': { name: 'Uncommon', color: 'uncommon', order: 3, next: 'rare', colorHex: '#0eb2d3', craftsFrom: 'common'},
 		'rare': { name: 'Rare', color: 'rare', order: 4, next: 'epic', colorHex: '#5555ff', craftsFrom: 'uncommon'},
@@ -4051,8 +4068,8 @@ document.addEventListener('DOMContentLoaded', function() {
 		'legendary': { name: 'Legendary', color: 'legendary', order: 6, next: 'arcane', colorHex: '#ff66ff', craftsFrom: 'epic'},
 		'arcane': { name: 'Arcane', color: 'arcane', order: 7, next: null, colorHex: '#ff3333', craftsFrom: 'legendary'},
 		'nameless': { name: 'Nameless', color: 'nameless', order: 8, next: null, colorHex: '#ffd700', craftsFrom: null},
-		'none': {name: 'none', color: 'none', order: 10, next: null, ColorHex: 'lightgrey', craftsFrom: null},
-		'gold-none': {name: 'none', color: 'gold-none', order: 11, next: null, ColorHex: '#ffde00', craftsFrom: null}
+		'none': {name: 'none', color: 'none', order: 10, next: null, colorHex: 'lightgrey', craftsFrom: null},
+		'gold-none': {name: 'none', color: 'gold-none', order: 11, next: null, colorHex: '#ffde00', craftsFrom: null}
 	};
 
 	const editItemBtn = document.getElementById('edit-item-btn');
@@ -6290,8 +6307,8 @@ document.addEventListener('DOMContentLoaded', function() {
 							return `
 								<div class="case-content-item" data-id="${item.id}" style="background-color: #2a2a2a; padding: 10px; border-radius: 8px; text-align: center; cursor: pointer; transition: all 0.3s; position: relative;">
 									<div style="position: relative; display: inline-block;">
-										<img src="${item.image}" alt="${item.name}" width="60" style="border-radius: 5px;">
-										${item.isRental ? `<img src="images/item_time_limited.png" alt="Арендовано" style="position: absolute; top: 0; left: 0; width: 60px; height: auto; pointer-events: none;">` : ''}
+										<img src="${item.image}" alt="${item.name}" width="80" style="border-radius: 5px;">
+										${item.isRental ? `<img src="images/item_time_limited.png" alt="Арендовано" style="position: absolute; top: 0; left: 0; width: 80px; height: auto; pointer-events: none;">` : ''}
 									</div>
 									
 									<div class="case-item-rarity ${rarity.color}" style="padding: 2px 5px; border-radius: 4px; margin-top: 5px; font-size: 10px;">
@@ -7038,54 +7055,44 @@ document.addEventListener('DOMContentLoaded', function() {
 	});
 
 	function initShop() {
-		itemsContainer.textContent = '';
-		const activeBtn = document.querySelector('.filter-btn.active');
-		const selectedRarity = activeBtn ? activeBtn.dataset.rarity : 'all';
-	
-		const collectionFilter = document.getElementById('collection-filter');
-		const selectedCollection = collectionFilter ? collectionFilter.value : 'all';
+		itemsContainer.innerHTML = '';
+		const selectedRarity = (() => {
+			const activeBtn = document.querySelector('.filter-btn.active');
+			return activeBtn ? activeBtn.dataset.rarity : 'all';
+		})();
+
+		const selectedCollection = document.getElementById('collection-filter')?.value || 'all';
 
 		const typeCheckboxes = document.querySelectorAll('#type-checkboxes input[type="checkbox"][data-type]:not([data-type="all"])');
-		const selectedTypes = [];
-		for (let i = 0; i < typeCheckboxes.length; i++) {
-			if (typeCheckboxes[i].checked) {
-				selectedTypes.push(typeCheckboxes[i].dataset.type);
-			}
-		}
+		const selectedTypes = Array.from(typeCheckboxes)
+			.filter(cb => cb.checked)
+			.map(cb => cb.dataset.type);
 
 		const allTypesSelected = selectedTypes.length === typeCheckboxes.length;
 
-		// Оптимизация: один проход фильтрации вместо нескольких filter()
-		const itemsToShow = [];
-		const isRentalMarket = currentMarket === 'rental';
-		for (let i = 0; i < itemsDatabase.length; i++) {
-			const item = itemsDatabase[i];
-			
-			// Фильтр по рынку
-			if (isRentalMarket ? !item.isRental : item.isRental) continue;
-			
-			// Фильтр по наличию в магазине
-			if (!item.itemInStore) continue;
-
-			// Фильтр по редкости
-			if (selectedRarity !== 'all' && item.rarity !== selectedRarity) continue;
-			
-			// Фильтр по коллекции
-			const itemCollection = item.collection || '';
-			if (selectedCollection !== 'all' && itemCollection !== selectedCollection) continue;
-			
-			// Фильтр по типу
-			if (!allTypesSelected) {
-				const itemType = getItemType(item);
-				if (!selectedTypes.includes(itemType)) continue;
+		let itemsToShow = itemsDatabase.filter(item => {
+			if (currentMarket === 'rental') {
+				return item.isRental === true;
+			} else {
+				return item.isRental !== true;
 			}
-			
-			itemsToShow.push(item);
-		}
+		});
+
+		itemsToShow = itemsToShow.filter(item => {
+			if (!item.itemInStore) return false;
+
+			const itemType = getItemType(item);
+			const itemCollection = item.collection || '';
+
+			const matchesRarity = selectedRarity === 'all' || item.rarity === selectedRarity;
+			const matchesCollection = selectedCollection === 'all' || itemCollection === selectedCollection;
+			const matchesType = allTypesSelected || selectedTypes.includes(itemType);
+
+			return matchesRarity && matchesCollection && matchesType;
+		});
 		
 		const cardObserver = new IntersectionObserver((entries) => {
-			for (let i = 0; i < entries.length; i++) {
-				const entry = entries[i];
+			entries.forEach(entry => {
 				if (entry.isIntersecting) {
 					const img = entry.target.querySelector('.item-img img');
 					if (img && img.hasAttribute('data-src')) {
@@ -7094,13 +7101,13 @@ document.addEventListener('DOMContentLoaded', function() {
 					}
 					cardObserver.unobserve(entry.target);
 				}
-			}
+			});
 		}, { threshold: 0.1 });
 		
-		for (let i = 0; i < itemsToShow.length; i++) {
-			const card = addItemToShop(itemsToShow[i]);
+		itemsToShow.forEach(item => {
+			const card = addItemToShop(item); // Предполагается, что addItemToShop возвращает DOM-элемент карточки
 			if (card) cardObserver.observe(card);
-		}
+		});
 		
 		applyTypeFilters();
 		sortItemsByPrice();
@@ -7146,37 +7153,33 @@ document.addEventListener('DOMContentLoaded', function() {
 	
 	function calculateInventoryTotal() {
 	  let total = 0;
-	  // Оптимизация: используем for loop вместо forEach и кэшируем поиск в Map
-	  const invLength = inventory.length;
-	  for (let i = 0; i < invLength; i++) {
-		const item = inventory[i];
-		if (item.isRental) continue;
+	  inventory.forEach(item => {
+		if (item.isRental) return;
 		
-		const originalItem = itemsDbMap.get(item.id);
+		const originalItem = itemsDatabase.find(dbItem => dbItem.id === item.id);
 		
-		if (!originalItem || originalItem.itemInStore === false) continue;
+		if (!originalItem || originalItem.itemInStore === false) return;
 		
-		if (originalItem.isCase) continue;
+		if (originalItem.isCase) return;
 		
 		total += Math.round((originalItem.price * 0.8) * 100) / 100;
 		
-		if (item.stickers && item.stickers.length > 0) {
-		  for (let j = 0; j < item.stickers.length; j++) {
-			const sticker = item.stickers[j];
-			const stickerItem = itemsDbMap.get(sticker.id);
+		if (item.stickers) {
+		  item.stickers.forEach(sticker => {
+			const stickerItem = itemsDatabase.find(dbItem => dbItem.id === sticker.id);
 			if (stickerItem && stickerItem.itemInStore !== false) {
 			  total += Math.round((stickerItem.price * 0.1) * 100) / 100;
 			}
-		  }
+		  });
 		}
 		
 		if (item.charm) {
-		  const charmItem = itemsDbMap.get(item.charm.id);
+		  const charmItem = itemsDatabase.find(dbItem => dbItem.id === item.charm.id);
 		  if (charmItem && charmItem.itemInStore !== false) {
 			total += Math.round((charmItem.price * 0.8) * 100) / 100;
 		  }
 		}
-	  }
+	  });
 	  
 	  return total.toLocaleString('ru-RU', {
 		minimumFractionDigits: 2,
@@ -7201,7 +7204,7 @@ document.addEventListener('DOMContentLoaded', function() {
 	  
 	  const price = currentMarket === 'rental' ? Math.round(item.price * 100) / 100 : item.price;
 	  
-	  itemCard.innerHTML = `
+	  itemCard.innerHTML = omMode ? omPlatformCardHTML(item, price, rarityInfo, collectionInfo) : `
 		<div class="item-img"><img data-src='${item.image}' alt="" class="logo lazy" width=150></div>
 		<div class="item-rarity ${rarityInfo.color}"><div class="item-name">${item.name}</div></div>
 		<div class="item-collection" data-collection="${item.collection}">
@@ -7238,7 +7241,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 	  const canShow3D = fxCan3D(item);
 
-	  if (canShow3D) {
+	  if (canShow3D && !omMode) {
 		  const imgContainer = itemCard.querySelector('.item-img');
 		  setup3DViewer(imgContainer, item, item); // item — и есть originalItem для магазина
 	  }
@@ -7348,6 +7351,7 @@ document.addEventListener('DOMContentLoaded', function() {
 		});
 	  }
 	  
+	  if (omMode) itemCard.style.cursor = 'pointer';
 	  itemsContainer.appendChild(itemCard);
 
 	  const img = itemCard.querySelector('.item-img img');
@@ -7837,8 +7841,6 @@ document.addEventListener('DOMContentLoaded', function() {
 	}
 	
 	function sortInventoryByRarity() {
-		const typeOrder = { 'case': 0, 'withSlots': 1, 'withoutSlots': 2, 'charm': 3, 'sticker': 4, 'rental': 5 };
-		
 		inventory.sort((a, b) => {
 			const rarityA = rarities[a.rarity]?.order || 0;
 			const rarityB = rarities[b.rarity]?.order || 0;
@@ -7858,6 +7860,7 @@ document.addEventListener('DOMContentLoaded', function() {
 				return 'withSlots';
 			};
 			
+			const typeOrder = { 'case': 0, 'withSlots': 1, 'withoutSlots': 2, 'charm': 3, 'sticker': 4, 'rental': 5 };
 			const typeA = getType(a, originalItemA);
 			const typeB = getType(b, originalItemB);
 			
@@ -7874,11 +7877,8 @@ document.addEventListener('DOMContentLoaded', function() {
 	
 	function groupFragmentsInInventory() {
 	  const fragmentGroups = {};
-	  const invLength = inventory.length;
 	  
-	  // Оптимизация: используем for loop вместо forEach
-	  for (let i = 0; i < invLength; i++) {
-		const item = inventory[i];
+	  inventory.forEach((item, index) => {
 		if (item.name.endsWith('Fragment') && !item.isRental) {
 		  if (!fragmentGroups[item.id]) {
 			fragmentGroups[item.id] = {
@@ -7887,10 +7887,10 @@ document.addEventListener('DOMContentLoaded', function() {
 			  count: 0
 			};
 		  }
-		  fragmentGroups[item.id].indices.push(i);
+		  fragmentGroups[item.id].indices.push(index);
 		  fragmentGroups[item.id].count++;
 		}
-	  }
+	  });
 	  
 	  return fragmentGroups;
 	}
@@ -8055,8 +8055,8 @@ document.addEventListener('DOMContentLoaded', function() {
 				return `
 				  <div class="case-content-item" data-id="${item.id}" style="background-color: #2a2a2a; padding: 10px; border-radius: 8px; text-align: center; cursor: pointer; transition: all 0.3s; position: relative;">
 					<div style="position: relative; display: inline-block;">
-						<img src="${item.image}" alt="${item.name}" width="60" style="border-radius: 5px;">
-						${item.isRental ? `<img src="images/item_time_limited.png" alt="Арендовано" style="position: absolute; top: 0; left: 0; width: 60px; height: auto; pointer-events: none;">` : ''}
+						<img src="${item.image}" alt="${item.name}" width="80" style="border-radius: 5px;">
+						${item.isRental ? `<img src="images/item_time_limited.png" alt="Арендовано" style="position: absolute; top: 0; left: 0; width: 80px; height: auto; pointer-events: none;">` : ''}
 					</div>
 					<div class="case-item-rarity ${rarity.color}" style="padding: 2px 5px; border-radius: 4px; margin-top: 5px; font-size: 10px;">
 					<div class="case-item-name" style="display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; font-size: 12px; margin-top: 5px; height: auto; text-overflow: ellipsis;">${item.name}</div></div>
@@ -10605,62 +10605,49 @@ document.addEventListener('DOMContentLoaded', function() {
 	
 	function updateInventory() {
 		mergeRentalStacks();
-		scheduleNextRentalCheck();
+		scheduleNextRentalCheck(); // Пересчитать таймеры после объединения
 		sortInventoryByRarity();
 		const fragmentGroups = groupFragmentsInInventory();
 		const groupedData = {};
 		
-		// Оптимизация: кэшируем keys раритетов
-		const rarityKeys = Object.keys(rarities);
-		for (let i = 0; i < rarityKeys.length; i++) {
-			const rarity = rarityKeys[i];
+		Object.keys(rarities).forEach(rarity => {
 			groupedData[rarity] = {
 				withoutSlots: [], charms: [], withSlots: [], stickers: [], cases: [], rentals: [], fragments: []
 			};
-		}
+		});
 
-		// Оптимизация: используем for loop вместо forEach для лучшей производительности
-		const invLength = inventory.length;
-		for (let idx = 0; idx < invLength; idx++) {
-			const item = inventory[idx];
+		inventory.forEach((item, index) => {
 			const originalItem = itemsDbMap.get(item.id);
 			const rarity = item.rarity;
 			
-			if (!groupedData[rarity]) continue;
+			if (!groupedData[rarity]) return;
 
 			if (item.name.endsWith('Fragment') && !item.isRental && fragmentGroups[item.id]) {
 				const fg = fragmentGroups[item.id];
-				if (idx === fg.indices[0]) {
-					groupedData[rarity].fragments.push({ item, index: idx, count: fg.count });
+				if (index === fg.indices[0]) {
+					groupedData[rarity].fragments.push({ item, index, count: fg.count });
 				}
 			} 
 			else if (item.isRental) {
-				groupedData[rarity].rentals.push({ item, index: idx });
+				groupedData[rarity].rentals.push({ item, index });
 			} 
 			else if (originalItem || item) {
-				if (originalItem?.isCase) groupedData[rarity].cases.push({ item, index: idx });
-				else if (originalItem?.isCharm) groupedData[rarity].charms.push({ item, index: idx });
-				else if (originalItem?.isSticker) groupedData[rarity].stickers.push({ item, index: idx });
-				else if (originalItem?.isItemWithoutSlot) groupedData[rarity].withoutSlots.push({ item, index: idx });
-				else groupedData[rarity].withSlots.push({ item, index: idx });
+				if (originalItem?.isCase) groupedData[rarity].cases.push({ item, index });
+				else if (originalItem?.isCharm) groupedData[rarity].charms.push({ item, index });
+				else if (originalItem?.isSticker) groupedData[rarity].stickers.push({ item, index });
+				else if (originalItem?.isItemWithoutSlot) groupedData[rarity].withoutSlots.push({ item, index });
+				else groupedData[rarity].withSlots.push({ item, index });
 			}
-		}
+		});
 
-		// Оптимизация: более эффективная сортировка
-		for (const rarity in groupedData) {
-			const groups = groupedData[rarity];
-			for (const key in groups) {
-				const list = groups[key];
-				if (list.length > 1) {
-					list.sort((a, b) => a.item.name.localeCompare(b.item.name));
-				}
-			}
-		}
+		Object.values(groupedData).forEach(groups => {
+			Object.values(groups).forEach(list => list.sort((a, b) => a.item.name.localeCompare(b.item.name)));
+		});
 
-		const sortedRarities = rarityKeys.sort((a, b) => (rarities[b]?.order || 0) - (rarities[a]?.order || 0));
+		const sortedRarities = Object.keys(rarities).sort((a, b) => (rarities[b]?.order || 0) - (rarities[a]?.order || 0));
 		
 		const fragment = document.createDocumentFragment();
-		inventoryItemsElement.textContent = ''; // textContent быстрее чем innerHTML
+		inventoryItemsElement.innerHTML = ''; // Очистка
 
 		if (inventory.length === 0) {
 			inventoryItemsElement.innerHTML = '<p>Ваш инвентарь пуст</p>';
@@ -11426,14 +11413,12 @@ document.addEventListener('DOMContentLoaded', function() {
 				if (maxRawChance < 5) return false;
 
 				return true;
-			});
-
-			availableItems.sort((a, b) => {
+			}).sort((b, a) => {
 				const priceA = calculateCurrentPrice(a.price, a.stock);
 				const priceB = calculateCurrentPrice(b.price, b.stock);
 				if (targetSort.key === 'name') return a.name.localeCompare(b.name);
 				return targetSort.desc ? priceB - priceA : priceA - priceB;
-			});
+			}).slice(0, 250); // max 250 items
 
 			countLabel.textContent = `Найдено: ${availableItems.length}`;
 
@@ -11470,7 +11455,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 		function setupBalanceSlider(avgSourcePrice, targetPrice) {
 			const slider = document.getElementById('upgrade-balance-slider');
-			const maxBalance = Math.floor(avgSourcePrice * 0.5);
+			const maxBalance = Math.floor(targetPrice * 0.7 - avgSourcePrice * 0.5); // МАКСИМАЛЬНЫЙ БАЛАНС В АПГРЕЙД равен 70% от цены желаемого - 50% от цены исходного
 			slider.max = maxBalance;
 			slider.value = 0;
 			addedBalance = 0;
@@ -13264,6 +13249,7 @@ document.addEventListener('DOMContentLoaded', function() {
 		addRanks(addNewRang);
 		initShop();
 		loadSavedGameState();
+		omInit();
 	});
 	
 	const candidates = itemsDatabase.filter(i => i.rarity === 'box-none');
@@ -16179,4 +16165,807 @@ document.addEventListener('DOMContentLoaded', function() {
 	addQuickOpenButtonToInventory();
 
 	console.log('Element Editor loaded. Press Alt+A to open editor.');
+
+	// =====================================================================
+	// ОНЛАЙН-МАРКЕТ (торговая площадка с ботами)
+	// =====================================================================
+	var omMode = false, omReady = false;      // var — чтобы быть доступными из старого кода до инициализации
+	var omSub = 'platform', omOrdersSub = 'buy';
+	const OM_MAX = 1000000;
+	const OM_STORE_KEY = 'onlineMarketState';
+	const omState = { items: {}, orders: [], nextId: 1 };
+	const omLayers = [];
+	let omMainLayer = null;
+	let omLotsSortAsc = true;
+	let omSyncing = false;
+	let omSaveTimer = null;
+
+	const omRound = n => Math.round(n * 100) / 100;
+	const omClamp = (n, a, b) => Math.min(b, Math.max(a, n));
+	const omFmt = n => Number(n).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+	const omEsc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+	const omItem = id => itemsDatabase.find(i => i.id === id && !i.isRental);
+	const omRar = item => rarities[item.rarity] || { name: item.rarity, colorHex: '#cccccc' };
+	const omNextId = () => omState.nextId++;
+	const omBots = st => st.lots.filter(l => l.seller === 'bot').sort((a, b) => a.price - b.price);
+	const omN0 = item => ({ common: 14, uncommon: 12, rare: 10, epic: 8, legendary: 6, arcane: 4, nameless: 3 }[item.rarity] || 8);
+	const omOrderOf = itemId => omState.orders.find(o => o.itemId === itemId);
+	const omImgTag = src => `<img src="${omEsc(src || 'images/none_item.png')}" alt="" onerror="this.onerror=null;this.src='images/none_item.png'">`;
+
+	// ---------------------------------------------------------------- стили
+	(function omInjectStyles() {
+		const s = document.createElement('style');
+		s.textContent = `
+		.om-top-tabs, #om-subtabs { margin-bottom: 8px; }
+		.om-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.78); display: flex; justify-content: center; align-items: center; }
+		.om-win { background: #1e1e1e; color: #fff; border: 1px solid #444; border-radius: 10px; box-shadow: 0 10px 40px rgba(0,0,0,.6); max-width: 96vw; max-height: 92vh; display: flex; flex-direction: column; overflow: hidden; }
+		.om-main { width: 1100px; height: min(86vh, 820px); }
+		.om-sm { width: 460px; }
+		.om-md { width: 760px; height: min(80vh, 640px); }
+		.om-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; background: #272727; border-bottom: 1px solid #444; flex: 0 0 auto; }
+		.om-title { font-size: 18px; font-weight: bold; color: gold; }
+		.om-x { flex: 0 0 auto; width: 34px; height: 34px; border: none; border-radius: 6px; background: #f44336; color: #fff; font-size: 16px; cursor: pointer; }
+		.om-x:hover { background: #d32f2f; }
+		.om-body { display: flex; gap: 14px; padding: 14px; flex: 1 1 auto; min-height: 0; }
+		.om-left { flex: 0 0 260px; display: flex; flex-direction: column; gap: 10px; align-self: flex-start; }
+		.om-right { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+		.om-itembox { background: #2a2a2a; border: 1px solid #444; border-radius: 8px; padding: 12px; text-align: center; }
+		.om-item-img { min-height: 150px; display: flex; align-items: center; justify-content: center; }
+		.om-item-img img { max-width: 100%; max-height: 170px; }
+		.om-item-name { font-weight: bold; font-size: 16px; margin-top: 6px; word-break: break-word; }
+		.om-item-rar { font-size: 13px; margin-top: 2px; }
+		.om-item-col { font-size: 13px; color: #bbb; margin-top: 6px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+		.om-item-col img { width: 26px; height: auto; }
+		.om-item-price { font-size: 13px; color: #ccc; margin-top: 8px; }
+		.om-btn { padding: 9px 14px; border: none; border-radius: 6px; background: #555; color: #fff; cursor: pointer; font-size: 14px; }
+		.om-btn:hover { filter: brightness(1.15); }
+		.om-btn:disabled { opacity: .45; cursor: not-allowed; filter: none; }
+		.om-primary { background: #2e9e4f; }
+		.om-danger { background: #c0392b; }
+		.om-order { background: #2a2a2a; border: 1px solid #444; border-radius: 8px; padding: 10px 12px; flex: 0 0 auto; }
+		.om-order-title { font-weight: bold; margin-bottom: 8px; }
+		.om-order-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+		.om-order-row label { display: flex; flex-direction: column; font-size: 12px; color: #bbb; gap: 3px; }
+		.om-order input, .om-win input[type=number] { background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; padding: 7px 8px; width: 130px; font-size: 14px; }
+		.om-hint { font-size: 12px; color: #999; margin-top: 6px; }
+		.om-err { font-size: 13px; color: #ff6b6b; margin-top: 4px; min-height: 0; }
+		.om-eta { font-size: 12px; color: #9fd3ff; margin: 6px 0; }
+		.om-eta.bad { color: #ffb36b; }
+		.om-lots-head { display: flex; justify-content: space-between; align-items: center; flex: 0 0 auto; }
+		.om-lots, .om-tiles, .om-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; overflow-y: auto; align-content: start; }
+		.om-lots { flex: 1 1 auto; min-height: 0; }
+		.om-lot, .om-tile, .om-inv { background: #2a2a2a; border: 1px solid #444; border-radius: 8px; padding: 8px; text-align: center; display: flex; flex-direction: column; gap: 4px; }
+		.om-lot.mine, .om-tile { border-color: #2e9e4f; }
+		.om-tile { cursor: pointer; }
+		.om-lot-img { height: 70px; display: flex; align-items: center; justify-content: center; }
+		.om-lot-img img { max-width: 100%; max-height: 70px; }
+		.om-lot-price { color: gold; font-weight: bold; }
+		.om-lot-seller, .om-lot-rar { font-size: 12px; color: #aaa; }
+		.om-lot-name { font-size: 13px; font-weight: bold; word-break: break-word; }
+		.om-slots { display: flex; justify-content: center; gap: 2px; min-height: 0; }
+		.om-slots img { width: 22px; height: 22px; object-fit: contain; }
+		.om-empty { grid-column: 1 / -1; text-align: center; color: #888; padding: 30px 0; }
+		.om-inv { cursor: pointer; position: relative; }
+		.om-inv.sel { border-color: gold; background: #3a3420; }
+		.om-inv.sel::after { content: '✓'; position: absolute; top: 4px; right: 8px; color: gold; font-weight: bold; }
+		.om-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-top: 1px solid #444; background: #272727; flex: 0 0 auto; }
+		.om-foot .om-btns { display: flex; gap: 8px; }
+		.om-pad { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+		.om-pick { padding: 14px; flex: 1 1 auto; min-height: 0; }
+		.om-find-btn { width: 100%; padding: 8px; border: none; border-radius: 4px; background: #2e9e4f; color: #fff; cursor: pointer; }
+		.om-find-btn:hover { filter: brightness(1.15); }
+		.om-suborders { margin-bottom: 10px; }
+		#om-orders-panel { padding: 10px; }
+		#om-notify-stack { position: fixed; top: 14px; right: 14px; z-index: 2147483647; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+		.om-note { display: flex; gap: 10px; align-items: center; min-width: 260px; max-width: 360px; padding: 10px 12px; background: rgba(25,25,25,.97); color: #fff; border: 1px solid #555; border-left: 4px solid #2e9e4f; border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.6); animation: omIn .25s ease; }
+		.om-note.err { border-left-color: #f44336; }
+		.om-note.out { opacity: 0; transform: translateX(30px); transition: .3s; }
+		.om-note img { width: 56px; height: 56px; object-fit: contain; }
+		.om-note-title { font-size: 12px; color: #9fd3ff; text-transform: uppercase; letter-spacing: .5px; }
+		.om-note-name { font-weight: bold; word-break: break-word; }
+		.om-note-price { color: gold; font-weight: bold; }
+		@keyframes omIn { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: none; } }
+		`;
+		document.head.appendChild(s);
+	})();
+
+	// ---------------------------------------------------------------- уведомления поверх всех окон
+	function omStack() {
+		let st = document.getElementById('om-notify-stack');
+		if (!st) { st = document.createElement('div'); st.id = 'om-notify-stack'; document.body.appendChild(st); }
+		return st;
+	}
+	function omPushNote(html, isErr) {
+		const stack = omStack();
+		const el = document.createElement('div');
+		el.className = 'om-note' + (isErr ? ' err' : '');
+		el.innerHTML = html;
+		stack.appendChild(el);
+		while (stack.children.length > 5) stack.firstChild.remove();
+		setTimeout(() => el.classList.add('out'), 3800);
+		setTimeout(() => el.remove(), 4200);
+	}
+	function omNotify(kind, item, price) {
+		const titles = { list: 'Предмет выставлен', sold: 'Предмет продан', bought: 'Предмет куплен' };
+		const rar = omRar(item);
+		omPushNote(`${omImgTag(item.image)}<div>
+			<div class="om-note-title">${titles[kind]}</div>
+			<div class="om-note-name">${omEsc(item.name)}</div>
+			<div style="color:${rar.colorHex};font-size:13px">${omEsc(rar.name)}</div>
+			${price != null ? `<div class="om-note-price">${omFmt(price)} ₽</div>` : ''}</div>`);
+	}
+	function omMsg(text, isErr) { omPushNote(`<div class="om-note-name">${omEsc(text)}</div>`, isErr); }
+
+	// ---------------------------------------------------------------- состояние / цены
+	function omBotPrice(item, st, n, idx = 0) {
+		const n0 = omN0(item);
+		// чем меньше лотов — тем дороже бот выставляет
+		const scarcity = 1 + 0.35 * Math.pow(1 - Math.min(n, n0) / n0, 1.2);
+		let p = item.price * (0.98 + Math.random() * 0.03 + idx * 0.012) * scarcity;
+		const ord = omOrderOf(item.id);
+		const floor = Math.max(item.price * 0.98, ord ? ord.price + 0.01 : 0); // не дешевле -2% и не ниже ордера Исправил: Было ord.price стало item.price
+		return omRound(omClamp(Math.max(p, floor), 0.01, OM_MAX));
+	}
+
+	function omGenLots(item, st) {
+		const n0 = omN0(item);
+		const k = Math.max(2, Math.round(n0 * (0.6 + Math.random() * 0.4)));
+		for (let i = 0; i < k; i++) st.lots.push({ id: omNextId(), price: omBotPrice(item, st, k, i), seller: 'bot' });
+	}
+
+	function omItemState(id, create = true) {
+		let st = omState.items[id];
+		if (st || !create) return st;
+		const item = omItem(id);
+		if (!item) return null;
+		st = { fair: Math.max(0.01, item.price), shopPrice: item.price, lots: [], nextRestock: Date.now() + Math.random() * 60000 };
+		omState.items[id] = st;
+		omGenLots(item, st);
+		omApplyShopPrice(item, st);
+		return st;
+	}
+
+	// Цена рынка/аренды = текущая цена на онлайн-рынке (самый дешёвый лот бота)
+	function omApplyShopPrice(item, st) {
+		const low = omBots(st)[0];
+		const p = omRound(low ? low.price : st.fair);
+		omSyncing = true;
+		try {
+			item.price = p;
+			st.shopPrice = p;
+			updateItemPriceInUI(item);
+		} finally { omSyncing = false; }
+	}
+
+	// Вызывается из updateItemPriceInUI: цена в магазине изменилась (корзина/продажа) — двигаем онлайн-рынок
+	function omBeforePriceUI(item) {
+		if (!omReady || omSyncing || !item || item.isRental) return;
+		const st = omState.items[item.id];
+		if (!st || Math.abs(item.price - st.shopPrice) <= 0.004) return;
+		const ratio = st.shopPrice > 0 ? item.price / st.shopPrice : 0;
+		if (isFinite(ratio) && ratio > 0) {
+			st.fair = omClamp(st.fair * ratio, 0.01, OM_MAX);
+			st.lots.forEach(l => { if (l.seller === 'bot') l.price = omRound(omClamp(l.price * ratio, 0.01, OM_MAX)); });
+		} else {
+			st.fair = Math.max(0.01, item.price);
+		}
+		const low = omBots(st)[0];
+		const p = omRound(low ? low.price : st.fair);
+		item.price = p;
+		st.shopPrice = p;
+		omSave();
+		if (omMainLayer && omMainLayer.itemId === item.id) setTimeout(omRenderMain, 0);
+	}
+	
+	// Сохранение всех цен 
+	function omSave() {
+		clearTimeout(omSaveTimer);
+		omSaveTimer = setTimeout(omSaveNow, 400);
+	}
+	function omSaveNow() {
+		try { localStorage.setItem(OM_STORE_KEY, JSON.stringify(omState)); } catch (e) { /* ignore */ }
+	}
+	function omLoad() {
+		try {
+			const raw = JSON.parse(localStorage.getItem(OM_STORE_KEY) || 'null');
+			if (!raw || !raw.items) return;
+			Object.keys(raw.items).forEach(id => { if (omItem(id)) omState.items[id] = raw.items[id]; });
+			omState.orders = (raw.orders || []).filter(o => omItem(o.itemId));
+			omState.nextId = raw.nextId || 1;
+		} catch (e) { console.warn('Online market load error', e); }
+	}
+	
+	// ---------------------------------------------------------------- деньги / предметы
+	function omPay(price, silent) {
+		if (balance + 1e-9 < price) { if (!silent) omMsg('Недостаточно средств!', true); return false; }
+		balance = omRound(balance - price);
+		balanceAmount.textContent = balance.toLocaleString('ru-RU');
+		updateDuelRang(Math.round(price));
+		UpdateStatrackFrame(balance);
+		addExp(Math.round(price));
+		return true;
+	}
+	function omReceive(price) {
+		balance = omRound(balance + price);
+		balanceAmount.textContent = balance.toLocaleString('ru-RU');
+		addExp(Math.round(price));
+		updateMMRang(Math.round(price));
+		UpdateStatrackFrame(balance);
+	}
+	function omGive(item) {
+		inventory.push({ id: item.id, name: item.name, rarity: item.rarity, image: item.image });
+		updateInventory();
+		saveGameState();
+	}
+
+	// ---------------------------------------------------------------- время продажи моих лотов
+	function omSellPlan(st, price) {
+		const bots = omBots(st);
+		if (!bots.length) return { ms: 500 + Math.random() * 1000 };   // ботов нет — бот скупает ваш лот
+		const ref = st.fair, lo = ref * 0.98;
+		const hi = Math.max(ref * 1.38, bots[0].price * 1.10);
+		const p = (price - lo) / (hi - lo);
+		if (p > 2.5) return { never: true };                           // выше лимита — не продастся
+		let sec;
+		if (p <= 0.15) sec = 0.2 + Math.random() * 0.7;                 // у нижней границы: < 1 с
+		else if (p <= 0.5) sec = (1 + (p - 0.15) / 0.35 * 7) * (0.9 + Math.random() * 0.2);   // 1–8 с
+		else sec = (8 + (p - 0.5) / 0.5 * 17) * (0.9 + Math.random() * 0.2);                  // 8–25 с
+		return { ms: sec * 100 }; // было 1000
+	}
+	function omReplan(st, lot, now) {
+		const bots = omBots(st);
+		const key = st.fair.toFixed(2) + '|' + (bots.length ? bots[0].price : 'x');
+		if (lot.planKey === key) return;
+		lot.planKey = key;
+		const plan = omSellPlan(st, lot.price);
+		if (plan.never) { lot.never = true; lot.sellAt = null; }
+		else { lot.never = false; lot.sellAt = now + plan.ms; }
+	}
+	function omCompleteSale(item, st, lot) {
+		const hadBots = omBots(st).length > 0;
+		st.lots = st.lots.filter(l => l !== lot);
+		omReceive(lot.price);
+		omNotify('sold', item, lot.price);
+		if (!hadBots) st.lots.push({ id: omNextId(), price: lot.price, seller: 'bot' }); // бот выставляет за ту же цену
+		saveGameState();
+	}
+
+	// ---------------------------------------------------------------- ордера на покупку
+	function omProcessOrder(o, now) {
+		const item = omItem(o.itemId), st = omState.items[o.itemId];
+		if (!item || !st) { omState.orders = omState.orders.filter(x => x !== o); omSave(); return; }
+		let changed = false;
+		for (let guard = 0; guard < 500 && o.qty > 0; guard++) {
+			const first = omBots(st)[0];
+			const L = first ? first.price : st.fair;
+			if (o.price + 1e-9 >= L) {                                  // мгновенная покупка
+				if (!omPay(L, true)) {
+					o.status = 'funds'; o.execAt = null; o.refL = null;
+					if (!o.warned) { o.warned = true; omMsg('Недостаточно средств для ордера', true); }
+					break;
+				}
+				o.warned = false;
+				if (first) st.lots = st.lots.filter(l => l !== first);
+				omGive(item); omNotify('bought', item, L);
+				o.qty--; o.execAt = null; o.refL = null; o.status = 'wait'; changed = true;
+				continue;
+			}
+			const key = omRound(L);
+			if (o.refL !== key) {                                       // пересчёт времени ожидания
+				o.refL = key;
+				const d = (L - o.price) / L * 100;                      // отставание от первого лота, %
+				if (d > 50) { o.status = 'low'; o.execAt = null; }
+				else { o.status = 'wait'; o.execAt = now + Math.max(150, 0.5 * d * 100 * (0.8 + Math.random() * 0.4)); } // 1% ≈ 0.5 с, 10% ≈ 5 с (было *1000 стало *100)
+			}
+			if (o.execAt && now >= o.execAt) {
+				if (!omPay(o.price, true)) {
+					o.status = 'funds'; o.execAt = now + 2000;
+					if (!o.warned) { o.warned = true; omMsg('Недостаточно средств для ордера', true); }
+					break;
+				}
+				o.warned = false;
+				omGive(item); omNotify('bought', item, o.price);
+				o.qty--; o.execAt = null; o.refL = null; o.status = 'wait'; changed = true;
+				continue;
+			}
+			break;
+		}
+		if (o.qty <= 0) { omState.orders = omState.orders.filter(x => x !== o); changed = true; }
+		if (changed) omAfterChange(o.itemId);
+	}
+
+	function omPlaceOrder(item, price, qty) {
+		if (!isFinite(price) || price < 0 || price > OM_MAX) return 'Цена должна быть от 0,00 до 1 000 000';
+		if (!Number.isInteger(qty) || qty < 1 || qty > 50) return 'Количество — целое число от 1 до 50';
+		if (omOrderOf(item.id)) return 'У вас уже есть ордер на этот предмет';
+		price = omRound(price);
+		if (balance + 1e-9 < price) return 'Недостаточно средств для ордера';
+		omItemState(item.id);
+		const o = { id: omNextId(), itemId: item.id, price, qty, total: qty, placedAt: Date.now(), execAt: null, refL: null, status: 'wait' };
+		omState.orders.push(o);
+		omProcessOrder(o, Date.now());
+		omAfterChange(item.id);
+		return null;
+	}
+
+	function omCancelOrder(orderId) {
+		const o = omState.orders.find(x => x.id === orderId);
+		if (!o) return;
+		omState.orders = omState.orders.filter(x => x !== o);
+		omMsg('Ордер на покупку отменён');
+		omAfterChange(o.itemId);
+	}
+
+	function omCancelLot(itemId, lotId) {
+		const st = omState.items[itemId];
+		const lot = st && st.lots.find(l => l.id === lotId && l.seller === 'me');
+		if (!lot) return;
+		st.lots = st.lots.filter(l => l !== lot);
+		if (lot.inv) inventory.push(lot.inv);
+		updateInventory(); saveGameState();
+		omMsg('Лот снят, предмет возвращён в инвентарь');
+		omAfterChange(itemId);
+	}
+
+	function omBuyLot(itemId, lotId) {
+		const item = omItem(itemId), st = omState.items[itemId];
+		const lot = st && st.lots.find(l => l.id === lotId && l.seller === 'bot');
+		if (!lot) { omMsg('Лот уже недоступен', true); omAfterChange(itemId); return; }
+		if (!omPay(lot.price)) return;
+		st.lots = st.lots.filter(l => l !== lot);
+		omGive(item); omNotify('bought', item, lot.price);
+		omAfterChange(itemId);
+	}
+
+	function omMaxListPrice(item) { return Math.min(OM_MAX, Math.floor(item.price * 1.6 * 100) / 100); }
+
+	function omListItems(item, invItems, price) {
+		const st = omItemState(item.id);
+		invItems.forEach(inv => {
+			const idx = inventory.indexOf(inv);
+			if (idx < 0) return;
+			inventory.splice(idx, 1);
+			st.lots.push({ id: omNextId(), price, seller: 'me', inv, listedAt: Date.now(), sellAt: null, never: false, planKey: null });
+			omNotify('list', item, null);
+		});
+		st.lots.filter(l => l.seller === 'me').forEach(l => omReplan(st, l, Date.now()));
+		updateInventory(); saveGameState();
+		omAfterChange(item.id);
+	}
+
+	// ---------------------------------------------------------------- общий «после изменений»
+	function omUpdateCard(itemId) {
+		const el = document.getElementById(itemId), st = omState.items[itemId];
+		const c = el && el.querySelector('.om-lots-count');
+		if (c && st) c.textContent = st.lots.length;
+	}
+	function omAfterChange(itemId) {
+		const item = omItem(itemId), st = omState.items[itemId];
+		if (item && st) omApplyShopPrice(item, st);
+		omUpdateCard(itemId);
+		omSave();
+		if (omMainLayer && omMainLayer.itemId === itemId) omRenderMain();
+		if (omMode && omSub === 'orders') omRenderOrders();
+		if (omMode && omSub === 'platform') sortItemsByPrice();
+	}
+
+	// ---------------------------------------------------------------- «тик» движка
+	function omTick() {
+		if (!omReady) return;
+		const now = Date.now();
+		const touched = new Set();
+		Object.keys(omState.items).forEach(id => {
+			const st = omState.items[id], item = omItem(id);
+			if (!item) return;
+			st.lots.filter(l => l.seller === 'me').forEach(lot => {
+				omReplan(st, lot, now);
+				if (lot.sellAt && now >= lot.sellAt) { omCompleteSale(item, st, lot); touched.add(id) }
+			});
+			if (now >= st.nextRestock) {                                // боты иногда докладывают лоты (пока рынок не пуст)
+				st.nextRestock = now + (30 + Math.random() * 60) * 500;
+				const bots = omBots(st);
+				if (bots.length >= 1 && bots.length < omN0(item)) {
+					st.lots.push({ id: omNextId(), price: omBotPrice(item, st, bots.length), seller: 'bot' });
+					touched.add(id);
+				}
+			}
+		});
+		omState.orders.slice().forEach(o => omProcessOrder(o, now));
+		touched.forEach(omAfterChange);
+		omUpdateEtas();
+	}
+
+	function omUpdateEtas() {
+		const now = Date.now();
+		document.querySelectorAll('[data-om-eta]').forEach(el => {
+			let txt = '', bad = false;
+			if (el.dataset.kind === 'order') {
+				const o = omState.orders.find(x => String(x.id) === el.dataset.id);
+				if (!o) return;
+				if (o.status === 'low') { txt = 'Цена слишком низкая — ордер не исполнится. Повысьте цену'; bad = true; }
+				else if (o.status === 'funds') { txt = 'Недостаточно средств для покупки'; bad = true; }
+				else if (o.execAt) { const s = (o.execAt - now) / 1000; txt = s < 1 ? 'Исполнится менее чем за секунду' : `Исполнится через ~${Math.ceil(s)} с`; }
+				else txt = 'Выполняется…';
+			} else {
+				const st = omState.items[el.dataset.item];
+				const lot = st && st.lots.find(l => String(l.id) === el.dataset.id);
+				if (!lot) return;
+				if (lot.never) { txt = 'Не продастся по такой цене — переставьте дешевле'; bad = true; }
+				else if (!lot.sellAt) txt = 'Оценка времени продажи…';
+				else { const s = (lot.sellAt - now) / 1000; txt = s < 1 ? 'Продастся менее чем за секунду' : `Продажа через ~${Math.ceil(s)} с`; }
+			}
+			el.textContent = txt;
+			el.classList.toggle('bad', bad);
+		});
+	}
+
+	// ---------------------------------------------------------------- окна
+	function omLayer(html, cls) {
+		const ov = document.createElement('div');
+		ov.className = 'om-overlay';
+		ov.style.zIndex = 10050 + omLayers.length * 10;
+		ov.innerHTML = `<div class="om-win ${cls || ''}">${html}</div>`;
+		const layer = {
+			ov, win: ov.firstElementChild,
+			close() {
+				ov.remove();
+				const i = omLayers.indexOf(layer);
+				if (i >= 0) omLayers.splice(i, 1);
+				if (omMainLayer === layer) omMainLayer = null;
+			}
+		};
+		ov.addEventListener('mousedown', e => { if (e.target === ov && omLayers[omLayers.length - 1] === layer) layer.close(); });
+		const x = layer.win.querySelector('.om-x');
+		if (x) x.addEventListener('click', () => layer.close());
+		document.body.appendChild(ov);
+		omLayers.push(layer);
+		return layer;
+	}
+	document.addEventListener('keydown', e => {
+		if (e.key === 'Escape' && omLayers.length) { e.stopPropagation(); omLayers[omLayers.length - 1].close(); }
+	}, true);
+
+	function omLotHTML(item, l) {
+		const mine = l.seller === 'me';
+		let slots = '';
+		if (mine && l.inv) {
+			const imgs = [];
+			(l.inv.stickers || []).forEach(s => imgs.push(s.image));
+			if (l.inv.charm) imgs.push(l.inv.charm.image);
+			if (imgs.length) slots = `<div class="om-slots">${imgs.map(i => `<img src="${omEsc(i || 'images/none_item.png')}" alt="">`).join('')}</div>`;
+		}
+		return `<div class="om-lot ${mine ? 'mine' : ''}">
+			<div class="om-lot-img">${omImgTag(item.image)}</div>${slots}
+			<div class="om-lot-price">${omFmt(l.price)} ₽</div>
+			<div class="om-lot-seller">${mine ? 'Ваш лот' : 'Бот'}</div>
+			${mine ? `<div class="om-eta" data-om-eta data-kind="lot" data-item="${omEsc(item.id)}" data-id="${l.id}"></div>` : ''}
+			<button class="om-btn ${mine ? 'om-danger' : 'om-primary'}" data-act="${mine ? 'cancel-lot' : 'buy-lot'}" data-id="${l.id}">${mine ? 'Отменить' : 'Купить'}</button>
+		</div>`;
+	}
+
+	function omRenderOrderPanel(layer, item) {
+		const box = layer.win.querySelector('.om-order');
+		const o = omOrderOf(item.id);
+		const key = o ? 'o' + o.id + ':' + o.qty : 'form';
+		if (box.dataset.key === key) return;
+		box.dataset.key = key;
+		if (o) {
+			box.innerHTML = `<div class="om-order-title">Ваш ордер на покупку</div>
+				<div class="om-order-row"><span>Цена: <b style="color:gold">${omFmt(o.price)} ₽</b></span><span>Осталось: <b>${o.qty}</b> из ${o.total}</span></div>
+				<div class="om-eta" data-om-eta data-kind="order" data-id="${o.id}"></div>
+				<button class="om-btn om-danger" data-act="cancel-order" data-id="${o.id}">Отменить ордер</button>`;
+		} else {
+			box.innerHTML = `<div class="om-order-title">Ордер на покупку</div>
+				<div class="om-order-row">
+					<label>Цена, ₽<input type="number" class="om-in-price" min="0" max="1000000" step="0.01" value="${omRound(item.price)}"></label>
+					<label>Количество<input type="number" class="om-in-qty" min="1" max="50" step="1" value="1"></label>
+					<button class="om-btn om-primary" data-act="place-order">Разместить</button>
+				</div>
+				<div class="om-hint">Цена от 0,00 до 1 000 000 ₽. Если цена не ниже первого лота — покупка мгновенная, иначе — по времени.</div>
+				<div class="om-err"></div>`;
+		}
+	}
+
+	function omRenderMain() {
+		const layer = omMainLayer;
+		if (!layer) return;
+		const item = omItem(layer.itemId), st = omState.items[layer.itemId];
+		if (!item || !st) return;
+		const w = layer.win;
+		w.querySelector('.om-item-price').innerHTML = `Цена на платформе: <b style="color:${currencyColor}">${omFmt(item.price)} ₽</b>`;
+		const lots = st.lots.slice().sort((a, b) => omLotsSortAsc ? a.price - b.price : b.price - a.price);
+		w.querySelector('.om-lots-n').textContent = lots.length;
+		w.querySelector('.om-sort').textContent = omLotsSortAsc ? 'Цена ↑' : 'Цена ↓';
+		const box = w.querySelector('.om-lots');
+		const sc = box.scrollTop;
+		box.innerHTML = lots.length ? lots.map(l => omLotHTML(item, l)).join('') : '<div class="om-empty">Лотов нет</div>';
+		box.scrollTop = sc;
+		omRenderOrderPanel(layer, item);
+		omUpdateEtas();
+	}
+
+	function omOpenItemModal(itemId) {
+		const item = omItem(itemId);
+		if (!item) return;
+		if (!omItemState(itemId)) return;
+		if (omMainLayer) omMainLayer.close();
+		const rar = omRar(item);
+		const col = collectionsDatabase[item.collection] || { name: item.collection, image: '' };
+		const layer = omLayer(`
+			<div class="om-head"><div class="om-title">Онлайн-маркет · Платформа</div><button class="om-x" title="Закрыть">✕</button></div>
+			<div class="om-body">
+				<div class="om-left">
+					<div class="om-itembox">
+						<div class="om-item-img" title="Открыть просмотр"></div>
+						<div class="om-item-name" style="color:${rar.colorHex}">${omEsc(item.name)}</div>
+						<div class="om-item-rar" style="color:${rar.colorHex}">${omEsc(rar.name)}</div>
+						<div class="om-item-col">${col.image ? `<img src="${omEsc(col.image)}" alt="">` : ''}<span>${omEsc(col.name || item.collection)}</span></div>
+						<div class="om-item-price"></div>
+					</div>
+					<button class="om-btn om-primary om-list-btn">Выставить на продажу</button>
+				</div>
+				<div class="om-right">
+					<div class="om-order"></div>
+					<div class="om-lots-head"><span>Лоты: <b class="om-lots-n">0</b></span><button class="om-btn om-sort">Цена ↑</button></div>
+					<div class="om-lots"></div>
+				</div>
+			</div>`, 'om-main');
+		layer.itemId = itemId;
+		omMainLayer = layer;
+		const w = layer.win;
+		const imgBox = w.querySelector('.om-item-img');
+		imgBox.innerHTML = omImgTag(item.image);
+		try { if (fxCan3D(item)) setup3DViewer(imgBox, item, item); } catch (e) { /* без просмотра */ }
+
+		w.querySelector('.om-list-btn').addEventListener('click', () => omOpenSelectModal(item));
+		w.querySelector('.om-sort').addEventListener('click', () => { omLotsSortAsc = !omLotsSortAsc; omRenderMain(); });
+		w.addEventListener('click', e => {
+			const b = e.target.closest('[data-act]');
+			if (!b) return;
+			const act = b.dataset.act, id = parseInt(b.dataset.id, 10);
+			if (act === 'buy-lot') omBuyLot(itemId, id);
+			else if (act === 'cancel-lot') omCancelLot(itemId, id);
+			else if (act === 'cancel-order') omCancelOrder(id);
+			else if (act === 'place-order') {
+				const price = parseFloat(String(w.querySelector('.om-in-price').value).replace(',', '.'));
+				const qty = parseInt(w.querySelector('.om-in-qty').value, 10);
+				const err = omPlaceOrder(item, price, qty);
+				const e2 = w.querySelector('.om-err');
+				if (err && e2) e2.textContent = err;
+			}
+		});
+		omRenderMain();
+	}
+
+	function omOpenSelectModal(item) {
+		const list = inventory.filter(inv => inv.id === item.id && !inv.isRental && (inv.slot === undefined || inv.slot === null));
+		const layer = omLayer(`
+			<div class="om-head"><div class="om-title">Выберите предметы для продажи</div><button class="om-x" title="Закрыть">✕</button></div>
+			<div class="om-pick"></div>
+			<div class="om-foot"><span>Выбрано: <b class="om-sel-n">0</b> из ${list.length}</span>
+				<div class="om-btns"><button class="om-btn om-all">Выбрать все</button><button class="om-btn om-primary om-next" disabled>Далее</button></div></div>`, 'om-md');
+		const w = layer.win, grid = w.querySelector('.om-pick');
+		const selected = new Set();
+		if (!list.length) grid.innerHTML = '<div class="om-empty">У вас нет таких предметов в инвентаре</div>';
+		else list.forEach((inv, i) => {
+			const imgs = [];
+			(inv.stickers || []).forEach(s => imgs.push(s.image));
+			if (inv.charm) imgs.push(inv.charm.image);
+			const rar = omRar(item);
+			const el = document.createElement('div');
+			el.className = 'om-inv';
+			el.innerHTML = `<div class="om-lot-img">${omImgTag(inv.image || item.image)}</div>
+				<div class="om-lot-name" style="color:${rar.colorHex}">${omEsc(item.name)}</div>
+				<div class="om-lot-rar">${omEsc(rar.name)}</div>
+				${imgs.length ? `<div class="om-slots">${imgs.map(s => `<img src="${omEsc(s || 'images/none_item.png')}" alt="">`).join('')}</div>` : ''}`;
+			el.addEventListener('click', () => {
+				if (selected.has(i)) { selected.delete(i); el.classList.remove('sel'); } else { selected.add(i); el.classList.add('sel'); }
+				w.querySelector('.om-sel-n').textContent = selected.size;
+				w.querySelector('.om-next').disabled = selected.size === 0;
+			});
+			grid.appendChild(el);
+		});
+		w.querySelector('.om-all').addEventListener('click', () => {
+			const all = selected.size !== list.length;
+			selected.clear();
+			grid.querySelectorAll('.om-inv').forEach((el, i) => { el.classList.toggle('sel', all); if (all) selected.add(i); });
+			w.querySelector('.om-sel-n').textContent = selected.size;
+			w.querySelector('.om-next').disabled = selected.size === 0;
+		});
+		w.querySelector('.om-next').addEventListener('click', () => {
+			const chosen = [...selected].map(i => list[i]);
+			omOpenPriceModal(item, chosen, layer);
+		});
+	}
+
+	function omOpenPriceModal(item, chosen, selectLayer) {
+		const max = omMaxListPrice(item);
+		const layer = omLayer(`
+			<div class="om-head"><div class="om-title">Цена продажи</div><button class="om-x" title="Закрыть">✕</button></div>
+			<div class="om-pad">
+				<div>${omEsc(item.name)} × <b>${chosen.length}</b></div>
+				<div class="om-hint">Цена на платформе: ${omFmt(item.price)} ₽. Максимум: ${omFmt(max)} ₽ (не выше +60% к цене предмета и не более 1 000 000 ₽).</div>
+				<label style="display:flex;flex-direction:column;gap:4px;font-size:13px;color:#bbb">Цена за 1 предмет, ₽
+					<input type="number" class="om-price-in" min="0.01" max="${max}" step="0.01" value="${omRound(Math.min(item.price, max))}">
+				</label>
+				<div class="om-err"></div>
+			</div>
+			<div class="om-foot"><span></span><div class="om-btns"><button class="om-btn om-back">Назад</button><button class="om-btn om-primary om-ok">Выставить</button></div></div>`, 'om-sm');
+		const w = layer.win;
+		const input = w.querySelector('.om-price-in');
+		input.focus(); input.select();
+		w.querySelector('.om-back').addEventListener('click', () => layer.close());
+		const submit = () => {
+			const price = omRound(parseFloat(String(input.value).replace(',', '.')));
+			const err = w.querySelector('.om-err');
+			if (!isFinite(price) || price <= 0) { err.textContent = 'Цена должна быть больше 0'; return; }
+			if (price > OM_MAX) { err.textContent = 'Цена не может превышать 1 000 000 ₽'; return; }
+			/*if (price > max + 1e-9) { err.textContent = `Цена не может превышать стоимость предмета более чем на 60% (максимум ${omFmt(max)} ₽)`; return; }*/
+			layer.close(); selectLayer.close();
+			omListItems(item, chosen, price);
+		};
+		w.querySelector('.om-ok').addEventListener('click', submit);
+		input.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+	}
+
+	// ---------------------------------------------------------------- вкладки «Онлайн-маркет»
+	function omRenderOrders() {
+		const p = document.getElementById('om-orders-panel');
+		if (!p) return;
+		const sell = [];
+		Object.keys(omState.items).forEach(id => omState.items[id].lots.forEach(l => { if (l.seller === 'me') sell.push({ id, lot: l }); }));
+		const buy = omState.orders;
+		let tiles = '';
+		if (omOrdersSub === 'buy') {
+			tiles = buy.map(o => {
+				const item = omItem(o.itemId); if (!item) return '';
+				const rar = omRar(item);
+				return `<div class="om-tile" data-item="${omEsc(item.id)}">
+					<div class="om-lot-img">${omImgTag(item.image)}</div>
+					<div class="om-lot-name" style="color:${rar.colorHex}">${omEsc(item.name)}</div>
+					<div class="om-lot-rar">${omEsc(rar.name)}</div>
+					<div class="om-lot-price">${omFmt(o.price)} ₽ × ${o.qty}</div>
+					<div class="om-eta" data-om-eta data-kind="order" data-id="${o.id}"></div>
+					<button class="om-btn om-danger" data-act="cancel-order" data-id="${o.id}">Отменить</button></div>`;
+			}).join('');
+		} else {
+			tiles = sell.map(({ id, lot }) => {
+				const item = omItem(id); if (!item) return '';
+				const rar = omRar(item);
+				return `<div class="om-tile" data-item="${omEsc(item.id)}">
+					<div class="om-lot-img">${omImgTag(item.image)}</div>
+					<div class="om-lot-name" style="color:${rar.colorHex}">${omEsc(item.name)}</div>
+					<div class="om-lot-rar">${omEsc(rar.name)}</div>
+					<div class="om-lot-price">${omFmt(lot.price)} ₽</div>
+					<div class="om-eta" data-om-eta data-kind="lot" data-item="${omEsc(id)}" data-id="${lot.id}"></div>
+					<button class="om-btn om-danger" data-act="cancel-lot" data-item="${omEsc(id)}" data-id="${lot.id}">Отменить</button></div>`;
+			}).join('');
+		}
+		p.innerHTML = `<div class="market-toggle om-suborders">
+				<button class="market-btn ${omOrdersSub === 'buy' ? 'active' : ''}" data-sub="buy"><a style="font-size:110%">Заявки на покупку (${buy.length})</a></button>
+				<button class="market-btn ${omOrdersSub === 'sell' ? 'active' : ''}" data-sub="sell"><a style="font-size:110%">Заявки на продажу (${sell.length})</a></button>
+			</div>
+			<div class="om-tiles">${tiles || '<div class="om-empty">Активных заявок нет</div>'}</div>`;
+		omUpdateEtas();
+	}
+
+	function omShowSub(sub) {
+		omSub = sub;
+		const pb = document.getElementById('om-platform-btn'), ob = document.getElementById('om-orders-btn');
+		const panel = document.getElementById('om-orders-panel');
+		if (pb) pb.classList.toggle('active', sub === 'platform');
+		if (ob) ob.classList.toggle('active', sub === 'orders');
+		if (sub === 'platform') {
+			panel.style.display = 'none';
+			itemsContainer.style.display = '';
+			initShop();
+		} else {
+			itemsContainer.style.display = 'none';
+			panel.style.display = '';
+			omRenderOrders();
+		}
+	}
+
+	function omEnterOnline() {
+		omMode = true;
+		currentMarket = 'normal';
+		document.getElementById('normal-market-btn').classList.remove('active');
+		document.getElementById('rental-market-btn').classList.remove('active');
+		document.getElementById('om-online-btn').classList.add('active');
+		document.getElementById('om-subtabs').style.display = '';
+		omShowSub('platform');
+	}
+	function omLeaveOnline() {
+		omMode = false;
+		document.getElementById('om-online-btn').classList.remove('active');
+		document.getElementById('om-subtabs').style.display = 'none';
+		document.getElementById('om-orders-panel').style.display = 'none';
+		itemsContainer.style.display = '';
+	}
+
+	function omBuildUI() {
+		const top = document.createElement('div');
+		top.className = 'market-toggle om-top-tabs';
+		top.innerHTML = `<button id="om-online-btn" class="market-btn"><a style="font-size: 120%">Онлайн-маркет</a></button>`;
+		marketToggle.insertAdjacentElement('beforebegin', top);
+
+		const sub = document.createElement('div');
+		sub.id = 'om-subtabs';
+		sub.className = 'market-toggle';
+		sub.style.display = 'none';
+		sub.innerHTML = `<button id="om-platform-btn" class="market-btn active"><a style="font-size: 110%">Платформа</a></button>
+			<button id="om-orders-btn" class="market-btn"><a style="font-size: 110%">Мои заявки</a></button>`;
+		marketToggle.insertAdjacentElement('afterend', sub);
+
+		const panel = document.createElement('div');
+		panel.id = 'om-orders-panel';
+		panel.style.display = 'none';
+		itemsContainer.insertAdjacentElement('afterend', panel);
+
+		document.getElementById('om-online-btn').addEventListener('click', () => { if (!omMode) omEnterOnline(); });
+		document.getElementById('om-platform-btn').addEventListener('click', () => omShowSub('platform'));
+		document.getElementById('om-orders-btn').addEventListener('click', () => omShowSub('orders'));
+
+		panel.addEventListener('click', e => {
+			const sb = e.target.closest('[data-sub]');
+			if (sb) { omOrdersSub = sb.dataset.sub; omRenderOrders(); return; }
+			const b = e.target.closest('[data-act]');
+			if (b) {
+				e.stopPropagation();
+				const id = parseInt(b.dataset.id, 10);
+				if (b.dataset.act === 'cancel-order') omCancelOrder(id);
+				else if (b.dataset.act === 'cancel-lot') omCancelLot(b.dataset.item, id);
+				return;
+			}
+			const t = e.target.closest('.om-tile');
+			if (t) omOpenItemModal(t.dataset.item);
+		});
+
+		// клик по карточке на платформе
+		itemsContainer.addEventListener('click', e => {
+			if (!omMode) return;
+			const card = e.target.closest('.item-card');
+			if (card) omOpenItemModal(card.id);
+		});
+	}
+
+	// HTML карточки предмета на «Платформе» (вместо кнопок корзины — «Найти на платформе»)
+	function omPlatformCardHTML(item, price, rarityInfo, collectionInfo) {
+		const st = omItemState(item.id);
+		const n = st ? st.lots.length : 0;
+		return `
+		<div class="item-img"><img data-src='${item.image}' alt="" class="logo lazy" width=150></div>
+		<div class="item-rarity ${rarityInfo.color}"><div class="item-name">${item.name}</div></div>
+		<div class="item-collection" data-collection="${item.collection}">
+		  ${collectionInfo.image ? `<img src="${collectionInfo.image}" class="collection-icon" alt="${collectionInfo.name}" style="width: 30px; height: auto;">` : ''}
+		  ${collectionInfo.name || item.collection}
+		</div>
+		<div class="item-stock">Лотов на платформе: <span class="om-lots-count">${n}</span></div>
+		<div class="item-price" style="color: ${currencyColor}">${price.toFixed(2)} ₽</div>
+		<div class="item-buttons"><button class="om-find-btn" data-id='${item.id}'>Найти на платформе</button></div>
+		<div style="display:none">
+		  <span class="available-stock">${item.stock}</span>
+		  <button class="add-to-cart" data-id='${item.id}' data-name='${item.name}' data-price='${price}' data-max='${item.stock}' data-rarity='${item.rarity}'></button>
+		  <button class="buy-all-btn" data-id='${item.id}' data-name='${item.name}' data-price='${price}' data-max='${item.stock}' data-rarity='${item.rarity}'></button>
+		  <div class="stock-warning"></div>
+		</div>`;
+	}
+
+	function omInit() {
+		if (omReady) return;
+		omLoad();
+		omBuildUI();
+		itemsDatabase.forEach(item => {
+			if (item.isRental || item.itemInStore === false) return;
+			const had = !!omState.items[item.id];
+			const st = omItemState(item.id);
+			if (st && had) omApplyShopPrice(item, st);
+		});
+		omReady = true;
+		omSaveNow();
+		initShop();
+		setInterval(omTick, 250);
+		window.addEventListener('beforeunload', omSaveNow);
+	}
+
 });
