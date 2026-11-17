@@ -15,7 +15,8 @@
         body.fallback-gradient { background: linear-gradient(135deg, #2a2a2a 0%, #4a4a4a 100%) !important; }
         .app-container { display: flex; min-height: 100vh; gap: 20px; }
         .scene-container { height: auto; width: auto; flex: 1; overflow: hidden; position: relative; min-width: 400px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); }
-        #viewer-canvas { width: 100%; height: 100%; display: block; }
+        #viewer-canvas { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+        #viewer-canvas.dragging { cursor: grabbing; }
         .item-title { position: absolute; top: 20px; left: -10px; background: rgba(0, 0, 0, 0.0); color: white; padding: 8px 16px; border-radius: 8px; font-size: 40px; font-weight: bold; z-index: 10; max-width: 80%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .back-btn { position: absolute; bottom: 15px; left: 15px; background: rgba(50, 50, 50, 0.5); color: #9c9c9c; border: 2px solid #9c9c9c; padding: 12px 60px; border-radius: 1px; cursor: pointer; z-index: 10; font-size: 16px; text-transform: uppercase; }
         .back-btn:hover { background: rgba(55, 55, 55, 0.5); }
@@ -223,6 +224,28 @@
         let gradientUniformsList = []; // Массив uniforms для всех материалов
         let lastCameraAngle = 0;
         let accumulatedAngle = 0;
+
+        // === ВРАЩЕНИЕ МОДЕЛИ (стартовая анимация, drag, возврат в 0) ===
+        const ROT_SPRING_OMEGA = 3.0;      // жёсткость пружины: больше = быстрее возврат (без колебаний)
+        const ROT_INTRO_ANGLE = Math.PI / 4; // стартовый поворот по Y (45°)
+        const ROT_DRAG_SPEED = 0.008;      // рад на пиксель при перетаскивании (меньше = медленнее)
+        const ROT_DRAG_FOLLOW = 16;        // плавность следования за курсором (меньше = мягче, но с запаздыванием)
+        const ROT_MAX_VELOCITY = 8;        // ограничение «броска» при отпускании, рад/с
+        let rotYaw = 0, rotPitch = 0;      // текущие углы (Y и X), рад
+        let rotYawTarget = 0, rotPitchTarget = 0; // целевые углы при перетаскивании
+        let rotYawV = 0, rotPitchV = 0;    // угловые скорости, рад/с
+        let rotDragging = false;
+        let rotIntroPending = false;       // ждём пока пропадёт оверлей загрузки
+        let rotLastTime = performance.now();
+        let rotPrevYaw = 0, rotPrevPitch = 0;
+        const rotPivot = new THREE.Vector3();   // центр модели в мире — вокруг него вращаем
+        const rotQuat = new THREE.Quaternion();
+        const rotQYaw = new THREE.Quaternion();
+        const rotQPitch = new THREE.Quaternion();
+        const rotAxisX = new THREE.Vector3(1, 0, 0);
+        const rotAxisY = new THREE.Vector3(0, 1, 0);
+        const rotTmpPivot = new THREE.Vector3();
+        const rotTmpBase = new THREE.Vector3();
         
         // URL параметры
         const urlParams = new URLSearchParams(window.location.search);
@@ -468,10 +491,11 @@
             controls.zoomSpeed = 1.5;
             controls.minDistance = 0.01;
             controls.maxDistance = 500;
-            controls.enablePan = true;
+            controls.enablePan = false;    // модель не должна смещаться — только вращение
+            controls.enableRotate = false; // вращение модели делаем сами (см. setupModelRotation)
             controls.autoRotate = false;
             controls.autoRotateSpeed = 1.0;
-            controls.enableKeys = true;
+            controls.enableKeys = false;
             window.addEventListener('resize', onWindowResize);
             animate();
         }
@@ -515,32 +539,15 @@
             requestAnimationFrame(animate);
             if (controls) controls.update();
             
-            // Вычисляем угол камеры по оси Y для градиентного эффекта
-            if (hasGradientMask && gradientUniformsList.length > 0 && camera && model) {
-                // Получаем текущий угол камеры вокруг модели по оси Y
-                const dx = camera.position.x - model.position.x;
-                const dz = camera.position.z - model.position.z;
-                const currentCameraAngle = Math.atan2(dx, dz);
-                
-                // Вычисляем разницу углов с учётом перехода через 360 градусов
-                let angleDiff = currentCameraAngle - lastCameraAngle;
-                
-                // Корректируем переход через границу -PI/PI
-                /*if (angleDiff > Math.PI) {
-                    angleDiff -= Math.PI * 2;
-                } else if (angleDiff < -Math.PI) {
-                    angleDiff += Math.PI * 2;
-                }*/
-                
-                // Накопленный угол для плавной анимации
-                accumulatedAngle += angleDiff;
-                lastCameraAngle = currentCameraAngle;
-                
-                // Накопленный угол напрямую передаём в шейдер (без нормализации):
-                // волна градиента проходит по маске плавно, цвет каждого пикселя
-                // зависит и от времени вращения, и от его положения в маске
+            // Обновляем вращение модели (старт, drag, пружинный возврат в 0)
+            updateModelRotation();
+
+            // Градиент привязан к текущему повороту модели: меняется и при ручном вращении,
+            // и при авто-возврате; в нулевом положении возвращается к исходному виду
+            if (hasGradientMask && gradientUniformsList.length > 0) {
+                const gradPhase = rotYaw + rotPitch;
                 for (let i = 0; i < gradientUniformsList.length; i++) {
-                    gradientUniformsList[i].time.value = accumulatedAngle;
+                    gradientUniformsList[i].time.value = gradPhase;
                 }
             }
             
@@ -551,15 +558,130 @@
                 const rotX = rotXDeg * Math.PI / 180;
                 const rotY = rotYDeg * Math.PI / 180;
                 const rotZ = rotZDeg * Math.PI / 180;
-                model.position.x = originalModelPosition.x + posX;
-                model.position.y = originalModelPosition.y + posY;
-                model.position.z = originalModelPosition.z + posZ;
                 model.scale.set(originalModelScale.x * scale, originalModelScale.y * scale, originalModelScale.z * scale);
                 model.rotation.set(rotX, rotY, rotZ);
+                // Поворот от пользователя/анимации: вращаем вокруг центра модели,
+                // так что её центр не смещается ни на пиксель
+                rotQYaw.setFromAxisAngle(rotAxisY, rotYaw);
+                rotQPitch.setFromAxisAngle(rotAxisX, rotPitch);
+                rotQuat.copy(rotQPitch).multiply(rotQYaw);
+                model.quaternion.premultiply(rotQuat);
+                rotTmpBase.set(originalModelPosition.x + posX, originalModelPosition.y + posY, originalModelPosition.z + posZ);
+                rotTmpPivot.set(rotPivot.x + posX, rotPivot.y + posY, rotPivot.z + posZ);
+                rotTmpBase.sub(rotTmpPivot).applyQuaternion(rotQuat).add(rotTmpPivot);
+                model.position.copy(rotTmpBase);
+                // Свет вращается вместе с моделью: освещение относительно модели остаётся
+                // таким же, как при вращении камеры (без новых бликов и самозатенения под 45°)
+                mainLight.position.set(20, 20, 20).applyQuaternion(rotQuat);
+                fillLight1.position.set(-15, 10, -15).applyQuaternion(rotQuat);
+                fillLight2.position.set(10, -15, 10).applyQuaternion(rotQuat);
+                backLight.position.set(0, 0, -25).applyQuaternion(rotQuat);
             }
             renderer.render(scene, camera);
         }
         
+        function wrapPi(a) {
+            a = (a + Math.PI) % (Math.PI * 2);
+            if (a < 0) a += Math.PI * 2;
+            return a - Math.PI;
+        }
+
+        // Вызывается после добавления новой модели в сцену
+        function initModelRotation() {
+            model.updateMatrixWorld(true);
+            new THREE.Box3().setFromObject(model).getCenter(rotPivot);
+            rotYaw = ROT_INTRO_ANGLE; rotPitch = 0;
+            rotYawV = 0; rotPitchV = 0;
+            rotDragging = false;
+            rotIntroPending = true; // стартуем, когда оверлей загрузки исчезнет
+            rotLastTime = performance.now();
+        }
+
+        // Критически затухающая пружина к 0: быстро, плавно, без дёрганий и перелётов
+        function springToZero(x, v, dt) {
+            const w = ROT_SPRING_OMEGA;
+            const e = Math.exp(-w * dt);
+            const c = v + w * x;
+            let nx = (x + c * dt) * e;
+            let nv = (v - c * w * dt) * e;
+            if (Math.abs(nx) < 1e-4 && Math.abs(nv) < 1e-3) { nx = 0; nv = 0; }
+            return [nx, nv];
+        }
+
+        function updateModelRotation() {
+            const now = performance.now();
+            const dt = Math.min(Math.max((now - rotLastTime) / 1000, 0), 0.05);
+            rotLastTime = now;
+            if (!model || dt === 0) return;
+
+            if (rotIntroPending) {
+                if (loadingOverlay.style.display === 'flex') return; // держим 45°, пока идёт загрузка
+                rotIntroPending = false;
+            }
+
+            if (rotDragging) {
+                // Плавно догоняем целевой угол от курсора (сглаживает рывки мыши)
+                const k = 1 - Math.exp(-ROT_DRAG_FOLLOW * dt);
+                rotYaw += (rotYawTarget - rotYaw) * k;
+                rotPitch += (rotPitchTarget - rotPitch) * k;
+                // Пользователь держит модель: авто-вращения нет; оцениваем скорость для плавного «отпускания»
+                const vy = (rotYaw - rotPrevYaw) / dt, vp = (rotPitch - rotPrevPitch) / dt;
+                rotYawV = rotYawV * 0.6 + vy * 0.4;
+                rotPitchV = rotPitchV * 0.6 + vp * 0.4;
+                rotPrevYaw = rotYaw; rotPrevPitch = rotPitch;
+                return;
+            }
+
+            [rotYaw, rotYawV] = springToZero(rotYaw, rotYawV, dt);
+            [rotPitch, rotPitchV] = springToZero(rotPitch, rotPitchV, dt);
+        }
+
+        function setupModelRotation() {
+            let activeId = null;
+            let lastX = 0, lastY = 0;
+            const pointers = new Set();
+
+            function release() {
+                if (!rotDragging) return;
+                rotDragging = false;
+                canvas.classList.remove('dragging');
+                // кратчайший путь к 0 (визуально поворот тот же, прыжка нет)
+                rotYaw = wrapPi(rotYaw); rotPitch = wrapPi(rotPitch);
+                const clamp = (v) => Math.max(-ROT_MAX_VELOCITY, Math.min(ROT_MAX_VELOCITY, v));
+                rotYawV = clamp(rotYawV); rotPitchV = clamp(rotPitchV);
+                rotLastTime = performance.now();
+                activeId = null;
+            }
+
+            canvas.addEventListener('pointerdown', (e) => {
+                pointers.add(e.pointerId);
+                if (pointers.size > 1) { release(); return; }          // щипок (zoom) — не вращаем
+                if (e.pointerType === 'mouse' && e.button !== 0) return;
+                if (!model) return;
+                rotIntroPending = false;                               // перехватили — стартовая анимация останавливается
+                rotDragging = true; activeId = e.pointerId;
+                lastX = e.clientX; lastY = e.clientY;
+                rotYawV = 0; rotPitchV = 0;
+                rotPrevYaw = rotYaw; rotPrevPitch = rotPitch;
+                rotYawTarget = rotYaw; rotPitchTarget = rotPitch;
+                canvas.classList.add('dragging');
+                try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+            });
+            canvas.addEventListener('pointermove', (e) => {
+                if (!rotDragging || e.pointerId !== activeId) return;
+                rotYawTarget += (e.clientX - lastX) * ROT_DRAG_SPEED;
+                rotPitchTarget += (e.clientY - lastY) * ROT_DRAG_SPEED;
+                lastX = e.clientX; lastY = e.clientY;
+            });
+            const end = (e) => {
+                pointers.delete(e.pointerId);
+                if (e.pointerId === activeId) release();
+            };
+            canvas.addEventListener('pointerup', end);
+            canvas.addEventListener('pointercancel', end);
+            window.addEventListener('blur', () => { pointers.clear(); release(); });
+        }
+
         function loadTextureSafely(url, onSuccess, onError, isColor = true) {
             if (!url) { onError?.(); return; }
             textureLoader.load(
@@ -1058,6 +1180,7 @@
                 model.scale.set(scale, scale, scale);
                 originalModelScale.set(scale, scale, scale);
                 scene.add(model);
+                initModelRotation();
                 isModelLoaded = true;
                 applyTexturesToModel();
                 if (controls) { controls.reset(); camera.position.set(0, 0, 20 * scale); controls.update(); }
@@ -1146,6 +1269,7 @@
                 model.scale.set(scale, scale, scale);
                 originalModelScale.set(scale, scale, scale);
                 scene.add(model);
+                initModelRotation();
                 isModelLoaded = true;
                 resetTransformSliders();
                 if (isPlaneModel(file.name)) planeLighting(); else resetLighting();
@@ -1353,6 +1477,7 @@
         initScene();
         initPatternDisplay();
         setupDragAndDrop();
+        setupModelRotation();
         loadBackgroundAndRarity(bgUrl, rarity).catch(err => console.error('Ошибка при загрузке фона/редкости:', err));
         if (modelUrl) loadModelFromUrl(modelUrl);
         
